@@ -1,0 +1,87 @@
+﻿7881e75 fix: remove unused variables and fix alpha value in WeeklyLine
+
+ src/ui/stats_widget.cpp | 15 ++-------------
+ 1 file changed, 2 insertions(+), 13 deletions(-)
+
+diff --git a/src/ui/stats_widget.cpp b/src/ui/stats_widget.cpp
+index 3368959..287f418 100644
+--- a/src/ui/stats_widget.cpp
++++ b/src/ui/stats_widget.cpp
+@@ -219,30 +219,20 @@ void WeeklyBar::paintEvent(QPaintEvent *)
+ // ========== WeeklyLine ==========
+ 
+ WeeklyLine::WeeklyLine(QWidget *parent)
+     : QWidget(parent)
+ {
+     setFixedHeight(120);
+ }
+ 
+ void WeeklyLine::setData(const QVector<QVariantMap> &weekData)
+ {
+-    QStringList dayNames = {
+-        QString::fromUtf8("\xe4\xb8\x80"),
+-        QString::fromUtf8("\xe4\xba\x8c"),
+-        QString::fromUtf8("\xe4\xb8\x89"),
+-        QString::fromUtf8("\xe5\x9b\x9b"),
+-        QString::fromUtf8("\xe4\xba\x94"),
+-        QString::fromUtf8("\xe5\x85\xad"),
+-        QString::fromUtf8("\xe6\x97\xa5")
+-    };
+-
+     QDate today = QDate::currentDate();
+     QDate monday = today.addDays(-today.dayOfWeek() + 1);
+     m_data.clear();
+     m_maxVal = 1;
+ 
+     for (int i = 0; i < 7; ++i) {
+         m_data[monday.addDays(i).toString(Qt::ISODate)] = 0;
+     }
+     for (const auto &item : weekData) {
+         QString d = item["d"].toString();
+@@ -272,22 +262,21 @@ void WeeklyLine::paintEvent(QPaintEvent *)
+ 
+     QStringList dayNames = {
+         QString::fromUtf8("\xe4\xb8\x80"),
+         QString::fromUtf8("\xe4\xba\x8c"),
+         QString::fromUtf8("\xe4\xb8\x89"),
+         QString::fromUtf8("\xe5\x9b\x9b"),
+         QString::fromUtf8("\xe4\xba\x94"),
+         QString::fromUtf8("\xe5\x85\xad"),
+         QString::fromUtf8("\xe6\x97\xa5")
+     };
+-    QDate today = QDate::currentDate();
+-    QDate monday = today.addDays(-today.dayOfWeek() + 1);
++    QDate monday = QDate::currentDate().addDays(1 - QDate::currentDate().dayOfWeek());
+ 
+     QVector<QPointF> points;
+     for (int i = 0; i < pointCount; ++i) {
+         double x = margin + i * stepX;
+         QString d = monday.addDays(i).toString(Qt::ISODate);
+         int val = m_data.value(d, 0);
+         double barH = (static_cast<double>(val) / m_maxVal) * chartAreaH;
+         double y = labelY - 30 - barH;
+         points.append(QPointF(x, y));
+     }
+@@ -299,21 +288,21 @@ void WeeklyLine::paintEvent(QPaintEvent *)
+         QPointF cp1 = QPointF((points[i].x() + points[i + 1].x()) / 2.0, points[i].y());
+         QPointF cp2 = QPointF((points[i].x() + points[i + 1].x()) / 2.0, points[i + 1].y());
+         areaPath.cubicTo(cp1, cp2, points[i + 1]);
+     }
+ 
+     areaPath.lineTo(points.last().x(), labelY - 30);
+     areaPath.lineTo(points.first().x(), labelY - 30);
+     areaPath.closeSubpath();
+ 
+     QLinearGradient areaGrad(0, chartTop, 0, labelY - 30);
+-    areaGrad.setColorAt(0.0, QColor(165, 180, 252, 100));
++    areaGrad.setColorAt(0.0, QColor(165, 180, 252, 102));
+     areaGrad.setColorAt(1.0, QColor(165, 180, 252, 0));
+     painter.setBrush(areaGrad);
+     painter.setPen(Qt::NoPen);
+     painter.drawPath(areaPath);
+ 
+     QPainterPath linePath;
+     linePath.moveTo(points[0]);
+     for (int i = 0; i < pointCount - 1; ++i) {
+         QPointF cp1 = QPointF((points[i].x() + points[i + 1].x()) / 2.0, points[i].y());
+         QPointF cp2 = QPointF((points[i].x() + points[i + 1].x()) / 2.0, points[i + 1].y());

@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Background gradient: bottom-left blue → top-right purple -->
+    <linearGradient id="bgGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4A6CF7"/>
+      <stop offset="100%" stop-color="#B86BFF"/>
+    </linearGradient>
+
+    <!-- Screen gradient: more saturated blue-purple -->
+    <linearGradient id="screenGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5B7BF9"/>
+      <stop offset="100%" stop-color="#9B6DF9"/>
+    </linearGradient>
+
+    <!-- Arc gradient: blue → purple along the arc -->
+    <linearGradient id="arcGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#4A6CF7"/>
+      <stop offset="50%" stop-color="#7B6DF9"/>
+      <stop offset="100%" stop-color="#B86BFF"/>
+    </linearGradient>
+
+    <!-- Glass frame drop shadow -->
+    <filter id="glassShadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.15"/>
+    </filter>
+
+    <!-- Text shadow -->
+    <filter id="textShadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+
+    <!-- Tick mark templates -->
+    <g id="tick-short">
+      <line x1="0" y1="-78" x2="0" y2="-62" stroke="white" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+    </g>
+    <g id="tick-long">
+      <line x1="0" y1="-82" x2="0" y2="-58" stroke="white" stroke-width="5" stroke-linecap="round" opacity="0.95"/>
+    </g>
+  </defs>
+
+  <!-- Outer squircle background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="230" ry="230" fill="url(#bgGrad)"/>
+
+  <!-- Monitor stand -->
+  <g opacity="0.85">
+    <!-- Stand column -->
+    <rect x="482" y="760" width="60" height="40" rx="8" fill="rgba(255,255,255,0.55)"/>
+    <!-- Stand base -->
+    <rect x="410" y="790" width="204" height="28" rx="14" fill="rgba(255,255,255,0.5)"/>
+    <!-- Stand base highlight -->
+    <rect x="420" y="794" width="184" height="6" rx="3" fill="rgba(255,255,255,0.3)"/>
+  </g>
+
+  <!-- Monitor outer frame (glass effect) -->
+  <g filter="url(#glassShadow)">
+    <rect x="165" y="135" width="694" height="640" rx="48" ry="48"
+          fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.35)" stroke-width="3"/>
+  </g>
+
+  <!-- Monitor top edge highlight -->
+  <path d="M218 140 Q218 140 240 138 L784 138 Q806 140 806 140"
+        stroke="rgba(255,255,255,0.5)" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+  <!-- Camera notch at top center -->
+  <circle cx="512" cy="155" r="8" fill="rgba(255,255,255,0.6)"/>
+
+  <!-- Screen area -->
+  <rect x="195" y="170" width="634" height="575" rx="36" ry="36" fill="url(#screenGrad)"/>
+
+  <!-- Screen inner shadow border -->
+  <rect x="195" y="170" width="634" height="575" rx="36" ry="36"
+        fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2"/>
+
+  <!-- === Speedometer / Clock Graphics === -->
+  <g transform="translate(512, 457)">
+    <!-- Tick marks: 12 positions -->
+    <use href="#tick-long" transform="rotate(0)"/>
+    <use href="#tick-short" transform="rotate(30)"/>
+    <use href="#tick-short" transform="rotate(60)"/>
+    <use href="#tick-long" transform="rotate(90)"/>
+    <use href="#tick-short" transform="rotate(120)"/>
+    <use href="#tick-short" transform="rotate(150)"/>
+    <use href="#tick-long" transform="rotate(180)"/>
+    <use href="#tick-short" transform="rotate(210)"/>
+    <use href="#tick-short" transform="rotate(240)"/>
+    <use href="#tick-long" transform="rotate(270)"/>
+    <use href="#tick-short" transform="rotate(300)"/>
+    <use href="#tick-short" transform="rotate(330)"/>
+
+    <!-- Colorful gradient arc -->
+    <path d="M -76 -40 A 86 86 0 0 1 76 -40"
+          stroke="url(#arcGrad)" stroke-width="14" fill="none" stroke-linecap="round" opacity="0.9"/>
+    <!-- Arc inner glow -->
+    <path d="M -76 -40 A 86 86 0 0 1 76 -40"
+          stroke="rgba(255,255,255,0.25)" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+    <!-- Hour hand (~10 o'clock direction) -->
+    <g transform="rotate(-60)">
+      <line x1="0" y1="12" x2="0" y2="-52" stroke="white" stroke-width="8" stroke-linecap="round" opacity="0.95"/>
+    </g>
+
+    <!-- Minute hand (~2 o'clock direction = 10:10 position) -->
+    <g transform="rotate(60)">
+      <line x1="0" y1="14" x2="0" y2="-66" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+    </g>
+
+    <!-- Center dot -->
+    <circle cx="0" cy="0" r="10" fill="white" opacity="0.95"/>
+    <circle cx="0" cy="0" r="5" fill="url(#screenGrad)" opacity="0.6"/>
+  </g>
+
+  <!-- "TM" text -->
+  <text x="512" y="530" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="72" font-weight="bold"
+        fill="white" opacity="0.95"
+        filter="url(#textShadow)">TM</text>
+
+  <!-- "Time Master" text -->
+  <text x="512" y="580" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="32" font-weight="400"
+        fill="white" opacity="0.85"
+        filter="url(#textShadow)">Time Master</text>
+
+  <!-- Subtle top-left highlight on whole icon -->
+  <rect x="0" y="0" width="1024" height="1024" rx="230" ry="230"
+        fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+</svg>

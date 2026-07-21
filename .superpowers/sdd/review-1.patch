@@ -1,0 +1,70 @@
+﻿76c84be feat: add getYesterdayTotal() to DatabaseManager
+
+ src/database/database_manager.cpp | 13 +++++++++++++
+ src/database/database_manager.h   |  1 +
+ 2 files changed, 14 insertions(+)
+
+diff --git a/src/database/database_manager.cpp b/src/database/database_manager.cpp
+index 0b599c7..09bc07b 100644
+--- a/src/database/database_manager.cpp
++++ b/src/database/database_manager.cpp
+@@ -134,20 +134,33 @@ int DatabaseManager::getTodayTotal()
+     QSqlQuery q(m_db);
+     q.prepare("SELECT COALESCE(SUM(duration_seconds), 0) as total "
+               "FROM sessions WHERE date(start_time) = ?");
+     q.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+     q.exec();
+     if (q.next())
+         return q.value("total").toInt();
+     return 0;
+ }
+ 
++int DatabaseManager::getYesterdayTotal()
++{
++    QMutexLocker lock(&m_mutex);
++    QSqlQuery q(m_db);
++    q.prepare("SELECT COALESCE(SUM(duration_seconds), 0) as total "
++              "FROM sessions WHERE date(start_time) = ?");
++    q.addBindValue(QDate::currentDate().addDays(-1).toString(Qt::ISODate));
++    q.exec();
++    if (q.next())
++        return q.value("total").toInt();
++    return 0;
++}
++
+ QVector<QVariantMap> DatabaseManager::getWeekSummary()
+ {
+     QMutexLocker lock(&m_mutex);
+     QDate today = QDate::currentDate();
+     QDate monday = today.addDays(-today.dayOfWeek() + 1);
+     QSqlQuery q(m_db);
+     q.prepare("SELECT date(start_time) as d, SUM(duration_seconds) as total_seconds "
+               "FROM sessions WHERE date(start_time) >= ? AND date(start_time) <= ? "
+               "GROUP BY date(start_time) ORDER BY d ASC");
+     q.addBindValue(monday.toString(Qt::ISODate));
+diff --git a/src/database/database_manager.h b/src/database/database_manager.h
+index 700aa05..c499f49 100644
+--- a/src/database/database_manager.h
++++ b/src/database/database_manager.h
+@@ -19,20 +19,21 @@ public:
+     ~DatabaseManager();
+ 
+     qint64 insertSession(const QString &processName, const QString &windowTitle,
+                          const QString &appName, const QDateTime &startTime,
+                          const QDateTime &endTime, int durationSeconds);
+     void updateSessionEnd(qint64 sessionId, const QDateTime &endTime, int durationSeconds);
+     void updateSessionDuration(qint64 sessionId, int durationSeconds);
+ 
+     QVector<QVariantMap> getTodaySummary();
+     int getTodayTotal();
++    int getYesterdayTotal();
+     QVector<QVariantMap> getWeekSummary();
+     QVector<QVariantMap> getAppRank(const QDate &targetDate = QDate::currentDate());
+     QVector<QVariantMap> getAllSessions(const QString &startDate = QString(),
+                                         const QString &endDate = QString());
+     QVector<QVariantMap> getDailySummaries(const QString &startDate = QString(),
+                                             const QString &endDate = QString());
+ 
+     QString getSetting(const QString &key, const QString &defaultValue = QString());
+     void setSetting(const QString &key, const QString &value);
+ 

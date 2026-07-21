@@ -1,0 +1,8 @@
+{
+  "name": "timemaster",
+  "version": "1.0.0",
+  "dependencies": [
+    "qt6-base",
+    "qt6-tools"
+  ]
+}

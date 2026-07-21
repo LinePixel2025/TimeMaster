@@ -1,0 +1,216 @@
+﻿5527238 feat: add WeeklyLine widget for area chart visualization
+
+ src/ui/stats_widget.cpp | 145 ++++++++++++++++++++++++++++++++++++++++++++++++
+ src/ui/stats_widget.h   |  15 +++++
+ 2 files changed, 160 insertions(+)
+
+diff --git a/src/ui/stats_widget.cpp b/src/ui/stats_widget.cpp
+index 39cc794..3368959 100644
+--- a/src/ui/stats_widget.cpp
++++ b/src/ui/stats_widget.cpp
+@@ -209,20 +209,165 @@ void WeeklyBar::paintEvent(QPaintEvent *)
+             painter.setFont(appFont(8));
+             painter.setPen(QColor("#374151"));
+             QString label = (hours > 0)
+                 ? QString("%1h%2").arg(hours).arg(mins, 2, 10, QChar('0'))
+                 : QString("%1m").arg(mins);
+             painter.drawText(QRectF(x - 4, labelY - 28 - barH, barW + 8, 14), Qt::AlignCenter, label);
+         }
+     }
+ }
+ 
++// ========== WeeklyLine ==========
++
++WeeklyLine::WeeklyLine(QWidget *parent)
++    : QWidget(parent)
++{
++    setFixedHeight(120);
++}
++
++void WeeklyLine::setData(const QVector<QVariantMap> &weekData)
++{
++    QStringList dayNames = {
++        QString::fromUtf8("\xe4\xb8\x80"),
++        QString::fromUtf8("\xe4\xba\x8c"),
++        QString::fromUtf8("\xe4\xb8\x89"),
++        QString::fromUtf8("\xe5\x9b\x9b"),
++        QString::fromUtf8("\xe4\xba\x94"),
++        QString::fromUtf8("\xe5\x85\xad"),
++        QString::fromUtf8("\xe6\x97\xa5")
++    };
++
++    QDate today = QDate::currentDate();
++    QDate monday = today.addDays(-today.dayOfWeek() + 1);
++    m_data.clear();
++    m_maxVal = 1;
++
++    for (int i = 0; i < 7; ++i) {
++        m_data[monday.addDays(i).toString(Qt::ISODate)] = 0;
++    }
++    for (const auto &item : weekData) {
++        QString d = item["d"].toString();
++        if (m_data.contains(d))
++            m_data[d] = item["total_seconds"].toInt();
++    }
++    for (auto it = m_data.begin(); it != m_data.end(); ++it)
++        m_maxVal = qMax(m_maxVal, it.value());
++    if (m_maxVal == 0) m_maxVal = 1;
++    update();
++}
++
++void WeeklyLine::paintEvent(QPaintEvent *)
++{
++    QPainter painter(this);
++    painter.setRenderHint(QPainter::Antialiasing);
++
++    double w = width();
++    double h = height();
++    int pointCount = 7;
++    double margin = 24.0;
++    double chartW = w - margin * 2;
++    double stepX = chartW / (pointCount - 1);
++    double labelY = h - 25;
++    double chartTop = 20.0;
++    double chartAreaH = labelY - 30 - chartTop;
++
++    QStringList dayNames = {
++        QString::fromUtf8("\xe4\xb8\x80"),
++        QString::fromUtf8("\xe4\xba\x8c"),
++        QString::fromUtf8("\xe4\xb8\x89"),
++        QString::fromUtf8("\xe5\x9b\x9b"),
++        QString::fromUtf8("\xe4\xba\x94"),
++        QString::fromUtf8("\xe5\x85\xad"),
++        QString::fromUtf8("\xe6\x97\xa5")
++    };
++    QDate today = QDate::currentDate();
++    QDate monday = today.addDays(-today.dayOfWeek() + 1);
++
++    QVector<QPointF> points;
++    for (int i = 0; i < pointCount; ++i) {
++        double x = margin + i * stepX;
++        QString d = monday.addDays(i).toString(Qt::ISODate);
++        int val = m_data.value(d, 0);
++        double barH = (static_cast<double>(val) / m_maxVal) * chartAreaH;
++        double y = labelY - 30 - barH;
++        points.append(QPointF(x, y));
++    }
++
++    QPainterPath areaPath;
++    areaPath.moveTo(points[0]);
++
++    for (int i = 0; i < pointCount - 1; ++i) {
++        QPointF cp1 = QPointF((points[i].x() + points[i + 1].x()) / 2.0, points[i].y());
++        QPointF cp2 = QPointF((points[i].x() + points[i + 1].x()) / 2.0, points[i + 1].y());
++        areaPath.cubicTo(cp1, cp2, points[i + 1]);
++    }
++
++    areaPath.lineTo(points.last().x(), labelY - 30);
++    areaPath.lineTo(points.first().x(), labelY - 30);
++    areaPath.closeSubpath();
++
++    QLinearGradient areaGrad(0, chartTop, 0, labelY - 30);
++    areaGrad.setColorAt(0.0, QColor(165, 180, 252, 100));
++    areaGrad.setColorAt(1.0, QColor(165, 180, 252, 0));
++    painter.setBrush(areaGrad);
++    painter.setPen(Qt::NoPen);
++    painter.drawPath(areaPath);
++
++    QPainterPath linePath;
++    linePath.moveTo(points[0]);
++    for (int i = 0; i < pointCount - 1; ++i) {
++        QPointF cp1 = QPointF((points[i].x() + points[i + 1].x()) / 2.0, points[i].y());
++        QPointF cp2 = QPointF((points[i].x() + points[i + 1].x()) / 2.0, points[i + 1].y());
++        linePath.cubicTo(cp1, cp2, points[i + 1]);
++    }
++
++    QPen linePen(QColor("#6366F1"), 2.0);
++    linePen.setCapStyle(Qt::RoundCap);
++    linePen.setJoinStyle(Qt::RoundJoin);
++    painter.setPen(linePen);
++    painter.setBrush(Qt::NoBrush);
++    painter.drawPath(linePath);
++
++    painter.setPen(Qt::NoPen);
++    painter.setBrush(QColor("#6366F1"));
++    for (int i = 0; i < pointCount; ++i) {
++        QString d = monday.addDays(i).toString(Qt::ISODate);
++        int val = m_data.value(d, 0);
++        if (val > 0) {
++            painter.drawEllipse(points[i], 3.5, 3.5);
++        }
++    }
++
++    painter.setFont(appFont(8));
++    for (int i = 0; i < pointCount; ++i) {
++        QString d = monday.addDays(i).toString(Qt::ISODate);
++        int val = m_data.value(d, 0);
++        if (val > 0) {
++            int hours = val / 3600;
++            int mins = (val % 3600) / 60;
++            QString label = (hours > 0)
++                ? QString("%1h%2").arg(hours).arg(mins, 2, 10, QChar('0'))
++                : QString("%1m").arg(mins);
++            painter.setPen(QColor("#374151"));
++            painter.drawText(QRectF(points[i].x() - 18, points[i].y() - 16, 36, 14),
++                             Qt::AlignCenter, label);
++        }
++    }
++
++    painter.setFont(appFont(10));
++    for (int i = 0; i < pointCount; ++i) {
++        double x = margin + i * stepX;
++        painter.setPen(QColor("#4B5563"));
++        painter.drawText(QRectF(x - 16, labelY - 5, 32, 20), Qt::AlignCenter, dayNames[i]);
++    }
++}
++
+ // ========== TopAppCard ==========
+ 
+ TopAppCard::TopAppCard(QWidget *parent)
+     : QWidget(parent)
+ {
+     QVBoxLayout *layout = new QVBoxLayout(this);
+     layout->setContentsMargins(0, 0, 0, 0);
+     layout->setSpacing(8);
+     layout->setAlignment(Qt::AlignCenter);
+ 
+diff --git a/src/ui/stats_widget.h b/src/ui/stats_widget.h
+index ccfd3da..11f85bb 100644
+--- a/src/ui/stats_widget.h
++++ b/src/ui/stats_widget.h
+@@ -47,20 +47,35 @@ public:
+     void setData(const QVector<QVariantMap> &weekData);
+ 
+ protected:
+     void paintEvent(QPaintEvent *event) override;
+ 
+ private:
+     QMap<QString, int> m_data;
+     int m_maxVal = 1;
+ };
+ 
++class WeeklyLine : public QWidget
++{
++    Q_OBJECT
++public:
++    explicit WeeklyLine(QWidget *parent = nullptr);
++    void setData(const QVector<QVariantMap> &weekData);
++
++protected:
++    void paintEvent(QPaintEvent *event) override;
++
++private:
++    QMap<QString, int> m_data;
++    int m_maxVal = 1;
++};
++
+ class TopAppCard : public QWidget
+ {
+     Q_OBJECT
+ public:
+     explicit TopAppCard(QWidget *parent = nullptr);
+     void setApp(const QString &name, int seconds, const QIcon &icon = QIcon());
+ 
+ private:
+     QLabel *m_iconLabel;
+     QLabel *m_nameLabel;
