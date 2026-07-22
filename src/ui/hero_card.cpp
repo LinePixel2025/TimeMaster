@@ -1,4 +1,4 @@
-﻿#include "ui/hero_card.h"
+#include "ui/hero_card.h"
 #include "ui/design_tokens.h"
 #include <QLabel>
 #include <QVBoxLayout>
@@ -22,8 +22,6 @@ HeroCard::HeroCard(QWidget *p):QFrame(p){
 
     m_time=new QLabel("0m",this);m_time->setFont(DesignTokens::appFont(44,QFont::Bold));
     m_time->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextStrong().name()));
-    m_time->setWordWrap(true);
-    m_time->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     L->addWidget(m_time);L->addSpacing(4);
 
     m_sub=new QLabel(QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf"),this);

@@ -1,4 +1,4 @@
-﻿#include "ui/grid_editor.h"
+#include "ui/grid_editor.h"
 #include "ui/design_tokens.h"
 
 #include <QDataStream>

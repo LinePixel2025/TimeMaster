@@ -29,14 +29,14 @@ inline QColor kTextFaint()    { return isDarkTheme() ? QColor("#64748B") : QColo
 
 // ============== NEW TOKENS (formerly hardcoded) ==============
 inline QColor kCardBorder()          { return isDarkTheme() ? QColor(255,255,255,10) : QColor(0,0,0,20); }
-inline QColor kButtonHoverBg()       { return isDarkTheme() ? QColor(255,255,255,0.08*255) : QColor("#E5E7EB"); }
+inline QColor kButtonHoverBg()       { return isDarkTheme() ? QColor(255,255,255,20) : QColor("#E5E7EB"); }
 inline QColor kChartGradientTop()    { return isDarkTheme() ? QColor("#6366F1") : QColor("#A5B4FC"); }
 inline QColor kChartGradientBottom() { return isDarkTheme() ? QColor("#4338CA") : QColor("#6366F1"); }
 inline QColor kChartAreaTop()        { return isDarkTheme() ? QColor(99,102,241,40) : QColor(165,180,252,60); }
 inline QColor kChartAreaBottom()     { return isDarkTheme() ? QColor(99,102,241,0) : QColor(165,180,252,0); }
 inline QColor kTodayGlow()           { return isDarkTheme() ? QColor(129,140,248,45) : QColor(99,102,241,38); }
 inline QColor kTodayDotBg()          { return isDarkTheme() ? QColor("#2D2D3F") : QColor("#FFFFFF"); }
-inline QColor kProgressBg()          { return isDarkTheme() ? QColor(255,255,255,0.12*255) : QColor("#E5E7EB"); }
+inline QColor kProgressBg()          { return isDarkTheme() ? QColor(255,255,255,31) : QColor("#E5E7EB"); }
 inline QColor kCompareTodayBg()      { return isDarkTheme() ? QColor(129,140,248,25) : QColor(99,102,241,20); }
 inline QColor kCompareYesterdayBg()  { return isDarkTheme() ? QColor(255,255,255,2) : QColor(0,0,0,4); }
 inline QColor kCompareYesterdayBar() { return isDarkTheme() ? QColor("#475569") : QColor("#D1D5DB"); }

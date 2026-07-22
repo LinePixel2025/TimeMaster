@@ -3,18 +3,37 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QBitmap>
+#include <QResizeEvent>
 
 DashboardCard::DashboardCard(const QString &id, QWidget *parent)
     : QFrame(parent), m_cardId(id)
 {
-    // Stylesheet declares the background colour so that child widgets
-    // with "background: transparent" (HeroCard, etc.) resolve correctly.
-    // Actual painting is done rounded in paintEvent; auto-fill is off.
     setStyleSheet("DashboardCard { background-color: #FFFFFF; }");
     setAutoFillBackground(false);
     m_layout = new QVBoxLayout(this);
     m_layout->setContentsMargins(20, 12, 20, 16);
     m_layout->setSpacing(12);
+}
+
+void DashboardCard::updateClipMask()
+{
+    QBitmap mask(size());
+    mask.fill(Qt::color0);
+    {
+        QPainter p(&mask);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setBrush(Qt::color1);
+        p.setPen(Qt::NoPen);
+        p.drawRoundedRect(rect(), DesignTokens::kRadiusCard, DesignTokens::kRadiusCard);
+    }
+    setMask(mask);
+}
+
+void DashboardCard::resizeEvent(QResizeEvent *event)
+{
+    QFrame::resizeEvent(event);
+    updateClipMask();
 }
 
 void DashboardCard::paintEvent(QPaintEvent *event)

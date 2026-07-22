@@ -6,8 +6,7 @@
 #include <QDialog>
 
 class DatabaseManager;
-class StatsWidget;
-class AppRankWidget;
+class DashboardWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -33,8 +32,7 @@ private:
     void setupPalette();
 
     DatabaseManager *m_db;
-    StatsWidget *m_statsWidget;
-    AppRankWidget *m_appRankWidget;
+    DashboardWidget *m_dashboardWidget;
     QTimer *m_refreshTimer;
     QWidget *m_centralWidget;
 };

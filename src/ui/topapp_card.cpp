@@ -1,4 +1,4 @@
-﻿#include "ui/topapp_card.h"
+#include "ui/topapp_card.h"
 #include "ui/design_tokens.h"
 
 #include <QVBoxLayout>

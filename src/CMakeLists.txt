@@ -13,7 +13,6 @@ set(SOURCES
     ui/compare_card.cpp
     ui/dashboard_card.cpp
     ui/dashboard_layout.cpp
-    ui/dashboard_widget.cpp
     ui/grid_editor.cpp
     ui/hero_card.cpp
     ui/insight_card.cpp
@@ -42,7 +41,6 @@ set(HEADERS
     ui/compare_card.h
     ui/dashboard_card.h
     ui/dashboard_layout.h
-    ui/dashboard_widget.h
     ui/design_tokens.h
     ui/grid_editor.h
     ui/hero_card.h

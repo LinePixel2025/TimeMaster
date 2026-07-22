@@ -1,4 +1,4 @@
-﻿#include "rank_card.h"
+#include "rank_card.h"
 #include "icon/app_icon_provider.h"
 #include "ui/design_tokens.h"
 

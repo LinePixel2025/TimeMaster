@@ -1,4 +1,4 @@
-﻿#include "ui/chart_card.h"
+#include "ui/chart_card.h"
 #include "ui/design_tokens.h"
 #include "ui/svg_icon.h"
 

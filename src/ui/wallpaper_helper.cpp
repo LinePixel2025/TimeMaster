@@ -1,4 +1,4 @@
-﻿#include "ui/wallpaper_helper.h"
+#include "ui/wallpaper_helper.h"
 #include "ui/design_tokens.h"
 #include <QImage>
 #include <QLinearGradient>

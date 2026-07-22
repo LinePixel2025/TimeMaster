@@ -1,4 +1,4 @@
-﻿#include "insight_card.h"
+#include "insight_card.h"
 #include "ui/design_tokens.h"
 
 #include <QHBoxLayout>

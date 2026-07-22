@@ -1,4 +1,4 @@
-﻿#include "ui/compare_card.h"
+#include "ui/compare_card.h"
 #include "ui/design_tokens.h"
 
 #include <QPainter>
