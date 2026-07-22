@@ -1,4 +1,4 @@
-#include "rank_card.h"
+﻿#include "rank_card.h"
 #include "icon/app_icon_provider.h"
 #include "ui/design_tokens.h"
 
@@ -66,7 +66,7 @@ void AppRankItem::paintEvent(QPaintEvent *)
         painter.drawEllipse(badgeRect);
 
         painter.setFont(DesignTokens::appFont(12, QFont::Medium));
-        painter.setPen(DesignTokens::kTextMute);
+        painter.setPen(DesignTokens::kTextMute());
         painter.drawText(badgeRect, Qt::AlignCenter, QString::number(m_rank));
     }
 
@@ -90,7 +90,7 @@ void AppRankItem::paintEvent(QPaintEvent *)
 
     const QFont nameFont = DesignTokens::appFont(13);
     painter.setFont(nameFont);
-    painter.setPen(DesignTokens::kText);
+    painter.setPen(DesignTokens::kText());
     const QString displayName = QFontMetrics(nameFont).elidedText(
         m_appName, Qt::ElideRight, qRound(nameWidth));
     painter.drawText(QRectF(nameX, 0, nameWidth, h),
@@ -105,7 +105,7 @@ void AppRankItem::paintEvent(QPaintEvent *)
         : QString("%1m").arg(minutes);
 
     painter.setFont(DesignTokens::appFont(12, QFont::Medium));
-    painter.setPen(DesignTokens::kTextStrong);
+    painter.setPen(DesignTokens::kTextStrong());
     painter.drawText(QRectF(timeX, 0, timeWidth, h),
                      Qt::AlignRight | Qt::AlignVCenter, timeText);
 }
@@ -129,7 +129,7 @@ RankCard::RankCard(QWidget *parent)
     accentDot->setFixedSize(6, 6);
     accentDot->setStyleSheet(
         QString("background-color: %1; border-radius: 3px;")
-            .arg(DesignTokens::kAccent.name()));
+            .arg(DesignTokens::kAccent().name()));
 
     auto *titleLabel = new QLabel(
         QString::fromUtf8("\xe5\xba\x94\xe7\x94\xa8\xe4\xbd\xbf\xe7\x94\xa8\xe6\x8e\x92\xe8\xa1\x8c"
@@ -138,7 +138,7 @@ RankCard::RankCard(QWidget *parent)
     titleLabel->setFont(DesignTokens::appFont(14, QFont::Medium));
     titleLabel->setStyleSheet(
         QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextStrong.name()));
+            .arg(DesignTokens::kTextStrong().name()));
 
     titleLayout->addWidget(accentDot, 0, Qt::AlignVCenter);
     titleLayout->addWidget(titleLabel, 0, Qt::AlignVCenter);
@@ -158,8 +158,8 @@ RankCard::RankCard(QWidget *parent)
             "QScrollBar::handle:vertical { background: %2; min-height: 24px; border-radius: 3px; }"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
             "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }")
-            .arg(DesignTokens::kBorder.name(QColor::HexArgb))
-            .arg(DesignTokens::kTextFaint.name()));
+            .arg(DesignTokens::kBorder().name(QColor::HexArgb))
+            .arg(DesignTokens::kTextFaint().name()));
     scrollArea->viewport()->setStyleSheet("background: transparent;");
 
     m_listWidget = new QWidget();
@@ -191,7 +191,7 @@ void RankCard::refresh(const QVector<QVariantMap> &rankData)
         emptyLabel->setFont(DesignTokens::appFont(13));
         emptyLabel->setStyleSheet(
             QString("color: %1; background: transparent; padding: 32px 0;")
-                .arg(DesignTokens::kTextFaint.name()));
+                .arg(DesignTokens::kTextFaint().name()));
         m_listLayout->insertWidget(0, emptyLabel);
         return;
     }

@@ -1,4 +1,4 @@
-#include "ui/grid_editor.h"
+﻿#include "ui/grid_editor.h"
 #include "ui/design_tokens.h"
 
 #include <QDataStream>
@@ -49,7 +49,7 @@ CellWidget::CellWidget(int row, int col, QWidget *parent)
     m_placeholder->setFont(DesignTokens::appFont(11));
     m_placeholder->setStyleSheet(
         QStringLiteral("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextFaint.name(QColor::HexArgb)));
+            .arg(DesignTokens::kTextFaint().name(QColor::HexArgb)));
     m_stack->addWidget(m_placeholder); // index 0
 
     // Page 1: component display
@@ -62,7 +62,7 @@ CellWidget::CellWidget(int row, int col, QWidget *parent)
     m_nameLabel->setFont(DesignTokens::appFont(12, QFont::Medium));
     m_nameLabel->setStyleSheet(
         QStringLiteral("color: %1; background: transparent;")
-            .arg(DesignTokens::kAccent.name(QColor::HexArgb)));
+            .arg(DesignTokens::kAccent().name(QColor::HexArgb)));
     m_nameLabel->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
     contentLayout->addWidget(m_nameLabel, 1);
 
@@ -83,9 +83,9 @@ CellWidget::CellWidget(int row, int col, QWidget *parent)
             "  background: %2;"
             "  color: %3;"
             "}")
-        .arg(DesignTokens::kTextFaint.name(QColor::HexArgb))
-        .arg(DesignTokens::kError.name(QColor::HexArgb))
-        .arg(DesignTokens::kSurface.name(QColor::HexArgb)));
+        .arg(DesignTokens::kTextFaint().name(QColor::HexArgb))
+        .arg(DesignTokens::kError().name(QColor::HexArgb))
+        .arg(DesignTokens::kSurface().name(QColor::HexArgb)));
     contentLayout->addWidget(m_removeBtn);
 
     m_stack->addWidget(contentPage); // index 1
@@ -179,13 +179,13 @@ void CellWidget::dropEvent(QDropEvent *event)
 
 void CellWidget::updateStyle()
 {
-    QString borderColor = DesignTokens::kBorder.name(QColor::HexArgb);
-    QString accentColor = DesignTokens::kAccent.name(QColor::HexArgb);
-    QString accentAlpha = DesignTokens::kAccentLight.name(QColor::HexArgb);
+    QString borderColor = DesignTokens::kBorder().name(QColor::HexArgb);
+    QString accentColor = DesignTokens::kAccent().name(QColor::HexArgb);
+    QString accentAlpha = DesignTokens::kAccentLight().name(QColor::HexArgb);
 
     if (m_hovering) {
         setStyleSheet(QString::fromLatin1(kStyleHover)
-            .arg(accentAlpha, DesignTokens::kAccent.name(QColor::HexArgb)));
+            .arg(accentAlpha, DesignTokens::kAccent().name(QColor::HexArgb)));
     } else if (m_stack->currentIndex() == 1) {
         setStyleSheet(QString::fromLatin1(kStyleOccupied)
             .arg(accentAlpha, accentColor));
@@ -233,11 +233,11 @@ DashboardGridEditor::DashboardGridEditor(QWidget *parent)
             "QPushButton:hover {"
             "  background: %5;"
             "}")
-        .arg(DesignTokens::kSurface.name(QColor::HexArgb))
-        .arg(DesignTokens::kError.name(QColor::HexArgb))
-        .arg(DesignTokens::kBorder.name(QColor::HexArgb))
+        .arg(DesignTokens::kSurface().name(QColor::HexArgb))
+        .arg(DesignTokens::kError().name(QColor::HexArgb))
+        .arg(DesignTokens::kBorder().name(QColor::HexArgb))
         .arg(DesignTokens::kRadiusBtn)
-        .arg(DesignTokens::kAccentGlow.name(QColor::HexArgb)));
+        .arg(DesignTokens::kAccentGlow().name(QColor::HexArgb)));
     btnRow->addWidget(m_removeRowBtn);
 
     m_addRowBtn = new QPushButton(
@@ -259,10 +259,10 @@ DashboardGridEditor::DashboardGridEditor(QWidget *parent)
             "QPushButton:pressed {"
             "  background-color: %4;"
             "}")
-        .arg(DesignTokens::kAccent.name(QColor::HexArgb))
+        .arg(DesignTokens::kAccent().name(QColor::HexArgb))
         .arg(DesignTokens::kRadiusBtn)
-        .arg(DesignTokens::kAccentHover.name(QColor::HexArgb))
-        .arg(DesignTokens::kAccentPressed.name(QColor::HexArgb)));
+        .arg(DesignTokens::kAccentHover().name(QColor::HexArgb))
+        .arg(DesignTokens::kAccentPressed().name(QColor::HexArgb)));
     btnRow->addWidget(m_addRowBtn);
 
     outerLayout->addLayout(btnRow);
@@ -270,6 +270,27 @@ DashboardGridEditor::DashboardGridEditor(QWidget *parent)
     // ---- Connections ----
     connect(m_addRowBtn, &QPushButton::clicked, this, &DashboardGridEditor::addRow);
     connect(m_removeRowBtn, &QPushButton::clicked, this, &DashboardGridEditor::removeLastRow);
+
+    m_addRowBtn->hide();
+    m_removeRowBtn->hide();
+}
+
+void DashboardGridEditor::setRows(int count)
+{
+    count = qBound(1, count, 4);
+    while (m_cells.size() > count) {
+        int lastRow = m_cells.size() - 1;
+        for (int c = 0; c < m_cells[lastRow].size(); ++c) {
+            CellWidget *cell = m_cells[lastRow][c];
+            if (cell && cell->hasComponent()
+                && !m_hiddenIds.contains(cell->componentId()))
+                m_hiddenIds.append(cell->componentId());
+        }
+        removeRow(lastRow);
+    }
+    while (m_cells.size() < count)
+        ensureRows(m_cells.size() + 1);
+    updateLibraryStates();
 }
 
 // ---- Public API ------------------------------------------------------------
@@ -372,10 +393,10 @@ void DashboardGridEditor::updateLibraryStates()
         QString id = libItem->data(Qt::UserRole).toString();
         if (placed.contains(id)) {
             libItem->setFlags(libItem->flags() & ~Qt::ItemIsEnabled);
-            libItem->setForeground(DesignTokens::kTextFaint);
+            libItem->setForeground(DesignTokens::kTextFaint());
         } else {
             libItem->setFlags(libItem->flags() | Qt::ItemIsEnabled);
-            libItem->setForeground(DesignTokens::kText);
+            libItem->setForeground(DesignTokens::kText());
         }
     }
 }

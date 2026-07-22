@@ -1,4 +1,4 @@
-#include "ui/topapp_card.h"
+﻿#include "ui/topapp_card.h"
 #include "ui/design_tokens.h"
 
 #include <QVBoxLayout>
@@ -24,7 +24,7 @@ TopAppCard::TopAppCard(QWidget *parent)
     m_eyebrowLabel = new QLabel(QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x9c\x80\xe5\xb8\xb8\xe7\x94\xa8"), this);
     m_eyebrowLabel->setFont(DesignTokens::eyebrowFont(11));
     m_eyebrowLabel->setStyleSheet(
-        QStringLiteral("color: %1; background: transparent;").arg(DesignTokens::kTextFaint.name()));
+        QStringLiteral("color: %1; background: transparent;").arg(DesignTokens::kTextFaint().name()));
     m_eyebrowLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(m_eyebrowLabel);
 
@@ -37,7 +37,7 @@ TopAppCard::TopAppCard(QWidget *parent)
     m_nameLabel = new QLabel(QString::fromUtf8("\xe6\x9a\x82\xe6\x97\xa0\xe6\x95\xb0\xe6\x8d\xae"), this);
     m_nameLabel->setFont(DesignTokens::appFont(18, QFont::Medium));
     m_nameLabel->setStyleSheet(
-        QStringLiteral("color: %1; background: transparent;").arg(DesignTokens::kTextStrong.name()));
+        QStringLiteral("color: %1; background: transparent;").arg(DesignTokens::kTextStrong().name()));
     m_nameLabel->setAlignment(Qt::AlignCenter);
     m_nameLabel->setWordWrap(true);
     layout->addWidget(m_nameLabel);
@@ -45,7 +45,7 @@ TopAppCard::TopAppCard(QWidget *parent)
     m_timeLabel = new QLabel(this);
     m_timeLabel->setFont(DesignTokens::appFont(15, QFont::Medium));
     m_timeLabel->setStyleSheet(
-        QStringLiteral("color: %1; background: transparent;").arg(DesignTokens::kAccent.name()));
+        QStringLiteral("color: %1; background: transparent;").arg(DesignTokens::kAccent().name()));
     m_timeLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(m_timeLabel);
 }

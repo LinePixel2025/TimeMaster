@@ -1,4 +1,4 @@
-#include "ui/compare_card.h"
+﻿#include "ui/compare_card.h"
 #include "ui/design_tokens.h"
 
 #include <QPainter>
@@ -41,7 +41,7 @@ void CompareCard::paintEvent(QPaintEvent *)
     // — Empty state —
     if (m_todaySeconds == 0 && m_yesterdaySeconds == 0) {
         p.setFont(DesignTokens::appFont(14));
-        p.setPen(DesignTokens::kTextFaint);
+        p.setPen(DesignTokens::kTextFaint());
         p.drawText(QRectF(0, 0, w, h), Qt::AlignCenter,
                    QString::fromUtf8("\xe6\x9a\x82\xe6\x97\xa0\xe6\x95\xb0\xe6\x8d\xae"));
         return;
@@ -59,7 +59,7 @@ void CompareCard::paintEvent(QPaintEvent *)
     // — Left column (今日) —
     {
         QRectF r(leftX, colY, colW, colH);
-        QColor accentBg = DesignTokens::kAccent;
+        QColor accentBg = DesignTokens::kAccent();
         accentBg.setAlpha(20); // ~8 %
         QPainterPath clip;
         clip.addRoundedRect(r, radius, radius);
@@ -74,19 +74,19 @@ void CompareCard::paintEvent(QPaintEvent *)
 
         // eyebrow
         p.setFont(DesignTokens::eyebrowFont(11));
-        p.setPen(DesignTokens::kAccent);
+        p.setPen(DesignTokens::kAccent());
         p.drawText(QRectF(leftX, colY + 8, colW, 20), Qt::AlignCenter,
                    QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5"));
 
         // big number
         p.setFont(DesignTokens::appFont(qMin(28, qRound(colW * 0.2)), QFont::Bold));
-        p.setPen(DesignTokens::kTextStrong);
+        p.setPen(DesignTokens::kTextStrong());
         p.drawText(QRectF(leftX, colY + 28, colW, 36), Qt::AlignCenter,
                    formatHM(m_todaySeconds));
 
         // subtitle
         p.setFont(DesignTokens::appFont(12));
-        p.setPen(DesignTokens::kTextMute);
+        p.setPen(DesignTokens::kTextMute());
         p.drawText(QRectF(leftX, colY + 66, colW, 18), Qt::AlignCenter,
                    QString::fromUtf8("\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf"));
     }
@@ -105,17 +105,17 @@ void CompareCard::paintEvent(QPaintEvent *)
         p.drawRoundedRect(r, radius, radius);
 
         p.setFont(DesignTokens::eyebrowFont(11));
-        p.setPen(DesignTokens::kTextMute);
+        p.setPen(DesignTokens::kTextMute());
         p.drawText(QRectF(rightX, colY + 8, colW, 20), Qt::AlignCenter,
                    QString::fromUtf8("\xe6\x98\xa8\xe6\x97\xa5"));
 
         p.setFont(DesignTokens::appFont(qMin(28, qRound(colW * 0.2)), QFont::Bold));
-        p.setPen(DesignTokens::kTextStrong);
+        p.setPen(DesignTokens::kTextStrong());
         p.drawText(QRectF(rightX, colY + 28, colW, 36), Qt::AlignCenter,
                    formatHM(m_yesterdaySeconds));
 
         p.setFont(DesignTokens::appFont(12));
-        p.setPen(DesignTokens::kTextMute);
+        p.setPen(DesignTokens::kTextMute());
         p.drawText(QRectF(rightX, colY + 66, colW, 18), Qt::AlignCenter,
                    QString::fromUtf8("\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf"));
     }
@@ -131,17 +131,17 @@ void CompareCard::paintEvent(QPaintEvent *)
                            / qMax(1, m_yesterdaySeconds);
             if (deltaPct > 0) {
                 label     = QString::fromUtf8("\xe2\x86\x91 %1%").arg(deltaPct);
-                pillColor = DesignTokens::kSuccess;
+                pillColor = DesignTokens::kSuccess();
             } else if (deltaPct < 0) {
                 label     = QString::fromUtf8("\xe2\x86\x93 %1%").arg(-deltaPct);
-                pillColor = DesignTokens::kError;
+                pillColor = DesignTokens::kError();
             } else {
                 label     = QString::fromUtf8("\xe2\x80\x94 0%");
-                pillColor = DesignTokens::kTextMute;
+                pillColor = DesignTokens::kTextMute();
             }
         } else {
             label     = QString::fromUtf8("\xe6\x96\xb0\xe5\xa2\x9e");
-            pillColor = DesignTokens::kAccent;
+            pillColor = DesignTokens::kAccent();
         }
 
         QFont pillFont = DesignTokens::appFont(12, QFont::Medium);

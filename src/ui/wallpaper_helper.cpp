@@ -1,4 +1,4 @@
-#include "ui/wallpaper_helper.h"
+﻿#include "ui/wallpaper_helper.h"
 #include "ui/design_tokens.h"
 #include <QImage>
 #include <QLinearGradient>
@@ -14,7 +14,7 @@ QPixmap generateWallpaper(Type type, const QSize &size) {
     switch (type) {
     case Type::White: {
         QPixmap pixmap(size);
-        pixmap.fill(DesignTokens::kWhiteBg);
+        pixmap.fill(DesignTokens::kWhiteBg());
         return pixmap;
     }
     case Type::FrostedGlass: {
@@ -23,8 +23,8 @@ QPixmap generateWallpaper(Type type, const QSize &size) {
         {
             QPainter painter(&pixmap);
             QLinearGradient gradient(0, 0, size.width(), size.height());
-            gradient.setColorAt(0.0, DesignTokens::kFrostStart);
-            gradient.setColorAt(1.0, DesignTokens::kFrostEnd);
+            gradient.setColorAt(0.0, DesignTokens::kFrostStart());
+            gradient.setColorAt(1.0, DesignTokens::kFrostEnd());
             painter.fillRect(pixmap.rect(), gradient);
         }
 

@@ -1,4 +1,4 @@
-#include "insight_card.h"
+﻿#include "insight_card.h"
 #include "ui/design_tokens.h"
 
 #include <QHBoxLayout>
@@ -14,17 +14,17 @@ InsightCard::InsightCard(QWidget *parent)
         "  border-radius: %2px; padding: 8px 20px; font-size: 13px; }"
         "QPushButton:hover { background-color: %3; }"
         "QPushButton:pressed { background-color: %4; }")
-        .arg(DesignTokens::kAccent.name())
+        .arg(DesignTokens::kAccent().name())
         .arg(DesignTokens::kRadiusBtn)
-        .arg(DesignTokens::kAccentLight.name())
-        .arg(DesignTokens::kAccent.name() + "CC");
+        .arg(DesignTokens::kAccentLight().name())
+        .arg(DesignTokens::kAccent().name() + "CC");
 
     const QString linkBtnStyle = QString(
         "QPushButton { color: %1; background: transparent; border: none;"
         "  font-size: 13px; padding: 4px 0; }"
         "QPushButton:hover { color: %2; }")
-        .arg(DesignTokens::kAccent.name())
-        .arg(DesignTokens::kAccentLight.name());
+        .arg(DesignTokens::kAccent().name())
+        .arg(DesignTokens::kAccentLight().name());
 
     m_stack = new QStackedWidget(this);
 
@@ -40,7 +40,7 @@ InsightCard::InsightCard(QWidget *parent)
     idleTitle->setFont(DesignTokens::appFont(14, QFont::Medium));
     idleTitle->setStyleSheet(
         QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextStrong.name()));
+            .arg(DesignTokens::kTextStrong().name()));
 
     m_notConfiguredLabel = new QLabel(
         QString::fromUtf8("\xe8\xaf\xb7\xe5\x85\x88\xe9\x85\x8d\xe7\xbd\xae API"),
@@ -48,7 +48,7 @@ InsightCard::InsightCard(QWidget *parent)
     m_notConfiguredLabel->setFont(DesignTokens::appFont(12));
     m_notConfiguredLabel->setStyleSheet(
         QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextMute.name()));
+            .arg(DesignTokens::kTextMute().name()));
 
     m_analyzeBtn = new QPushButton(
         QString::fromUtf8("\xe7\x94\x9f\xe6\x88\x90\xe5\x88\x86\xe6\x9e\x90"),
@@ -77,7 +77,7 @@ InsightCard::InsightCard(QWidget *parent)
     loadingTitle->setFont(DesignTokens::appFont(14, QFont::Medium));
     loadingTitle->setStyleSheet(
         QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextStrong.name()));
+            .arg(DesignTokens::kTextStrong().name()));
     loadingTitle->setAlignment(Qt::AlignCenter);
 
     auto *progressBar = new QProgressBar(loadingPage);
@@ -90,7 +90,7 @@ InsightCard::InsightCard(QWidget *parent)
             "QProgressBar { background: %1; border: none; border-radius: 2px; }"
             "QProgressBar::chunk { background: %2; border-radius: 2px; }")
             .arg(QColor(0, 0, 0, 12).name(QColor::HexArgb))
-            .arg(DesignTokens::kAccent.name()));
+            .arg(DesignTokens::kAccent().name()));
 
     auto *loadingLabel = new QLabel(
         QString::fromUtf8("\xe6\xad\xa3\xe5\x9c\xa8\xe5\x88\x86\xe6\x9e\x90..."),
@@ -98,7 +98,7 @@ InsightCard::InsightCard(QWidget *parent)
     loadingLabel->setFont(DesignTokens::appFont(12));
     loadingLabel->setStyleSheet(
         QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextMute.name()));
+            .arg(DesignTokens::kTextMute().name()));
     loadingLabel->setAlignment(Qt::AlignCenter);
 
     loadingLayout->addWidget(loadingTitle);
@@ -119,14 +119,14 @@ InsightCard::InsightCard(QWidget *parent)
     errorTitle->setFont(DesignTokens::appFont(14, QFont::Medium));
     errorTitle->setStyleSheet(
         QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextStrong.name()));
+            .arg(DesignTokens::kTextStrong().name()));
     errorTitle->setAlignment(Qt::AlignCenter);
 
     m_errorLabel = new QLabel(errorPage);
     m_errorLabel->setFont(DesignTokens::appFont(12));
     m_errorLabel->setStyleSheet(
         QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kError.name()));
+            .arg(DesignTokens::kError().name()));
     m_errorLabel->setAlignment(Qt::AlignCenter);
     m_errorLabel->setWordWrap(true);
 
@@ -155,20 +155,20 @@ InsightCard::InsightCard(QWidget *parent)
     resultTitle->setFont(DesignTokens::appFont(14, QFont::Medium));
     resultTitle->setStyleSheet(
         QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextStrong.name()));
+            .arg(DesignTokens::kTextStrong().name()));
 
     m_headlineLabel = new QLabel(resultPage);
     m_headlineLabel->setFont(DesignTokens::appFont(14, QFont::Bold));
     m_headlineLabel->setStyleSheet(
         QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextStrong.name()));
+            .arg(DesignTokens::kTextStrong().name()));
     m_headlineLabel->setWordWrap(true);
 
     m_summaryLabel = new QLabel(resultPage);
     m_summaryLabel->setFont(DesignTokens::appFont(12));
     m_summaryLabel->setStyleSheet(
         QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kText.name()));
+            .arg(DesignTokens::kText().name()));
     m_summaryLabel->setWordWrap(true);
 
     m_reportBtn = new QPushButton(

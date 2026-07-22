@@ -1,4 +1,4 @@
-#include "ui/hero_card.h"
+﻿#include "ui/hero_card.h"
 #include "ui/design_tokens.h"
 #include <QLabel>
 #include <QVBoxLayout>
@@ -17,22 +17,24 @@ HeroCard::HeroCard(QWidget *p):QFrame(p){
     auto *R=new QHBoxLayout();
     auto *d=new QLabel(QStringLiteral("TODAY \u00B7 ")+QDate::currentDate().toString("yyyy-MM-dd"),this);
     d->setFont(DesignTokens::eyebrowFont(11));
-    d->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextFaint.name()));
+    d->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextFaint().name()));
     R->addWidget(d);R->addStretch();L->addLayout(R);L->addSpacing(12);
 
     m_time=new QLabel("0m",this);m_time->setFont(DesignTokens::appFont(44,QFont::Bold));
-    m_time->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextStrong.name()));
+    m_time->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextStrong().name()));
+    m_time->setWordWrap(true);
+    m_time->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     L->addWidget(m_time);L->addSpacing(4);
 
     m_sub=new QLabel(QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf"),this);
     m_sub->setFont(DesignTokens::appFont(14));
-    m_sub->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextMute.name()));
+    m_sub->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextMute().name()));
     L->addWidget(m_sub);
 
     L->addStretch();
     m_ring=new QLabel(this);m_ring->setFont(DesignTokens::appFont(18,QFont::Medium));
     m_ring->setStyleSheet(QString("color:%1;padding:8px 16px;background:%2;border-radius:16px;")
-        .arg(DesignTokens::kAccent.name(),DesignTokens::kAccentLight.name()));
+        .arg(DesignTokens::kAccent().name(),DesignTokens::kAccentLight().name()));
     m_ring->setAlignment(Qt::AlignCenter);L->addWidget(m_ring,0,Qt::AlignRight);
 }
 void HeroCard::setData(int t,int y,int g,const QVector<QVariantMap>&){m_today=t;m_yesterday=y;m_goal=g;updateDisplay();}

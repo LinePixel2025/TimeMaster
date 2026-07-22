@@ -1,4 +1,4 @@
-#include "ui/chart_card.h"
+﻿#include "ui/chart_card.h"
 #include "ui/design_tokens.h"
 #include "ui/svg_icon.h"
 
@@ -98,7 +98,7 @@ void WeeklyBar::paintEvent(QPaintEvent *)
     // Empty state
     if (allZero) {
         painter.setFont(DesignTokens::appFont(13));
-        painter.setPen(DesignTokens::kTextFaint);
+        painter.setPen(DesignTokens::kTextFaint());
         painter.drawText(QRectF(0, chartTop, pw, chartAreaH),
                          Qt::AlignCenter,
                          QString::fromUtf8("\xe6\x9a\x82\xe6\x97\xa0\xe6\x95\xb0\xe6\x8d\xae"));
@@ -109,7 +109,7 @@ void WeeklyBar::paintEvent(QPaintEvent *)
     QString todayKey = QDate::currentDate().toString(Qt::ISODate);
 
     // Baseline rule
-    QPen rulePen(DesignTokens::kBorder, 1.0);
+    QPen rulePen(DesignTokens::kBorder(), 1.0);
     painter.setPen(rulePen);
     painter.setBrush(Qt::NoBrush);
     painter.drawLine(QPointF(sideMargin, baselineY), QPointF(pw - sideMargin, baselineY));
@@ -141,7 +141,7 @@ void WeeklyBar::paintEvent(QPaintEvent *)
             path.addRoundedRect(x, chartBottom - barH, barW, barH, 6, 6);
             QLinearGradient gradient(x, chartBottom - barH, x, chartBottom);
             gradient.setColorAt(0.0, QColor("#A5B4FC"));
-            gradient.setColorAt(1.0, DesignTokens::kAccent);
+            gradient.setColorAt(1.0, DesignTokens::kAccent());
             painter.setPen(Qt::NoPen);
             painter.setBrush(QBrush(gradient));
             painter.drawPath(path);
@@ -151,7 +151,7 @@ void WeeklyBar::paintEvent(QPaintEvent *)
         if (val > 0) {
             QString label = formatDuration(val);
             painter.setFont(labelFont);
-            painter.setPen(DesignTokens::kTextMute);
+            painter.setPen(DesignTokens::kTextMute());
             double textY = (barH > 0)
                 ? (chartBottom - barH - 8 - fmLabel.height())
                 : (chartTop - 2);
@@ -165,7 +165,7 @@ void WeeklyBar::paintEvent(QPaintEvent *)
             ? DesignTokens::appFont(11, QFont::Bold)
             : DesignTokens::appFont(11, QFont::Medium);
         painter.setFont(dayFont);
-        painter.setPen(isToday ? DesignTokens::kAccent : DesignTokens::kTextMute);
+        painter.setPen(isToday ? DesignTokens::kAccent() : DesignTokens::kTextMute());
         QFontMetrics dayFm(dayFont);
         double dayTextW = dayFm.horizontalAdvance(kDayCn[i]) + 8.0;
         painter.drawText(QRectF(x - dayTextW / 2.0 + barW / 2.0, labelY, dayTextW, 20),
@@ -228,7 +228,7 @@ void WeeklyLine::paintEvent(QPaintEvent *)
 
     if (allZero) {
         painter.setFont(DesignTokens::appFont(13));
-        painter.setPen(DesignTokens::kTextFaint);
+        painter.setPen(DesignTokens::kTextFaint());
         painter.drawText(QRectF(0, chartTop, pw, chartAreaH),
                          Qt::AlignCenter,
                          QString::fromUtf8("\xe6\x9a\x82\xe6\x97\xa0\xe6\x95\xb0\xe6\x8d\xae"));
@@ -281,7 +281,7 @@ void WeeklyLine::paintEvent(QPaintEvent *)
 
     QLinearGradient strokeGrad(points.first().x(), 0, points.last().x(), 0);
     strokeGrad.setColorAt(0.0, QColor("#A5B4FC"));
-    strokeGrad.setColorAt(1.0, DesignTokens::kAccent);
+    strokeGrad.setColorAt(1.0, DesignTokens::kAccent());
     QPen linePen(QBrush(strokeGrad), 2.5);
     linePen.setCapStyle(Qt::RoundCap);
     linePen.setJoinStyle(Qt::RoundJoin);
@@ -306,13 +306,13 @@ void WeeklyLine::paintEvent(QPaintEvent *)
             painter.drawPath(glow);
 
             // Larger today dot with white center
-            painter.setBrush(DesignTokens::kAccent);
+            painter.setBrush(DesignTokens::kAccent());
             painter.setPen(Qt::NoPen);
             painter.drawEllipse(points[i], 4.0, 4.0);
             painter.setBrush(QColor("#FFFFFF"));
             painter.drawEllipse(points[i], 1.5, 1.5);
         } else if (vals[i] > 0) {
-            painter.setBrush(DesignTokens::kAccent);
+            painter.setBrush(DesignTokens::kAccent());
             painter.setPen(Qt::NoPen);
             painter.drawEllipse(points[i], 2.5, 2.5);
         }
@@ -321,7 +321,7 @@ void WeeklyLine::paintEvent(QPaintEvent *)
         if (vals[i] > 0) {
             QString label = formatDuration(vals[i]);
             painter.setFont(dotFont);
-            painter.setPen(DesignTokens::kTextFaint);
+            painter.setPen(DesignTokens::kTextFaint());
             double labelW = qMax(44.0, static_cast<double>(dotFm.horizontalAdvance(label)) + 8.0);
             painter.drawText(QRectF(points[i].x() - labelW / 2.0, points[i].y() - 18, labelW, 14),
                              Qt::AlignCenter, label);
@@ -335,7 +335,7 @@ void WeeklyLine::paintEvent(QPaintEvent *)
         bool isToday = (d == todayKey);
         double x = margin + i * stepX;
         painter.setFont(isToday ? DesignTokens::appFont(11, QFont::Bold) : dayFont);
-        painter.setPen(isToday ? DesignTokens::kAccent : DesignTokens::kTextMute);
+        painter.setPen(isToday ? DesignTokens::kAccent() : DesignTokens::kTextMute());
         painter.drawText(QRectF(x - 16, labelY, 32, 20),
                          Qt::AlignCenter, kDayCn[i]);
     }
