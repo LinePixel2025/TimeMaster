@@ -17,12 +17,12 @@ QStringList validIds()
 QMap<QString, QVector<int>> defaultGrid()
 {
     return {
-        {"today_total",       {0, 0, 1}},
-        {"weekly_chart",      {0, 1, 1}},
-        {"ai_insight",        {1, 0, 1}},
-        {"top_app",           {1, 1, 1}},
-        {"app_ranking",       {2, 0, 1}},
-        {"yesterday_compare", {2, 1, 1}},
+        {"today_total",       {0, 0, 2}},
+        {"weekly_chart",      {1, 0, 1}},
+        {"ai_insight",        {1, 1, 1}},
+        {"top_app",           {2, 0, 1}},
+        {"app_ranking",       {2, 1, 1}},
+        {"yesterday_compare", {3, 0, 2}},
     };
 }
 

@@ -1,6 +1,7 @@
 #include "main_window.h"
 #include "database/database_manager.h"
-#include "ui/dashboard_widget.h"
+#include "ui/stats_widget.h"
+#include "ui/app_rank_widget.h"
 #include "ui/settings_dialog.h"
 #include "export/exporter.h"
 
@@ -48,7 +49,8 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
     : QMainWindow(parent), m_db(db)
 {
     setWindowTitle("Time Master");
-    setFixedSize(1000, 700);
+    setMinimumSize(900, 600);
+    resize(1000, 700);
 
     setAutoFillBackground(true);
     setupPalette();
@@ -104,8 +106,19 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
 
     layout->addLayout(headerLayout);
 
-    m_dashboardWidget = new DashboardWidget(db, this);
-    layout->addWidget(m_dashboardWidget, 1);
+    m_statsWidget = new StatsWidget(db, this);
+    layout->addWidget(m_statsWidget);
+
+    QHBoxLayout *rankRow = new QHBoxLayout();
+    rankRow->setSpacing(16);
+    m_appRankWidget = new AppRankWidget(db, this);
+    m_appRankWidget->setMaximumHeight(280);
+    m_appRankWidget->setMinimumHeight(120);
+    rankRow->addWidget(m_appRankWidget, 1);
+    rankRow->addStretch(1);
+    layout->addLayout(rankRow);
+
+    layout->addStretch();
 
     m_refreshTimer = new QTimer(this);
     m_refreshTimer->setInterval(10000);
@@ -125,7 +138,8 @@ void MainWindow::showEvent(QShowEvent *event)
 
 void MainWindow::refreshData()
 {
-    m_dashboardWidget->refresh();
+    m_statsWidget->refresh();
+    m_appRankWidget->refresh();
 }
 
 void MainWindow::onExport()
@@ -176,7 +190,6 @@ void MainWindow::onSettings()
 {
     SettingsDialog dialog(m_db, this);
     if (dialog.exec() == QDialog::Accepted) {
-        m_dashboardWidget->loadLayout();
         refreshData();
         emit settingsChanged();
     }

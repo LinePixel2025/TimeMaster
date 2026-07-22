@@ -17,11 +17,8 @@ signals:
     void clicked();
 protected:
     void paintEvent(QPaintEvent *event) override;
-    void resizeEvent(QResizeEvent *event) override;
     void mousePressEvent(QMouseEvent *e) override;
 private:
-    void updateClipMask();
-
     QString m_cardId;
     QLabel *m_titleLabel = nullptr;
     QWidget *m_contentWidget = nullptr;

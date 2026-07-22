@@ -270,27 +270,6 @@ DashboardGridEditor::DashboardGridEditor(QWidget *parent)
     // ---- Connections ----
     connect(m_addRowBtn, &QPushButton::clicked, this, &DashboardGridEditor::addRow);
     connect(m_removeRowBtn, &QPushButton::clicked, this, &DashboardGridEditor::removeLastRow);
-
-    m_addRowBtn->hide();
-    m_removeRowBtn->hide();
-}
-
-void DashboardGridEditor::setRows(int count)
-{
-    count = qBound(1, count, 4);
-    while (m_cells.size() > count) {
-        int lastRow = m_cells.size() - 1;
-        for (int c = 0; c < m_cells[lastRow].size(); ++c) {
-            CellWidget *cell = m_cells[lastRow][c];
-            if (cell && cell->hasComponent()
-                && !m_hiddenIds.contains(cell->componentId()))
-                m_hiddenIds.append(cell->componentId());
-        }
-        removeRow(lastRow);
-    }
-    while (m_cells.size() < count)
-        ensureRows(m_cells.size() + 1);
-    updateLibraryStates();
 }
 
 // ---- Public API ------------------------------------------------------------

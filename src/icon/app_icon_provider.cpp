@@ -70,7 +70,7 @@ QIcon AppIconProvider::extractIcon(const QString &processPath, int size)
     DWORD_PTR result = SHGetFileInfoW(
         reinterpret_cast<LPCWSTR>(nativePath.utf16()),
         0, &sfi, sizeof(sfi),
-        SHGFI_ICON | SHGFI_LARGEICON);
+        SHGFI_ICON | SHGFI_SMALLICON);
 
     if (result == 0)
         return m_fallbackIcon;

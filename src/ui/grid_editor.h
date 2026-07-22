@@ -104,8 +104,6 @@ public:
     int  rowCount() const { return m_cells.size(); }
     bool isDirty() const  { return m_dirty; }
 
-    void setRows(int count);
-
 signals:
     void layoutChanged();
 
