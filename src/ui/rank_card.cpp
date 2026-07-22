@@ -1,6 +1,7 @@
 #include "rank_card.h"
 #include "icon/app_icon_provider.h"
 #include "ui/design_tokens.h"
+#include "ui/theme_manager.h"
 
 #include <QLabel>
 #include <QPainter>
@@ -62,7 +63,7 @@ void AppRankItem::paintEvent(QPaintEvent *)
     } else {
         // Rank 4+ — gray circle
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 0, 0, 20));
+        painter.setBrush(DesignTokens::kCardBorder());
         painter.drawEllipse(badgeRect);
 
         painter.setFont(DesignTokens::appFont(12, QFont::Medium));
@@ -171,6 +172,11 @@ RankCard::RankCard(QWidget *parent)
 
     scrollArea->setWidget(m_listWidget);
     outerLayout->addWidget(scrollArea);
+
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, [this](ThemeManager::Theme) {
+        update();
+    });
 }
 
 void RankCard::refresh(const QVector<QVariantMap> &rankData)
