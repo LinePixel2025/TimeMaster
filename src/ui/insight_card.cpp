@@ -1,5 +1,6 @@
 #include "insight_card.h"
 #include "ui/design_tokens.h"
+#include "ui/theme_manager.h"
 
 #include <QHBoxLayout>
 
@@ -89,7 +90,7 @@ InsightCard::InsightCard(QWidget *parent)
         QString(
             "QProgressBar { background: %1; border: none; border-radius: 2px; }"
             "QProgressBar::chunk { background: %2; border-radius: 2px; }")
-            .arg(QColor(0, 0, 0, 12).name(QColor::HexArgb))
+            .arg(DesignTokens::kProgressBg().name(QColor::HexArgb))
             .arg(DesignTokens::kAccent().name()));
 
     auto *loadingLabel = new QLabel(
@@ -190,6 +191,21 @@ InsightCard::InsightCard(QWidget *parent)
     // --- Default state ---
     m_stack->setCurrentIndex(0);
     outerLayout->addWidget(m_stack);
+
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, [this](ThemeManager::Theme) {
+        QString newAccentBtnStyle = QString(
+            "QPushButton { background-color: %1; color: white; border: none;"
+            "  border-radius: %2px; padding: 8px 20px; font-size: 13px; }"
+            "QPushButton:hover { background-color: %3; }"
+            "QPushButton:pressed { background-color: %4; }")
+            .arg(DesignTokens::kAccent().name())
+            .arg(DesignTokens::kRadiusBtn)
+            .arg(DesignTokens::kAccentLight().name())
+            .arg(DesignTokens::kAccent().name() + "CC");
+        m_analyzeBtn->setStyleSheet(newAccentBtnStyle);
+        m_retryBtn->setStyleSheet(newAccentBtnStyle);
+    });
 }
 
 void InsightCard::setConfigured(bool configured)

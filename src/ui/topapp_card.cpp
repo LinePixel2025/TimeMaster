@@ -1,5 +1,6 @@
 #include "ui/topapp_card.h"
 #include "ui/design_tokens.h"
+#include "ui/theme_manager.h"
 
 #include <QVBoxLayout>
 
@@ -48,6 +49,16 @@ TopAppCard::TopAppCard(QWidget *parent)
         QStringLiteral("color: %1; background: transparent;").arg(DesignTokens::kAccent().name()));
     m_timeLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(m_timeLabel);
+
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, [this](ThemeManager::Theme) {
+        m_eyebrowLabel->setStyleSheet(
+            QStringLiteral("color: %1; background: transparent;").arg(DesignTokens::kTextFaint().name()));
+        m_nameLabel->setStyleSheet(
+            QStringLiteral("color: %1; background: transparent;").arg(DesignTokens::kTextStrong().name()));
+        m_timeLabel->setStyleSheet(
+            QStringLiteral("color: %1; background: transparent;").arg(DesignTokens::kAccent().name()));
+    });
 }
 
 void TopAppCard::setApp(const QString &name, int seconds, const QIcon &icon)

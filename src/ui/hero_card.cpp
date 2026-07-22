@@ -1,5 +1,6 @@
 #include "ui/hero_card.h"
 #include "ui/design_tokens.h"
+#include "ui/theme_manager.h"
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -34,6 +35,16 @@ HeroCard::HeroCard(QWidget *p):QFrame(p){
     m_ring->setStyleSheet(QString("color:%1;padding:8px 16px;background:%2;border-radius:16px;")
         .arg(DesignTokens::kAccent().name(),DesignTokens::kAccentLight().name()));
     m_ring->setAlignment(Qt::AlignCenter);L->addWidget(m_ring,0,Qt::AlignRight);
+
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, [this](ThemeManager::Theme) {
+        QLabel* d = findChild<QLabel*>();
+        if (d) d->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextFaint().name()));
+        m_time->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextStrong().name()));
+        m_sub->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextMute().name()));
+        m_ring->setStyleSheet(QString("color:%1;padding:8px 16px;background:%2;border-radius:16px;")
+            .arg(DesignTokens::kAccent().name(), DesignTokens::kAccentLight().name()));
+    });
 }
 void HeroCard::setData(int t,int y,int g,const QVector<QVariantMap>&){m_today=t;m_yesterday=y;m_goal=g;updateDisplay();}
 void HeroCard::updateDisplay(){
