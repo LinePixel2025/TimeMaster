@@ -1,10 +1,16 @@
 #include "main_window.h"
 #include "database/database_manager.h"
-#include "ui/stats_widget.h"
-#include "ui/app_rank_widget.h"
 #include "ui/settings_dialog.h"
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
+#include "ui/dashboard_layout.h"
+#include "ui/hero_card.h"
+#include "ui/chart_card.h"
+#include "ui/insight_card.h"
+#include "ui/topapp_card.h"
+#include "ui/rank_card.h"
+#include "ui/compare_card.h"
+#include "icon/app_icon_provider.h"
 #include "export/exporter.h"
 
 #include <QCloseEvent>
@@ -121,19 +127,12 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
 
     layout->addLayout(headerLayout);
 
-    m_statsWidget = new StatsWidget(db, this);
-    layout->addWidget(m_statsWidget);
+    m_contentGrid = new QGridLayout();
+    m_contentGrid->setSpacing(16);
+    m_contentGrid->setContentsMargins(0, 0, 0, 0);
+    layout->addLayout(m_contentGrid, 1);
 
-    QHBoxLayout *rankRow = new QHBoxLayout();
-    rankRow->setSpacing(16);
-    m_appRankWidget = new AppRankWidget(db, this);
-    m_appRankWidget->setMaximumHeight(280);
-    m_appRankWidget->setMinimumHeight(120);
-    rankRow->addWidget(m_appRankWidget, 1);
-    rankRow->addStretch(1);
-    layout->addLayout(rankRow);
-
-    layout->addStretch();
+    loadLayout();
 
     m_refreshTimer = new QTimer(this);
     m_refreshTimer->setInterval(10000);
@@ -195,8 +194,97 @@ void MainWindow::showEvent(QShowEvent *event)
 
 void MainWindow::refreshData()
 {
-    m_statsWidget->refresh();
-    m_appRankWidget->refresh();
+    QVector<QVariantMap> weekData = m_db->getWeekSummary();
+    QVector<QVariantMap> rankData = m_db->getAppRank();
+    int todayTotal = m_db->getTodayTotal();
+    int yesterdayTotal = m_db->getYesterdayTotal();
+    int dailyGoal = m_db->getSetting("daily_goal", "28800").toInt();
+
+    if (auto *w = m_cards.value("today_total")) {
+        if (auto *c = qobject_cast<HeroCard*>(w))
+            c->setData(todayTotal, yesterdayTotal, dailyGoal, {});
+    }
+    if (auto *w = m_cards.value("weekly_chart")) {
+        if (auto *c = qobject_cast<ChartCard*>(w))
+            c->setData(weekData);
+    }
+    if (auto *w = m_cards.value("top_app")) {
+        if (auto *c = qobject_cast<TopAppCard*>(w)) {
+            if (!rankData.isEmpty()) {
+                QIcon icon = AppIconProvider::instance()->icon(
+                    rankData[0]["process_name"].toString(), 24);
+                c->setApp(rankData[0]["app_name"].toString(),
+                         rankData[0]["total_seconds"].toInt(), icon);
+            }
+        }
+    }
+    if (auto *w = m_cards.value("app_ranking")) {
+        if (auto *c = qobject_cast<RankCard*>(w))
+            c->refresh(rankData);
+    }
+    if (auto *w = m_cards.value("yesterday_compare")) {
+        if (auto *c = qobject_cast<CompareCard*>(w))
+            c->setData(todayTotal, yesterdayTotal);
+    }
+}
+
+void MainWindow::loadLayout()
+{
+    clearLayout();
+    QString json = m_db->getSetting("dashboard_layout");
+    QVector<DashboardLayoutItem> items = DashboardLayoutParser::parse(json);
+
+    int maxRow = 0;
+    for (const auto &item : items) {
+        if (item.visible && item.row > maxRow)
+            maxRow = item.row;
+    }
+
+    for (const auto &item : items) {
+        if (!item.visible)
+            continue;
+        QWidget *card = createCard(item.id);
+        if (card) {
+            m_contentGrid->addWidget(card, item.row, item.col,
+                                    1, qBound(1, item.colSpan, 2));
+            m_cards[item.id] = card;
+        }
+    }
+
+    refreshData();
+}
+
+void MainWindow::clearLayout()
+{
+    m_cards.clear();
+    while (m_contentGrid->count() > 0) {
+        QLayoutItem *item = m_contentGrid->takeAt(0);
+        if (item->widget())
+            item->widget()->deleteLater();
+        delete item;
+    }
+}
+
+QWidget *MainWindow::createCard(const QString &cardId)
+{
+    if (cardId == "today_total") {
+        return new HeroCard(this);
+    } else if (cardId == "weekly_chart") {
+        auto *c = new ChartCard(this);
+        c->setChartType(m_db->getSetting("chart_type", "bar"));
+        return c;
+    } else if (cardId == "ai_insight") {
+        auto *c = new InsightCard(this);
+        c->setConfigured(m_db->getSetting("lineweb_enabled", "false") == "true");
+        return c;
+    } else if (cardId == "top_app") {
+        return new TopAppCard(this);
+    } else if (cardId == "app_ranking") {
+        return new RankCard(this);
+    } else if (cardId == "yesterday_compare") {
+        return new CompareCard(this);
+    }
+    return nullptr;
 }
 
 void MainWindow::onExport()
@@ -247,7 +335,7 @@ void MainWindow::onSettings()
 {
     SettingsDialog dialog(m_db, this);
     if (dialog.exec() == QDialog::Accepted) {
-        refreshData();
+        loadLayout();
         emit settingsChanged();
     }
 }
