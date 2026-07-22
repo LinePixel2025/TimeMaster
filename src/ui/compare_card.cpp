@@ -1,5 +1,6 @@
 #include "ui/compare_card.h"
 #include "ui/design_tokens.h"
+#include "ui/theme_manager.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -19,6 +20,8 @@ static QString formatHM(int s)
 CompareCard::CompareCard(QWidget *parent)
     : QWidget(parent)
 {
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, [this](ThemeManager::Theme) { update(); });
 }
 
 void CompareCard::setData(int todaySeconds, int yesterdaySeconds)
@@ -59,8 +62,7 @@ void CompareCard::paintEvent(QPaintEvent *)
     // — Left column (今日) —
     {
         QRectF r(leftX, colY, colW, colH);
-        QColor accentBg = DesignTokens::kAccent();
-        accentBg.setAlpha(20); // ~8 %
+        QColor accentBg = DesignTokens::kCompareTodayBg();
         QPainterPath clip;
         clip.addRoundedRect(r, radius, radius);
         p.setClipPath(clip);
@@ -68,7 +70,7 @@ void CompareCard::paintEvent(QPaintEvent *)
         p.setClipping(false);
 
         // border
-        p.setPen(QPen(QColor(0, 0, 0, 8), 1));
+        p.setPen(QPen(DesignTokens::kBorder(), 1));
         p.setBrush(Qt::NoBrush);
         p.drawRoundedRect(r, radius, radius);
 
@@ -97,10 +99,10 @@ void CompareCard::paintEvent(QPaintEvent *)
         QPainterPath clip;
         clip.addRoundedRect(r, radius, radius);
         p.setClipPath(clip);
-        p.fillRect(r, QColor(0, 0, 0, 4));
+        p.fillRect(r, DesignTokens::kCompareYesterdayBg());
         p.setClipping(false);
 
-        p.setPen(QPen(QColor(0, 0, 0, 8), 1));
+        p.setPen(QPen(DesignTokens::kBorder(), 1));
         p.setBrush(Qt::NoBrush);
         p.drawRoundedRect(r, radius, radius);
 
