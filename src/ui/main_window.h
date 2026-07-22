@@ -8,6 +8,8 @@
 class DatabaseManager;
 class StatsWidget;
 class AppRankWidget;
+class QPushButton;
+class QLabel;
 
 class MainWindow : public QMainWindow
 {
@@ -30,13 +32,16 @@ signals:
     void settingsChanged();
 
 private:
-    void setupPalette();
-
     DatabaseManager *m_db;
     StatsWidget *m_statsWidget;
     AppRankWidget *m_appRankWidget;
     QTimer *m_refreshTimer;
     QWidget *m_centralWidget;
+    QPushButton *m_themeBtn;
+    QLabel *m_titleLabel;
+    QPushButton *m_settingsBtn;
+    QPushButton *m_exportBtn;
+    QPushButton *m_refreshBtn;
 };
 
 #endif // MAIN_WINDOW_H
