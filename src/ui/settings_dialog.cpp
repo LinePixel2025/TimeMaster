@@ -2,6 +2,8 @@
 #include "database/database_manager.h"
 #include "utility/autostart_helper.h"
 #include "icon/app_icon_provider.h"
+#include "ui/theme_manager.h"
+#include "ui/design_tokens.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -66,6 +68,19 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
 
     m_tabWidget = new QTabWidget(this);
     mainLayout->addWidget(m_tabWidget);
+
+    QPalette pal = palette();
+    pal.setColor(QPalette::Window, DesignTokens::kBg());
+    pal.setColor(QPalette::Base, DesignTokens::kSurface());
+    pal.setColor(QPalette::Text, DesignTokens::kTextStrong());
+    pal.setColor(QPalette::WindowText, DesignTokens::kTextStrong());
+    setPalette(pal);
+
+    setStyleSheet(
+        QString("SettingsDialog { background-color: %1; }"
+                "QTabWidget::pane { background: %1; border: none; }"
+                "QTabBar::tab { padding: 8px 20px; font-size: 13px; }")
+            .arg(DesignTokens::kBg().name()));
 
     // ---- Tab 1: App Management ----
     QWidget *appTab = new QWidget();
@@ -230,6 +245,14 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     personalLayout->setContentsMargins(8, 8, 8, 8);
     personalLayout->setSpacing(16);
 
+    QCheckBox *darkMode = new QCheckBox(QString::fromUtf8("\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"), this);
+    darkMode->setFont(appFont(13));
+    darkMode->setChecked(ThemeManager::instance()->isDark());
+    connect(darkMode, &QCheckBox::toggled, this, [](bool checked) {
+        ThemeManager::instance()->setTheme(checked ? ThemeManager::Dark : ThemeManager::Light);
+    });
+    personalLayout->addWidget(darkMode);
+
     m_autoStart = new QCheckBox(QString::fromUtf8("\xe5\xbc\x80\xe6\x9c\xba\xe8\x87\xaa\xe5\x90\xaf"), this);
     m_autoStart->setFont(appFont(13));
     personalLayout->addWidget(m_autoStart);
@@ -320,7 +343,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     });
     testRow->addWidget(m_linewebTestBtn);
     m_linewebStatus = new QLabel(this);
-    m_linewebStatus->setStyleSheet("color: #6B7280; font-size: 12px;");
+    m_linewebStatus->setStyleSheet(QString("color: %1; font-size: 12px;").arg(DesignTokens::kTextMute().name()));
     testRow->addWidget(m_linewebStatus);
     testRow->addStretch();
     cloudLayout->addLayout(testRow);
@@ -338,7 +361,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     QLabel *appNameLabel = new QLabel(QString::fromUtf8("Time Master"), aboutTab);
     appNameLabel->setFont(appFont(24, QFont::Bold));
     appNameLabel->setAlignment(Qt::AlignCenter);
-    appNameLabel->setStyleSheet("color: #1F2937;");
+    appNameLabel->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextStrong().name()));
     aboutLayout->addWidget(appNameLabel);
 
     // 版本号
@@ -346,7 +369,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         QString::fromUtf8("v") + QApplication::applicationVersion(), aboutTab);
     versionLabel->setFont(appFont(14));
     versionLabel->setAlignment(Qt::AlignCenter);
-    versionLabel->setStyleSheet("color: #6B7280;");
+    versionLabel->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextMute().name()));
     aboutLayout->addWidget(versionLabel);
 
     // 间隔
@@ -357,7 +380,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         QString::fromUtf8("Windows \xe6\xa1\x8c\xe9\x9d\xa2\xe6\x97\xb6\xe9\x97\xb4\xe8\xbf\xbd\xe8\xb8\xaa\xe5\xb7\xa5\xe5\x85\xb7"), aboutTab);
     descLabel->setFont(appFont(12));
     descLabel->setAlignment(Qt::AlignCenter);
-    descLabel->setStyleSheet("color: #9CA3AF;");
+    descLabel->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextFaint().name()));
     aboutLayout->addWidget(descLabel);
 
     aboutLayout->addStretch();
@@ -374,10 +397,11 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
 
     QPushButton *saveBtn = new QPushButton(QString::fromUtf8("\xe4\xbf\x9d\xe5\xad\x98"), this);
     saveBtn->setStyleSheet(
-        "QPushButton { background-color: #6366F1; color: white; border: none; border-radius: 6px; "
-        "padding: 6px 16px; font-size: 13px; }"
-        "QPushButton:hover { background-color: #818CF8; }"
-        "QPushButton:pressed { background-color: #4F46E5; }");
+        QString("QPushButton { background-color: %1; color: white; border: none; border-radius: 6px; "
+                "padding: 6px 16px; font-size: 13px; }"
+                "QPushButton:hover { background-color: %2; }"
+                "QPushButton:pressed { background-color: %3; }")
+            .arg(DesignTokens::kAccent().name(), DesignTokens::kAccentHover().name(), DesignTokens::kAccentPressed().name()));
     connect(saveBtn, &QPushButton::clicked, this, [this]() {
         saveSettings();
         emit settingsChanged();
@@ -386,6 +410,21 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     btnLayout->addWidget(saveBtn);
 
     mainLayout->addLayout(btnLayout);
+
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, [this](ThemeManager::Theme) {
+        QPalette pal = palette();
+        pal.setColor(QPalette::Window, DesignTokens::kBg());
+        pal.setColor(QPalette::Base, DesignTokens::kSurface());
+        pal.setColor(QPalette::Text, DesignTokens::kTextStrong());
+        pal.setColor(QPalette::WindowText, DesignTokens::kTextStrong());
+        setPalette(pal);
+        setStyleSheet(
+            QString("SettingsDialog { background-color: %1; }"
+                    "QTabWidget::pane { background: %1; border: none; }"
+                    "QTabBar::tab { padding: 8px 20px; font-size: 13px; }")
+                .arg(DesignTokens::kBg().name()));
+    });
 
     loadSettings();
 }
@@ -447,7 +486,7 @@ void SettingsDialog::refreshKnownAppsList()
         QListWidgetItem *item = new QListWidgetItem(icon, name);
         item->setData(Qt::UserRole, path);
         if (ignoredNames.contains(path))
-            item->setForeground(QColor("#9CA3AF"));
+            item->setForeground(DesignTokens::kTextFaint());
         m_knownAppsList->addItem(item);
     }
 }
