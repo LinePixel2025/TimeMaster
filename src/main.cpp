@@ -7,6 +7,7 @@
 #include "ui/tray_manager.h"
 #include "utility/autostart_helper.h"
 #include "push/lineweb_pusher.h"
+#include "ui/theme_manager.h"
 
 int main(int argc, char *argv[])
 {
@@ -23,6 +24,8 @@ int main(int argc, char *argv[])
     app.setFont(font);
 
     DatabaseManager db;
+
+    ThemeManager::instance()->loadFromDb(&db);
 
     bool autoStartSetting = (db.getSetting("auto_start", "false") == "true");
     if (autoStartSetting != AutoStartHelper::isAutoStartEnabled())
