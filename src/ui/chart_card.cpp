@@ -1,6 +1,7 @@
 #include "ui/chart_card.h"
 #include "ui/design_tokens.h"
 #include "ui/svg_icon.h"
+#include "ui/theme_manager.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -18,9 +19,6 @@ static const QStringList kDayCn = {
     QString::fromUtf8("\xe5\x91\xa8\xe5\x85\xad"),   // 周六
     QString::fromUtf8("\xe5\x91\xa8\xe6\x97\xa5")    // 周日
 };
-
-/// Glow highlight colour for today's datum (semi-transparent accent).
-static const QColor kGlowAccent(99, 102, 241, 38);
 
 static QDate currentMonday()
 {
@@ -131,7 +129,7 @@ void WeeklyBar::paintEvent(QPaintEvent *)
             QPainterPath glow;
             glow.addRoundedRect(x - 4, baselineY - 2, barW + 8, 5, 2.5, 2.5);
             painter.setPen(Qt::NoPen);
-            painter.setBrush(kGlowAccent);
+            painter.setBrush(DesignTokens::kTodayGlow());
             painter.drawPath(glow);
         }
 
@@ -140,8 +138,8 @@ void WeeklyBar::paintEvent(QPaintEvent *)
             QPainterPath path;
             path.addRoundedRect(x, chartBottom - barH, barW, barH, 6, 6);
             QLinearGradient gradient(x, chartBottom - barH, x, chartBottom);
-            gradient.setColorAt(0.0, QColor("#A5B4FC"));
-            gradient.setColorAt(1.0, DesignTokens::kAccent());
+            gradient.setColorAt(0.0, DesignTokens::kChartGradientTop());
+            gradient.setColorAt(1.0, DesignTokens::kChartGradientBottom());
             painter.setPen(Qt::NoPen);
             painter.setBrush(QBrush(gradient));
             painter.drawPath(path);
@@ -264,8 +262,8 @@ void WeeklyLine::paintEvent(QPaintEvent *)
     areaPath.closeSubpath();
 
     QLinearGradient areaGrad(0, chartTop, 0, chartBottom);
-    areaGrad.setColorAt(0.0, QColor(165, 180, 252, 60));
-    areaGrad.setColorAt(1.0, QColor(165, 180, 252, 0));
+    areaGrad.setColorAt(0.0, DesignTokens::kChartAreaTop());
+    areaGrad.setColorAt(1.0, DesignTokens::kChartAreaBottom());
     painter.setPen(Qt::NoPen);
     painter.setBrush(areaGrad);
     painter.drawPath(areaPath);
@@ -280,8 +278,8 @@ void WeeklyLine::paintEvent(QPaintEvent *)
     }
 
     QLinearGradient strokeGrad(points.first().x(), 0, points.last().x(), 0);
-    strokeGrad.setColorAt(0.0, QColor("#A5B4FC"));
-    strokeGrad.setColorAt(1.0, DesignTokens::kAccent());
+    strokeGrad.setColorAt(0.0, DesignTokens::kChartGradientTop());
+    strokeGrad.setColorAt(1.0, DesignTokens::kChartGradientBottom());
     QPen linePen(QBrush(strokeGrad), 2.5);
     linePen.setCapStyle(Qt::RoundCap);
     linePen.setJoinStyle(Qt::RoundJoin);
@@ -302,14 +300,14 @@ void WeeklyLine::paintEvent(QPaintEvent *)
             QPainterPath glow;
             glow.addRoundedRect(points[i].x() - 10, chartBottom - 4, 20, 5, 2.5, 2.5);
             painter.setPen(Qt::NoPen);
-            painter.setBrush(kGlowAccent);
+            painter.setBrush(DesignTokens::kTodayGlow());
             painter.drawPath(glow);
 
             // Larger today dot with white center
             painter.setBrush(DesignTokens::kAccent());
             painter.setPen(Qt::NoPen);
             painter.drawEllipse(points[i], 4.0, 4.0);
-            painter.setBrush(QColor("#FFFFFF"));
+            painter.setBrush(DesignTokens::kTodayDotBg());
             painter.drawEllipse(points[i], 1.5, 1.5);
         } else if (vals[i] > 0) {
             painter.setBrush(DesignTokens::kAccent());
@@ -363,7 +361,8 @@ void ChartCard::setupUi()
     QLabel *trendTitle = new QLabel(
         QString::fromUtf8("\xe6\xaf\x8f\xe6\x97\xa5\xe8\xb6\x8b\xe5\x8a\xbf"), this);
     trendTitle->setFont(DesignTokens::appFont(12));
-    trendTitle->setStyleSheet("color: #6B7280;");
+    trendTitle->setStyleSheet(
+        QString("color: %1;").arg(DesignTokens::kTextMute().name()));
     titleRow->addWidget(trendTitle);
     titleRow->addStretch();
 
@@ -418,6 +417,14 @@ void ChartCard::setupUi()
             applyToggleStyle(m_lineBtn, m_lineBtn->isChecked());
             emit chartTypeChanged(id == 1 ? QStringLiteral("line") : QStringLiteral("bar"));
         });
+
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, [this](ThemeManager::Theme) {
+        m_bar->update();
+        m_line->update();
+        applyToggleStyle(m_barBtn, m_barBtn->isChecked());
+        applyToggleStyle(m_lineBtn, m_lineBtn->isChecked());
+    });
 }
 
 void ChartCard::setData(const QVector<QVariantMap> &weekData)
@@ -446,12 +453,14 @@ void ChartCard::applyToggleStyle(QPushButton *btn, bool checked)
 {
     if (checked) {
         btn->setStyleSheet(
-            "QPushButton { background-color: rgba(99,102,241,0.1); "
-            "border-radius: 6px; border: none; }");
+            QString("QPushButton { background-color: %1; "
+                    "border-radius: 6px; border: none; }")
+                .arg(DesignTokens::kAccentGlow().name(QColor::HexArgb)));
     } else {
         btn->setStyleSheet(
-            "QPushButton { background-color: transparent; "
-            "border-radius: 6px; border: none; }"
-            "QPushButton:hover { background-color: rgba(0,0,0,0.04); }");
+            QString("QPushButton { background-color: transparent; "
+                    "border-radius: 6px; border: none; }"
+                    "QPushButton:hover { background-color: %1; }")
+                .arg(DesignTokens::kButtonHoverBg().name(QColor::HexArgb)));
     }
 }
