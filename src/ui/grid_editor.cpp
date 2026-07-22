@@ -1,5 +1,6 @@
 #include "ui/grid_editor.h"
 #include "ui/design_tokens.h"
+#include "ui/theme_manager.h"
 
 #include <QDataStream>
 #include <QMimeData>
@@ -270,6 +271,57 @@ DashboardGridEditor::DashboardGridEditor(QWidget *parent)
     // ---- Connections ----
     connect(m_addRowBtn, &QPushButton::clicked, this, &DashboardGridEditor::addRow);
     connect(m_removeRowBtn, &QPushButton::clicked, this, &DashboardGridEditor::removeLastRow);
+
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, [this](ThemeManager::Theme) {
+        for (int r = 0; r < m_cells.size(); ++r)
+            for (int c = 0; c < m_cells[r].size(); ++c)
+                if (m_cells[r][c])
+                    m_cells[r][c]->updateStyle();
+        updateLibraryStates();
+        if (m_addRowBtn) {
+            m_addRowBtn->setStyleSheet(
+                QStringLiteral(
+                    "QPushButton {"
+                    "  background-color: %1;"
+                    "  color: white;"
+                    "  border: none;"
+                    "  border-radius: %2px;"
+                    "  padding: 5px 14px;"
+                    "  font-size: 11px;"
+                    "}"
+                    "QPushButton:hover {"
+                    "  background-color: %3;"
+                    "}"
+                    "QPushButton:pressed {"
+                    "  background-color: %4;"
+                    "}")
+                .arg(DesignTokens::kAccent().name(QColor::HexArgb))
+                .arg(DesignTokens::kRadiusBtn)
+                .arg(DesignTokens::kAccentHover().name(QColor::HexArgb))
+                .arg(DesignTokens::kAccentPressed().name(QColor::HexArgb)));
+        }
+        if (m_removeRowBtn) {
+            m_removeRowBtn->setStyleSheet(
+                QStringLiteral(
+                    "QPushButton {"
+                    "  background: %1;"
+                    "  color: %2;"
+                    "  border: 1px solid %3;"
+                    "  border-radius: %4px;"
+                    "  padding: 5px 12px;"
+                    "  font-size: 11px;"
+                    "}"
+                    "QPushButton:hover {"
+                    "  background: %5;"
+                    "}")
+                .arg(DesignTokens::kSurface().name(QColor::HexArgb))
+                .arg(DesignTokens::kError().name(QColor::HexArgb))
+                .arg(DesignTokens::kBorder().name(QColor::HexArgb))
+                .arg(DesignTokens::kRadiusBtn)
+                .arg(DesignTokens::kAccentGlow().name(QColor::HexArgb)));
+        }
+    });
 }
 
 // ---- Public API ------------------------------------------------------------
@@ -381,6 +433,24 @@ void DashboardGridEditor::updateLibraryStates()
 }
 
 // ---- Slots ----------------------------------------------------------------
+
+void DashboardGridEditor::setRows(int count)
+{
+    count = qBound(1, count, 4);
+    while (m_cells.size() > count) {
+        int lastRow = m_cells.size() - 1;
+        for (int c = 0; c < m_cells[lastRow].size(); ++c) {
+            CellWidget *cell = m_cells[lastRow][c];
+            if (cell && cell->hasComponent()
+                && !m_hiddenIds.contains(cell->componentId()))
+                m_hiddenIds.append(cell->componentId());
+        }
+        removeRow(lastRow);
+    }
+    while (m_cells.size() < count)
+        ensureRows(m_cells.size() + 1);
+    updateLibraryStates();
+}
 
 void DashboardGridEditor::addRow()
 {

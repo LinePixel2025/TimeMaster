@@ -1,6 +1,8 @@
 #include "app_rank_widget.h"
 #include "database/database_manager.h"
 #include "icon/app_icon_provider.h"
+#include "ui/design_tokens.h"
+#include "ui/theme_manager.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -23,7 +25,7 @@ AppRankWidget::AppRankWidget(DatabaseManager *db, QWidget *parent)
 
     QLabel *title = new QLabel(QString::fromUtf8("\xe5\xba\x94\xe7\x94\xa8\xe4\xbd\xbf\xe7\x94\xa8\xe6\x8e\x92\xe8\xa1\x8c (\xe4\xbb\x8a\xe6\x97\xa5)"), this);
     title->setFont(appFont(14, QFont::Medium));
-    title->setStyleSheet("color: #1F2937;");
+    title->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextStrong().name()));
     layout->addWidget(title);
 
     m_scrollArea = new QScrollArea(this);

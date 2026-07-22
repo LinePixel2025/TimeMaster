@@ -1,6 +1,8 @@
 #include "stats_widget.h"
 #include "database/database_manager.h"
 #include "icon/app_icon_provider.h"
+#include "ui/design_tokens.h"
+#include "ui/theme_manager.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -55,13 +57,13 @@ void BigNumberWidget::paintEvent(QPaintEvent *)
     QFont bigFont = appFont(28, QFont::Bold);
     QFontMetrics fmBig(bigFont);
     painter.setFont(bigFont);
-    painter.setPen(QColor("#111827"));
+    painter.setPen(DesignTokens::kTextStrong());
     painter.drawText(QRectF(0, 2, w, fmBig.height()), Qt::AlignCenter, timeStr);
 
     double curY = fmBig.height() + 10;
 
     painter.setFont(appFont(12));
-    painter.setPen(QColor("#9CA3AF"));
+    painter.setPen(DesignTokens::kTextFaint());
     QFontMetrics fmSub(appFont(12));
     painter.drawText(QRectF(0, curY, w, fmSub.height()), Qt::AlignCenter,
                      QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe4\xb8\x93\xe6\xb3\xa8"));
@@ -75,14 +77,14 @@ void BigNumberWidget::paintEvent(QPaintEvent *)
     QPainterPath bgPath;
     bgPath.addRoundedRect(barX, curY, barMaxW, barH, barH / 2.0, barH / 2.0);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor("#E5E7EB"));
+    painter.setBrush(DesignTokens::kProgressBg());
     painter.drawPath(bgPath);
 
     if (ratio > 0) {
         double filledW = barMaxW * ratio;
         QPainterPath fgPath;
         fgPath.addRoundedRect(barX, curY, filledW, barH, barH / 2.0, barH / 2.0);
-        painter.setBrush(QColor("#6366F1"));
+        painter.setBrush(DesignTokens::kAccent());
         painter.drawPath(fgPath);
     }
 
@@ -90,7 +92,7 @@ void BigNumberWidget::paintEvent(QPaintEvent *)
 
     if (m_value > 0) {
         painter.setFont(appFont(11));
-        painter.setPen(QColor("#9CA3AF"));
+        painter.setPen(DesignTokens::kTextFaint());
         int pct = static_cast<int>(ratio * 100 + 0.5);
         QString pctStr = (pct >= 100)
             ? QString::fromUtf8("\xe5\xb7\xb2\xe5\xae\x8c\xe6\x88\x90 >100%")
@@ -99,7 +101,7 @@ void BigNumberWidget::paintEvent(QPaintEvent *)
         painter.drawText(QRectF(0, curY, w, fmPct.height()), Qt::AlignCenter, pctStr);
     } else {
         painter.setFont(appFont(11));
-        painter.setPen(QColor("#9CA3AF"));
+        painter.setPen(DesignTokens::kTextFaint());
         QFontMetrics fmPct(appFont(11));
         painter.drawText(QRectF(0, curY, w, fmPct.height()), Qt::AlignCenter,
                          QString::fromUtf8("\xe6\x9a\x82\xe6\x97\xa0\xe8\xae\xb0\xe5\xbd\x95"));
@@ -158,7 +160,7 @@ void YesterdayCompare::paintEvent(QPaintEvent *)
 
     if (today == 0 && yesterday == 0) {
         painter.setFont(appFont(13));
-        painter.setPen(QColor("#9CA3AF"));
+        painter.setPen(DesignTokens::kTextFaint());
         painter.drawText(QRectF(0, 0, w, h), Qt::AlignCenter,
                          QString::fromUtf8("\xe6\x9a\x82\xe6\x97\xa0\xe6\x95\xb0\xe6\x8d\xae"));
         return;
@@ -182,7 +184,7 @@ void YesterdayCompare::paintEvent(QPaintEvent *)
 
     // --- Title ---
     painter.setFont(appFont(12));
-    painter.setPen(QColor("#6B7280"));
+    painter.setPen(DesignTokens::kTextMute());
     painter.drawText(QRectF(0, yOffset, w, 20), Qt::AlignCenter,
                      QString::fromUtf8("\xe8\xbe\x83\xe6\x98\xa8\xe6\x97\xa5"));
     yOffset += 28.0;
@@ -195,20 +197,20 @@ void YesterdayCompare::paintEvent(QPaintEvent *)
         double pct = (static_cast<double>(today - yesterday) / yesterday) * 100.0;
         int pctInt = static_cast<int>(std::abs(pct) + 0.5);
         if (pct > 0) {
-            pctColor = QColor("#10B981");
+            pctColor = DesignTokens::kSuccess();
             arrow = QString::fromUtf8("\xe2\x86\x91");
             pctText = QString("%1 %2%").arg(arrow).arg(pctInt);
         } else if (pct < 0) {
-            pctColor = QColor("#EF4444");
+            pctColor = DesignTokens::kError();
             arrow = QString::fromUtf8("\xe2\x86\x93");
             pctText = QString("%1 %2%").arg(arrow).arg(pctInt);
         } else {
-            pctColor = QColor("#6B7280");
+            pctColor = DesignTokens::kTextMute();
             arrow = QString::fromUtf8("\xe2\x86\x92");
             pctText = QString("%1 0%").arg(arrow);
         }
     } else {
-        pctColor = QColor("#6366F1");
+        pctColor = DesignTokens::kAccent();
         pctText = QString::fromUtf8("\xe6\x96\xb0\xe5\xa2\x9e");
     }
 
@@ -221,11 +223,11 @@ void YesterdayCompare::paintEvent(QPaintEvent *)
     // --- Today / Yesterday text ---
     double textY = yOffset;
     painter.setFont(appFont(13));
-    painter.setPen(QColor("#1F2937"));
+    painter.setPen(DesignTokens::kTextStrong());
     painter.drawText(QRectF(0, textY, w, 20), Qt::AlignCenter,
                      QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5 ") + todayStr);
     textY += 20.0;
-    painter.setPen(QColor("#6B7280"));
+    painter.setPen(DesignTokens::kTextMute());
     painter.drawText(QRectF(0, textY, w, 20), Qt::AlignCenter,
                      QString::fromUtf8("\xe6\x98\xa8\xe6\x97\xa5 ") + yesterdayStr);
     textY += 28.0;
@@ -243,11 +245,11 @@ void YesterdayCompare::paintEvent(QPaintEvent *)
     QPainterPath todayPath;
     todayPath.addRoundedRect(barX, textY, todayW, barH, barCorner, barCorner);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor("#6366F1"));
+    painter.setBrush(DesignTokens::kAccent());
     painter.drawPath(todayPath);
 
     painter.setFont(appFont(10));
-    painter.setPen(QColor("#6B7280"));
+    painter.setPen(DesignTokens::kTextMute());
     painter.drawText(QRectF(barX + todayW + 6, textY - 2, 40, barH + 4),
                      Qt::AlignVCenter,
                      QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5"));
@@ -257,10 +259,10 @@ void YesterdayCompare::paintEvent(QPaintEvent *)
     double yesterdayW = (static_cast<double>(yesterday) / maxVal) * barMaxW;
     QPainterPath yesterdayPath;
     yesterdayPath.addRoundedRect(barX, textY, yesterdayW, barH, barCorner, barCorner);
-    painter.setBrush(QColor("#D1D5DB"));
+    painter.setBrush(DesignTokens::kCompareYesterdayBar());
     painter.drawPath(yesterdayPath);
 
-    painter.setPen(QColor("#6B7280"));
+    painter.setPen(DesignTokens::kTextMute());
     painter.drawText(QRectF(barX + yesterdayW + 6, textY - 2, 40, barH + 4),
                      Qt::AlignVCenter,
                      QString::fromUtf8("\xe6\x98\xa8\xe6\x97\xa5"));
@@ -278,7 +280,7 @@ StatsWidget::StatsWidget(DatabaseManager *db, QWidget *parent)
     // Header
     QLabel *header = new QLabel(QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\xa6\x82\xe8\xa7\x88"), this);
     header->setFont(appFont(18, QFont::Medium));
-    header->setStyleSheet("color: #1F2937;");
+    header->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextStrong().name()));
     mainLayout->addWidget(header);
 
     // Top row: 2 cards (today + top app)
@@ -290,7 +292,7 @@ StatsWidget::StatsWidget(DatabaseManager *db, QWidget *parent)
     todayLayout->setAlignment(Qt::AlignCenter);
     QLabel *todayTitle = new QLabel(QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf"), todayCard);
     todayTitle->setFont(appFont(12));
-    todayTitle->setStyleSheet("color: #6B7280;");
+    todayTitle->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextMute().name()));
     todayTitle->setAlignment(Qt::AlignCenter);
     m_bigNumber = new BigNumberWidget(todayCard);
     todayLayout->addWidget(todayTitle);
@@ -302,7 +304,7 @@ StatsWidget::StatsWidget(DatabaseManager *db, QWidget *parent)
     topAppLayout->setAlignment(Qt::AlignCenter);
     QLabel *topAppTitle = new QLabel(QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x9c\x80\xe5\xb8\xb8\xe7\x94\xa8"), topAppCardContainer);
     topAppTitle->setFont(appFont(12));
-    topAppTitle->setStyleSheet("color: #6B7280;");
+    topAppTitle->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextMute().name()));
     topAppTitle->setAlignment(Qt::AlignCenter);
     m_topAppCard = new TopAppCard(topAppCardContainer);
     topAppLayout->addWidget(topAppTitle);
@@ -328,7 +330,7 @@ StatsWidget::StatsWidget(DatabaseManager *db, QWidget *parent)
 
     QLabel *trendTitle = new QLabel(QString::fromUtf8("\xe6\xaf\x8f\xe6\x97\xa5\xe8\xb6\x8b\xe5\x8a\xbf"), trendCard);
     trendTitle->setFont(appFont(12));
-    trendTitle->setStyleSheet("color: #6B7280;");
+    trendTitle->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextMute().name()));
     titleRow->addWidget(trendTitle);
     titleRow->addStretch();
 
@@ -375,13 +377,17 @@ StatsWidget::StatsWidget(DatabaseManager *db, QWidget *parent)
     auto applyToggleStyle = [](QPushButton *btn, bool checked) {
         if (checked) {
             btn->setStyleSheet(
-                "QPushButton { color: #6366F1; background-color: rgba(99,102,241,0.1); "
-                "border-radius: 6px; font-size: 14px; border: none; }");
+                QString("QPushButton { color: %1; background-color: %2; "
+                        "border-radius: 6px; font-size: 14px; border: none; }")
+                .arg(DesignTokens::kAccent().name(QColor::HexArgb))
+                .arg(DesignTokens::kAccentGlow().name(QColor::HexArgb)));
         } else {
             btn->setStyleSheet(
-                "QPushButton { color: #9CA3AF; background-color: transparent; "
-                "border-radius: 6px; font-size: 14px; border: none; }"
-                "QPushButton:hover { background-color: rgba(0,0,0,0.04); }");
+                QString("QPushButton { color: %1; background-color: transparent; "
+                        "border-radius: 6px; font-size: 14px; border: none; }"
+                        "QPushButton:hover { background-color: %2; }")
+                .arg(DesignTokens::kTextFaint().name(QColor::HexArgb))
+                .arg(DesignTokens::kButtonHoverBg().name(QColor::HexArgb)));
         }
     };
     applyToggleStyle(barBtn, barBtn->isChecked());

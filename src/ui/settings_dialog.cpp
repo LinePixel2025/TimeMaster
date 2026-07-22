@@ -4,6 +4,8 @@
 #include "icon/app_icon_provider.h"
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
+#include "ui/dashboard_layout.h"
+#include "ui/grid_editor.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -243,7 +245,145 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     QWidget *personalTab = new QWidget();
     QVBoxLayout *personalLayout = new QVBoxLayout(personalTab);
     personalLayout->setContentsMargins(8, 8, 8, 8);
-    personalLayout->setSpacing(16);
+    personalLayout->setSpacing(12);
+
+    QLabel *layoutLabel = new QLabel(
+        QString::fromUtf8("\xe4\xb8\xbb\xe9\xa1\xb5\xe5\xb8\x83\xe5\xb1\x80"), this);
+    layoutLabel->setFont(appFont(14, QFont::Medium));
+    personalLayout->addWidget(layoutLabel);
+
+    QLabel *layoutHint = new QLabel(
+        QString::fromUtf8(
+            "\xe4\xbb\x8e\xe5\xb7\xa6\xe4\xbe\xa7\xe7\xbb\x84\xe4\xbb\xb6\xe5\xba\x93\xe6\x8b\x96\xe6\x8b\xbd\xe7\xbb\x84\xe4\xbb\xb6\xe5\x88\xb0\xe5\x8f\xb3\xe4\xbe\xa7\xe7\xbd\x91\xe6\xa0\xbc\xe4\xb8\xad\xef\xbc\x8c"
+            "\xe5\x8d\x95\xe5\x87\xbb\xe7\xbd\x91\xe6\xa0\xbc\xe5\x8f\xb3\xe4\xb8\x8a\xe8\xa7\x92\xc3\x97\xe5\x88\xa0\xe9\x99\xa4\xe5\xb7\xb2\xe6\x94\xbe\xe7\xbd\xae\xe7\x9a\x84\xe7\xbb\x84\xe4\xbb\xb6"),
+        this);
+    layoutHint->setFont(appFont(12));
+    layoutHint->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextMute().name()));
+    layoutHint->setWordWrap(true);
+    personalLayout->addWidget(layoutHint);
+
+    QHBoxLayout *rowCountRow = new QHBoxLayout();
+    QLabel *rowCountLabel = new QLabel(
+        QString::fromUtf8("\xe7\xbd\x91\xe6\xa0\xbc\xe8\xa7\x84\xe6\xa0\xbc:"), this);
+    rowCountLabel->setFont(appFont(13));
+    rowCountLabel->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextStrong().name()));
+    rowCountRow->addWidget(rowCountLabel);
+
+    m_rowCountCombo = new QComboBox(this);
+    m_rowCountCombo->setFont(appFont(13));
+    m_rowCountCombo->addItem(
+        QString::fromUtf8("2\xe8\xa1\x8c \xc3\x97 2\xe5\x88\x97"), 2);
+    m_rowCountCombo->addItem(
+        QString::fromUtf8("3\xe8\xa1\x8c \xc3\x97 2\xe5\x88\x97"), 3);
+    m_rowCountCombo->setCurrentIndex(1);
+    m_rowCountCombo->setStyleSheet(
+        QStringLiteral(
+            "QComboBox { border: 1px solid %1; border-radius: 6px; padding: 4px 8px;"
+            " background: %2; color: %3; }"
+            "QComboBox::drop-down { border: none; width: 24px; }")
+            .arg(DesignTokens::kBorder().name(QColor::HexArgb))
+            .arg(DesignTokens::kSurface().name(QColor::HexArgb))
+            .arg(DesignTokens::kText().name(QColor::HexArgb)));
+    connect(m_rowCountCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        int rows = m_rowCountCombo->currentData().toInt();
+        m_gridEditor->setRows(rows);
+    });
+    rowCountRow->addWidget(m_rowCountCombo);
+    rowCountRow->addStretch();
+    personalLayout->addLayout(rowCountRow);
+
+    QHBoxLayout *editorRow = new QHBoxLayout();
+    editorRow->setSpacing(12);
+
+    m_componentLibrary = new QListWidget(this);
+    m_componentLibrary->setDragEnabled(true);
+    m_componentLibrary->setMinimumWidth(130);
+    m_componentLibrary->setMaximumWidth(160);
+    m_componentLibrary->setFont(appFont(13));
+    m_componentLibrary->setStyleSheet(
+        QStringLiteral(
+            "QListWidget { border: 1px solid %1; border-radius: 8px; background: %2; }"
+            "QListWidget::item { padding: 8px 12px; border-radius: 6px; }"
+            "QListWidget::item:hover { background: %3; }"
+            "QListWidget::item:selected { background: %4; color: white; }")
+            .arg(DesignTokens::kBorder().name(QColor::HexArgb))
+            .arg(DesignTokens::kSurface().name(QColor::HexArgb))
+            .arg(DesignTokens::kSeparator().name(QColor::HexArgb))
+            .arg(DesignTokens::kAccent().name(QColor::HexArgb)));
+
+    struct { const char *id; const char *name; } comps[] = {
+        {"today_total",       "\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf"},
+        {"weekly_chart",      "\xe6\xaf\x8f\xe6\x97\xa5\xe8\xb6\x8b\xe5\x8a\xbf"},
+        {"ai_insight",        "AI \xe5\x88\x86\xe6\x9e\x90"},
+        {"top_app",           "\xe4\xbb\x8a\xe6\x97\xa5\xe6\x9c\x80\xe5\xb8\xb8\xe7\x94\xa8"},
+        {"app_ranking",       "\xe5\xba\x94\xe7\x94\xa8\xe6\x8e\x92\xe8\xa1\x8c"},
+        {"yesterday_compare", "\xe6\x98\xa8\xe6\x97\xa5\xe5\xaf\xb9\xe6\xaf\x94"},
+    };
+    for (auto &c : comps) {
+        QListWidgetItem *libItem = new QListWidgetItem(
+            QString::fromUtf8(c.name));
+        libItem->setData(Qt::UserRole, QString::fromUtf8(c.id));
+        libItem->setFlags(libItem->flags() | Qt::ItemIsDragEnabled);
+        m_componentLibrary->addItem(libItem);
+    }
+
+    QLabel *libLabel = new QLabel(
+        QString::fromUtf8("\xe7\xbb\x84\xe4\xbb\xb6\xe5\xba\x93"), this);
+    libLabel->setFont(appFont(12, QFont::Medium));
+    libLabel->setStyleSheet(QString("color: %1;").arg(DesignTokens::kTextStrong().name()));
+
+    QVBoxLayout *libPanel = new QVBoxLayout();
+    libPanel->setSpacing(6);
+    libPanel->addWidget(libLabel);
+    libPanel->addWidget(m_componentLibrary, 1);
+
+    editorRow->addLayout(libPanel);
+
+    m_gridEditor = new DashboardGridEditor(this);
+    m_gridEditor->setLibrary(m_componentLibrary);
+    editorRow->addWidget(m_gridEditor, 1);
+
+    personalLayout->addLayout(editorRow, 1);
+
+    QHBoxLayout *personalBtnRow = new QHBoxLayout();
+    personalBtnRow->setSpacing(8);
+
+    QPushButton *resetLayoutBtn = new QPushButton(
+        QString::fromUtf8("\xe6\x81\xa2\xe5\xa4\x8d\xe9\xbb\x98\xe8\xae\xa4\xe5\xb8\x83\xe5\xb1\x80"), this);
+    resetLayoutBtn->setFont(appFont(12));
+    resetLayoutBtn->setStyleSheet(
+        QStringLiteral(
+            "QPushButton {"
+            "  background: %1;"
+            "  color: %2;"
+            "  border: 1px solid %3;"
+            "  border-radius: 6px;"
+            "  padding: 5px 12px;"
+            "  font-size: 11px;"
+            "}"
+            "QPushButton:hover {"
+            "  background: %4;"
+            "}")
+            .arg(DesignTokens::kSurface().name(QColor::HexArgb))
+            .arg(DesignTokens::kText().name(QColor::HexArgb))
+            .arg(DesignTokens::kBorder().name(QColor::HexArgb))
+            .arg(DesignTokens::kSeparator().name(QColor::HexArgb)));
+    connect(resetLayoutBtn, &QPushButton::clicked, this, [this]() {
+        auto defaults = DashboardLayoutParser::defaultLayout();
+        QMap<QString, QString> nameMap;
+        nameMap["today_total"] = QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf");
+        nameMap["weekly_chart"] = QString::fromUtf8("\xe6\xaf\x8f\xe6\x97\xa5\xe8\xb6\x8b\xe5\x8a\xbf");
+        nameMap["ai_insight"] = QString::fromUtf8("AI \xe5\x88\x86\xe6\x9e\x90");
+        nameMap["top_app"] = QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x9c\x80\xe5\xb8\xb8\xe7\x94\xa8");
+        nameMap["app_ranking"] = QString::fromUtf8("\xe5\xba\x94\xe7\x94\xa8\xe6\x8e\x92\xe8\xa1\x8c");
+        nameMap["yesterday_compare"] = QString::fromUtf8("\xe6\x98\xa8\xe6\x97\xa5\xe5\xaf\xb9\xe6\xaf\x94");
+        QMap<QString, QString> iconMap;
+        m_gridEditor->setLayoutItems(defaults, nameMap, iconMap);
+        m_rowCountCombo->setCurrentIndex(1);
+    });
+    personalBtnRow->addWidget(resetLayoutBtn);
+    personalBtnRow->addStretch();
 
     QCheckBox *darkMode = new QCheckBox(QString::fromUtf8("\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"), this);
     darkMode->setFont(appFont(13));
@@ -251,12 +391,13 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     connect(darkMode, &QCheckBox::toggled, this, [](bool checked) {
         ThemeManager::instance()->setTheme(checked ? ThemeManager::Dark : ThemeManager::Light);
     });
-    personalLayout->addWidget(darkMode);
+    personalBtnRow->addWidget(darkMode);
 
     m_autoStart = new QCheckBox(QString::fromUtf8("\xe5\xbc\x80\xe6\x9c\xba\xe8\x87\xaa\xe5\x90\xaf"), this);
     m_autoStart->setFont(appFont(13));
-    personalLayout->addWidget(m_autoStart);
-    personalLayout->addStretch();
+    personalBtnRow->addWidget(m_autoStart);
+
+    personalLayout->addLayout(personalBtnRow);
     m_tabWidget->addTab(personalTab, QString::fromUtf8("\xe4\xb8\xaa\xe6\x80\xa7\xe5\x8c\x96"));
 
     // ---- Tab 4: Cloud Sync ----
@@ -449,6 +590,22 @@ void SettingsDialog::loadSettings()
     m_linewebStatus->setText(lastPush.isEmpty()
         ? QString::fromUtf8("\xe5\xb0\x9a\xe6\x9c\xaa\xe6\x8e\xa8\xe9\x80\x81")
         : lastPush);
+
+    QMap<QString, QString> nameMap;
+    nameMap["today_total"] = QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf");
+    nameMap["weekly_chart"] = QString::fromUtf8("\xe6\xaf\x8f\xe6\x97\xa5\xe8\xb6\x8b\xe5\x8a\xbf");
+    nameMap["ai_insight"] = QString::fromUtf8("AI \xe5\x88\x86\xe6\x9e\x90");
+    nameMap["top_app"] = QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x9c\x80\xe5\xb8\xb8\xe7\x94\xa8");
+    nameMap["app_ranking"] = QString::fromUtf8("\xe5\xba\x94\xe7\x94\xa8\xe6\x8e\x92\xe8\xa1\x8c");
+    nameMap["yesterday_compare"] = QString::fromUtf8("\xe6\x98\xa8\xe6\x97\xa5\xe5\xaf\xb9\xe6\xaf\x94");
+    QMap<QString, QString> iconMap;
+    auto layoutItems = DashboardLayoutParser::parse(m_db->getSetting("dashboard_layout"));
+    m_gridEditor->setLayoutItems(layoutItems, nameMap, iconMap);
+    int currentRows = m_gridEditor->rowCount();
+    if (currentRows <= 2)
+        m_rowCountCombo->setCurrentIndex(0);
+    else
+        m_rowCountCombo->setCurrentIndex(1);
 }
 
 void SettingsDialog::saveSettings()
@@ -465,6 +622,9 @@ void SettingsDialog::saveSettings()
     m_db->setSetting("lineweb_endpoint", m_linewebEndpoint->text().trimmed());
     m_db->setSetting("lineweb_token", m_linewebToken->text().trimmed());
     m_db->setSetting("lineweb_interval", QString::number(m_linewebInterval->value()));
+
+    auto layoutItems = m_gridEditor->layoutItems();
+    m_db->setSetting("dashboard_layout", DashboardLayoutParser::serialize(layoutItems));
 }
 
 void SettingsDialog::refreshKnownAppsList()

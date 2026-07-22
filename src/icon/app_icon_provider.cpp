@@ -1,4 +1,5 @@
 #include "app_icon_provider.h"
+#include "ui/design_tokens.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -29,11 +30,11 @@ void AppIconProvider::createFallbackIcon()
 
     QPainterPath path;
     path.addRoundedRect(2, 2, 20, 20, 4, 4);
-    p.setPen(QPen(QColor("#9CA3AF"), 1.5));
-    p.setBrush(QColor("#E5E7EB"));
+    p.setPen(QPen(DesignTokens::kPlaceholderIcon(), 1.5));
+    p.setBrush(DesignTokens::kPlaceholderBg());
     p.drawPath(path);
 
-    p.setPen(QPen(QColor("#9CA3AF"), 1.2));
+    p.setPen(QPen(DesignTokens::kPlaceholderIcon(), 1.2));
     p.drawLine(6, 9, 18, 9);
     p.drawLine(6, 13, 15, 13);
     p.drawLine(6, 17, 12, 17);

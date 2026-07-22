@@ -36,6 +36,9 @@ public:
     /// Clear this cell. Switches to page 0.
     void clearComponent();
 
+    /// Update visual styling based on state changes or theme switch.
+    void updateStyle();
+
     bool hasComponent() const { return !m_componentId.isEmpty(); }
     QString componentId() const { return m_componentId; }
     int colSpan() const { return m_colSpan; }
@@ -59,8 +62,6 @@ protected:
     void dropEvent(QDropEvent *event) override;
 
 private:
-    void updateStyle();
-
     int m_row;
     int m_col;
     int m_colSpan = 1;
@@ -103,6 +104,9 @@ public:
 
     int  rowCount() const { return m_cells.size(); }
     bool isDirty() const  { return m_dirty; }
+
+    /// Set number of rows (adds/removes from end).
+    void setRows(int count);
 
 signals:
     void layoutChanged();

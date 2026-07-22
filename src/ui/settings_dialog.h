@@ -11,8 +11,10 @@
 #include <QLineEdit>
 #include <QColor>
 #include <QLabel>
+#include <QComboBox>
 
 class DatabaseManager;
+class DashboardGridEditor;
 
 class SettingsDialog : public QDialog
 {
@@ -61,6 +63,10 @@ private:
     QSpinBox *m_linewebInterval;
     QPushButton *m_linewebTestBtn;
     QLabel *m_linewebStatus;
+
+    DashboardGridEditor *m_gridEditor;
+    QListWidget *m_componentLibrary;
+    QComboBox *m_rowCountCombo;
 };
 
 #endif // SETTINGS_DIALOG_H
