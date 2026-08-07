@@ -4,22 +4,14 @@ set(SOURCES
     tracker/window_tracker.cpp
     icon/app_icon_provider.cpp
     ui/main_window.cpp
-    ui/stats_widget.cpp
-    ui/app_rank_widget.cpp
     ui/settings_dialog.cpp
     ui/theme_manager.cpp
     ui/tray_manager.cpp
-    ui/chart_card.cpp
-    ui/compare_card.cpp
-    ui/dashboard_card.cpp
-    ui/dashboard_layout.cpp
-    ui/grid_editor.cpp
+    ui/card_frame.cpp
     ui/hero_card.cpp
-    ui/insight_card.cpp
+    ui/trend_card.cpp
     ui/rank_card.cpp
-    ui/svg_icon.cpp
-    ui/topapp_card.cpp
-    ui/wallpaper_helper.cpp
+    ui/compare_card.cpp
     export/exporter.cpp
     export/xlsx_writer.cpp
     utility/autostart_helper.cpp
@@ -32,23 +24,16 @@ set(HEADERS
     tracker/window_tracker.h
     icon/app_icon_provider.h
     ui/main_window.h
-    ui/stats_widget.h
-    ui/app_rank_widget.h
     ui/settings_dialog.h
     ui/theme_manager.h
     ui/tray_manager.h
-    ui/chart_card.h
-    ui/compare_card.h
-    ui/dashboard_card.h
-    ui/dashboard_layout.h
     ui/design_tokens.h
-    ui/grid_editor.h
+    ui/ui_utils.h
+    ui/card_frame.h
     ui/hero_card.h
-    ui/insight_card.h
+    ui/trend_card.h
     ui/rank_card.h
-    ui/svg_icon.h
-    ui/topapp_card.h
-    ui/wallpaper_helper.h
+    ui/compare_card.h
     export/exporter.h
     export/xlsx_writer.h
     utility/autostart_helper.h

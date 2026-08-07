@@ -1,16 +1,12 @@
-#include "main_window.h"
+#include "ui/main_window.h"
 #include "database/database_manager.h"
 #include "ui/settings_dialog.h"
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
-#include "ui/dashboard_layout.h"
 #include "ui/hero_card.h"
-#include "ui/chart_card.h"
-#include "ui/insight_card.h"
-#include "ui/topapp_card.h"
+#include "ui/trend_card.h"
 #include "ui/rank_card.h"
 #include "ui/compare_card.h"
-#include "icon/app_icon_provider.h"
 #include "export/exporter.h"
 
 #include <QCloseEvent>
@@ -45,9 +41,9 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
     : QMainWindow(parent), m_db(db)
 {
     setWindowTitle("Time Master");
-    setFixedSize(1000, 700);
+    setMinimumSize(960, 640);
+    resize(1100, 720);
 
-    bool dark = ThemeManager::instance()->isDark();
     QColor bg = DesignTokens::kBg();
     QColor textStrong = DesignTokens::kTextStrong();
     QColor textMute = DesignTokens::kTextMute();
@@ -55,236 +51,186 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
     QColor accentHover = DesignTokens::kAccentHover();
     QColor accentPressed = DesignTokens::kAccentPressed();
 
-    setAutoFillBackground(true);
     QPalette pal = palette();
     pal.setColor(QPalette::Window, bg);
+    pal.setColor(QPalette::Base, DesignTokens::kSurface());
+    pal.setColor(QPalette::Text, textStrong);
+    pal.setColor(QPalette::WindowText, textStrong);
     setPalette(pal);
 
-    m_centralWidget = new QWidget(this);
-    m_centralWidget->setObjectName("centralWidget");
-    m_centralWidget->setStyleSheet(
-        QString("#centralWidget { background-color: %1; }").arg(bg.name()));
-    setCentralWidget(m_centralWidget);
-    QVBoxLayout *layout = new QVBoxLayout(m_centralWidget);
-    layout->setContentsMargins(24, 24, 24, 24);
-    layout->setSpacing(20);
+    auto *central = new QWidget(this);
+    central->setObjectName("centralWidget");
+    central->setStyleSheet(QString("#centralWidget { background-color: %1; }").arg(bg.name()));
+    setCentralWidget(central);
 
-    QHBoxLayout *headerLayout = new QHBoxLayout();
-    headerLayout->setSpacing(16);
+    auto *layout = new QVBoxLayout(central);
+    layout->setContentsMargins(24, 20, 24, 24);
+    layout->setSpacing(16);
 
-    m_titleLabel = new QLabel("Time Master", this);
-    m_titleLabel->setFont(DesignTokens::appFont(20, QFont::Medium));
-    m_titleLabel->setStyleSheet(QString("color: %1;").arg(textStrong.name()));
-    headerLayout->addWidget(m_titleLabel);
+    // ---- Header ----
+    auto *headerLayout = new QHBoxLayout();
+    headerLayout->setSpacing(10);
 
-    m_themeBtn = new QPushButton(dark ? QString::fromUtf8("\xe2\x98\x80") : QString::fromUtf8("\xf0\x9f\x8c\x99"), this);
-    m_themeBtn->setStyleSheet(
-        QString("QPushButton { background-color: transparent; color: %1; border: none; "
-                "font-size: 18px; padding: 4px; }"
-                "QPushButton:hover { background-color: %2; border-radius: 6px; }")
-            .arg(textMute.name(), DesignTokens::kButtonHoverBg().name()));
-    m_themeBtn->setToolTip(dark ? QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe4\xba\xae\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f") : QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"));
+    auto *titleLabel = new QLabel("Time Master", central);
+    titleLabel->setFont(DesignTokens::appFont(19, QFont::Medium));
+    titleLabel->setStyleSheet(QString("color: %1; background: transparent;").arg(textStrong.name()));
+    headerLayout->addWidget(titleLabel);
+    headerLayout->addStretch();
+
+    const QString iconBtnQss = QString(
+        "QPushButton { background-color: transparent; color: %1; border: none;"
+        " font-size: 17px; padding: 4px 8px; border-radius: 6px; }"
+        "QPushButton:hover { background-color: %2; }")
+        .arg(textMute.name(), DesignTokens::kButtonHoverBg().name());
+
+    m_themeBtn = new QPushButton(
+        ThemeManager::instance()->isDark()
+            ? QString::fromUtf8("\xe2\x98\x80")
+            : QString::fromUtf8("\xf0\x9f\x8c\x99"),
+        central);
+    m_themeBtn->setStyleSheet(iconBtnQss);
+    m_themeBtn->setToolTip(
+        ThemeManager::instance()->isDark()
+            ? QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe4\xba\xae\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f")
+            : QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"));
     connect(m_themeBtn, &QPushButton::clicked, this, []() {
         ThemeManager::instance()->toggle();
     });
     headerLayout->addWidget(m_themeBtn);
 
-    m_settingsBtn = new QPushButton(QString::fromUtf8("\xe2\x9a\x99"), this);
-    m_settingsBtn->setStyleSheet(
-        QString("QPushButton { background-color: transparent; color: %1; border: none; "
-                "font-size: 20px; padding: 4px; }"
-                "QPushButton:hover { background-color: %2; border-radius: 6px; }")
-            .arg(textMute.name(), DesignTokens::kButtonHoverBg().name()));
+    m_settingsBtn = new QPushButton(QString::fromUtf8("\xe2\x9a\x99"), central);
+    m_settingsBtn->setStyleSheet(iconBtnQss);
     m_settingsBtn->setToolTip(QString::fromUtf8("\xe8\xae\xbe\xe7\xbd\xae"));
     connect(m_settingsBtn, &QPushButton::clicked, this, &MainWindow::onSettings);
     headerLayout->addWidget(m_settingsBtn);
 
-    headerLayout->addStretch();
-
-    const QString btnStyle = QString(
-        "QPushButton {"
-        "  background-color: %1;"
-        "  color: white; border: none; border-radius: 8px;"
-        "  padding: 8px 20px; font-size: 13px; font-weight: 500;"
-        "}"
-        "QPushButton:hover {"
-        "  background-color: %2;"
-        "}"
-        "QPushButton:pressed {"
-        "  background-color: %3;"
-        "}")
+    const QString primaryBtnQss = QString(
+        "QPushButton { background-color: %1; color: white; border: none;"
+        " border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 500; }"
+        "QPushButton:hover { background-color: %2; }"
+        "QPushButton:pressed { background-color: %3; }")
         .arg(accent.name(), accentHover.name(), accentPressed.name());
 
-    m_exportBtn = new QPushButton(QString::fromUtf8("\xe5\xaf\xbc\xe5\x87\xba\xe8\xae\xb0\xe5\xbd\x95"), this);
-    m_exportBtn->setStyleSheet(btnStyle);
+    m_exportBtn = new QPushButton(QString::fromUtf8("\xe5\xaf\xbc\xe5\x87\xba\xe8\xae\xb0\xe5\xbd\x95"), central);
+    m_exportBtn->setStyleSheet(primaryBtnQss);
     connect(m_exportBtn, &QPushButton::clicked, this, &MainWindow::onExport);
     headerLayout->addWidget(m_exportBtn);
 
-    m_refreshBtn = new QPushButton(QString::fromUtf8("\xe5\x88\xb7\xe6\x96\xb0"), this);
-    m_refreshBtn->setStyleSheet(btnStyle);
+    m_refreshBtn = new QPushButton(QString::fromUtf8("\xe5\x88\xb7\xe6\x96\xb0"), central);
+    m_refreshBtn->setStyleSheet(primaryBtnQss);
     connect(m_refreshBtn, &QPushButton::clicked, this, &MainWindow::refreshData);
     headerLayout->addWidget(m_refreshBtn);
 
     layout->addLayout(headerLayout);
 
-    m_contentGrid = new QGridLayout();
-    m_contentGrid->setSpacing(16);
-    m_contentGrid->setContentsMargins(0, 0, 0, 0);
-    layout->addLayout(m_contentGrid, 1);
+    // ---- Cards: 2x2 grid ----
+    auto *grid = new QGridLayout();
+    grid->setSpacing(16);
+    grid->setContentsMargins(0, 0, 0, 0);
+    grid->setColumnStretch(0, 1);
+    grid->setColumnStretch(1, 1);
 
-    loadLayout();
+    m_heroCard = new HeroCard(central);
+    m_trendCard = new TrendCard(central);
+    m_compareCard = new CompareCard(central);
+    m_rankCard = new RankCard(central);
+
+    grid->addWidget(m_heroCard, 0, 0);
+    grid->addWidget(m_trendCard, 0, 1);
+    grid->addWidget(m_compareCard, 1, 0);
+    grid->addWidget(m_rankCard, 1, 1);
+    grid->setRowStretch(0, 5);
+    grid->setRowStretch(1, 5);
+
+    layout->addLayout(grid, 1);
+
+    // Persist chart type when the user toggles it.
+    connect(m_trendCard, &TrendCard::chartTypeChanged, this,
+            [this](const QString &type) {
+        m_db->setSetting("chart_type", type);
+    });
 
     m_refreshTimer = new QTimer(this);
     m_refreshTimer->setInterval(10000);
     connect(m_refreshTimer, &QTimer::timeout, this, &MainWindow::refreshData);
     m_refreshTimer->start();
 
-    connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme theme) {
-        bool d = (theme == ThemeManager::Dark);
-        m_themeBtn->setText(d ? QString::fromUtf8("\xe2\x98\x80") : QString::fromUtf8("\xf0\x9f\x8c\x99"));
-        m_themeBtn->setToolTip(d ? QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe4\xba\xae\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f") : QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"));
+    // ---- Theme change handling ----
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, [this](ThemeManager::Theme theme) {
+        const bool dark = (theme == ThemeManager::Dark);
+        m_themeBtn->setText(dark ? QString::fromUtf8("\xe2\x98\x80")
+                                 : QString::fromUtf8("\xf0\x9f\x8c\x99"));
+        m_themeBtn->setToolTip(
+            dark
+                ? QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe4\xba\xae\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f")
+                : QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"));
 
         QColor bg = DesignTokens::kBg();
         QColor textStrong = DesignTokens::kTextStrong();
         QColor textMute = DesignTokens::kTextMute();
-        QColor accent = DesignTokens::kAccent();
-        QColor accentHover = DesignTokens::kAccentHover();
-        QColor accentPressed = DesignTokens::kAccentPressed();
 
         QPalette pal = palette();
         pal.setColor(QPalette::Window, bg);
+        pal.setColor(QPalette::Base, DesignTokens::kSurface());
+        pal.setColor(QPalette::Text, textStrong);
+        pal.setColor(QPalette::WindowText, textStrong);
         setPalette(pal);
-        m_centralWidget->setStyleSheet(
+
+        centralWidget()->setStyleSheet(
             QString("#centralWidget { background-color: %1; }").arg(bg.name()));
 
-        m_titleLabel->setStyleSheet(QString("color: %1;").arg(textStrong.name()));
+        auto *titleLabel = qobject_cast<QLabel*>(
+            centralWidget()->layout()->itemAt(0)->layout()->itemAt(0)->widget());
+        if (titleLabel) {
+            titleLabel->setStyleSheet(
+                QString("color: %1; background: transparent;").arg(textStrong.name()));
+        }
 
-        QString iconBtnQss = QString(
-            "QPushButton { background-color: transparent; color: %1; border: none; "
-            "font-size: 20px; padding: 4px; }"
-            "QPushButton:hover { background-color: %2; border-radius: 6px; }")
+        const QString iconBtnQss = QString(
+            "QPushButton { background-color: transparent; color: %1; border: none;"
+            " font-size: 17px; padding: 4px 8px; border-radius: 6px; }"
+            "QPushButton:hover { background-color: %2; }")
             .arg(textMute.name(), DesignTokens::kButtonHoverBg().name());
         m_themeBtn->setStyleSheet(iconBtnQss);
         m_settingsBtn->setStyleSheet(iconBtnQss);
 
-        QString btnStyle = QString(
-            "QPushButton {"
-            "  background-color: %1;"
-            "  color: white; border: none; border-radius: 8px;"
-            "  padding: 8px 20px; font-size: 13px; font-weight: 500;"
-            "}"
+        const QString primaryBtnQss = QString(
+            "QPushButton { background-color: %1; color: white; border: none;"
+            " border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 500; }"
             "QPushButton:hover { background-color: %2; }"
             "QPushButton:pressed { background-color: %3; }")
-            .arg(accent.name(), accentHover.name(), accentPressed.name());
-        m_exportBtn->setStyleSheet(btnStyle);
-        m_refreshBtn->setStyleSheet(btnStyle);
+            .arg(DesignTokens::kAccent().name(),
+                 DesignTokens::kAccentHover().name(),
+                 DesignTokens::kAccentPressed().name());
+        m_exportBtn->setStyleSheet(primaryBtnQss);
+        m_refreshBtn->setStyleSheet(primaryBtnQss);
 
         if (isVisible()) {
-            HWND hwnd = reinterpret_cast<HWND>(winId());
-            applyDwmTitleBar(hwnd, d);
+            applyDwmTitleBar(reinterpret_cast<HWND>(winId()), dark);
         }
     });
+
+    refreshData();
 }
 
 void MainWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
-    applyDwmTitleBar(reinterpret_cast<HWND>(winId()), ThemeManager::instance()->isDark());
+    applyDwmTitleBar(reinterpret_cast<HWND>(winId()),
+                     ThemeManager::instance()->isDark());
 }
 
 void MainWindow::refreshData()
 {
-    QVector<QVariantMap> weekData = m_db->getWeekSummary();
-    QVector<QVariantMap> rankData = m_db->getAppRank();
-    int todayTotal = m_db->getTodayTotal();
-    int yesterdayTotal = m_db->getYesterdayTotal();
-    int dailyGoal = m_db->getSetting("daily_goal", "28800").toInt();
+    const int todayTotal = m_db->getTodayTotal();
+    const int yesterdayTotal = m_db->getYesterdayTotal();
+    const int dailyGoal = m_db->getSetting("daily_goal", "28800").toInt();
 
-    if (auto *w = m_cards.value("today_total")) {
-        if (auto *c = qobject_cast<HeroCard*>(w))
-            c->setData(todayTotal, yesterdayTotal, dailyGoal, {});
-    }
-    if (auto *w = m_cards.value("weekly_chart")) {
-        if (auto *c = qobject_cast<ChartCard*>(w))
-            c->setData(weekData);
-    }
-    if (auto *w = m_cards.value("top_app")) {
-        if (auto *c = qobject_cast<TopAppCard*>(w)) {
-            if (!rankData.isEmpty()) {
-                QIcon icon = AppIconProvider::instance()->icon(
-                    rankData[0]["process_name"].toString(), 24);
-                c->setApp(rankData[0]["app_name"].toString(),
-                         rankData[0]["total_seconds"].toInt(), icon);
-            }
-        }
-    }
-    if (auto *w = m_cards.value("app_ranking")) {
-        if (auto *c = qobject_cast<RankCard*>(w))
-            c->refresh(rankData);
-    }
-    if (auto *w = m_cards.value("yesterday_compare")) {
-        if (auto *c = qobject_cast<CompareCard*>(w))
-            c->setData(todayTotal, yesterdayTotal);
-    }
-}
-
-void MainWindow::loadLayout()
-{
-    clearLayout();
-    QString json = m_db->getSetting("dashboard_layout");
-    QVector<DashboardLayoutItem> items = DashboardLayoutParser::parse(json);
-
-    int maxRow = 0;
-    for (const auto &item : items) {
-        if (item.visible && item.row > maxRow)
-            maxRow = item.row;
-    }
-
-    for (const auto &item : items) {
-        if (!item.visible)
-            continue;
-        QWidget *card = createCard(item.id);
-        if (card) {
-            m_contentGrid->addWidget(card, item.row, item.col,
-                                    1, qBound(1, item.colSpan, 2));
-            m_cards[item.id] = card;
-        }
-    }
-
-    refreshData();
-}
-
-void MainWindow::clearLayout()
-{
-    m_cards.clear();
-    while (m_contentGrid->count() > 0) {
-        QLayoutItem *item = m_contentGrid->takeAt(0);
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
-}
-
-QWidget *MainWindow::createCard(const QString &cardId)
-{
-    if (cardId == "today_total") {
-        return new HeroCard(this);
-    } else if (cardId == "weekly_chart") {
-        auto *c = new ChartCard(this);
-        c->setChartType(m_db->getSetting("chart_type", "bar"));
-        return c;
-    } else if (cardId == "ai_insight") {
-        auto *c = new InsightCard(this);
-        c->setConfigured(m_db->getSetting("lineweb_enabled", "false") == "true");
-        return c;
-    } else if (cardId == "top_app") {
-        return new TopAppCard(this);
-    } else if (cardId == "app_ranking") {
-        return new RankCard(this);
-    } else if (cardId == "yesterday_compare") {
-        return new CompareCard(this);
-    }
-    return nullptr;
+    m_heroCard->setData(todayTotal, yesterdayTotal, dailyGoal);
+    m_trendCard->setData(m_db->getWeekSummary());
+    m_rankCard->refresh(m_db->getAppRank());
+    m_compareCard->setData(todayTotal, yesterdayTotal);
 }
 
 void MainWindow::onExport()
@@ -304,16 +250,14 @@ void MainWindow::onExport()
         : QString::fromUtf8("Excel \xe6\x96\x87\xe4\xbb\xb6 (*.xlsx)");
     QString path = QFileDialog::getSaveFileName(this,
         QString::fromUtf8("\xe4\xbf\x9d\xe5\xad\x98\xe6\x96\x87\xe4\xbb\xb6"),
-        "", filter);
+        QString(), filter);
     if (path.isEmpty()) return;
 
     try {
         Exporter exporter(m_db);
-        bool success = false;
-        if (fmt.contains("CSV"))
-            success = exporter.exportCsv(path);
-        else
-            success = exporter.exportExcel(path);
+        bool success = fmt.contains("CSV")
+            ? exporter.exportCsv(path)
+            : exporter.exportExcel(path);
 
         if (success) {
             QMessageBox::information(this,
@@ -335,7 +279,7 @@ void MainWindow::onSettings()
 {
     SettingsDialog dialog(m_db, this);
     if (dialog.exec() == QDialog::Accepted) {
-        loadLayout();
+        refreshData();
         emit settingsChanged();
     }
 }

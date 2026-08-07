@@ -1,19 +1,28 @@
 #pragma once
-#include <QFrame>
-#include <QVector>
-#include <QVariantMap>
+
+#include "ui/card_frame.h"
+
 class QLabel;
 
-class HeroCard : public QFrame
+/// Today's total time: big number, goal ring, and day-over-day change.
+class HeroCard : public CardFrame
 {
     Q_OBJECT
 public:
     explicit HeroCard(QWidget *parent = nullptr);
-    void setData(int todaySec, int yesterdaySec, int goalSec, const QVector<QVariantMap> &);
-    QSize minimumSizeHint() const override { return QSize(400, 280); }
-signals: void clicked();
-protected: void mousePressEvent(QMouseEvent *e) override;
-private: void updateDisplay();
-    int m_today=0, m_yesterday=0, m_goal=0;
-    QLabel *m_time=nullptr, *m_sub=nullptr, *m_ring=nullptr;
+
+    void setData(int todaySeconds, int yesterdaySeconds, int goalSeconds);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    void updateDisplay();
+
+    int m_today = 0;
+    int m_yesterday = 0;
+    int m_goal = 0;
+    QLabel *m_timeLabel = nullptr;
+    QLabel *m_subLabel = nullptr;
+    QLabel *m_goalLabel = nullptr;
 };

@@ -1,57 +1,124 @@
 #include "ui/hero_card.h"
 #include "ui/design_tokens.h"
 #include "ui/theme_manager.h"
+#include "ui/ui_utils.h"
+
 #include <QLabel>
+#include <QPainter>
+#include <QPainterPath>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QMouseEvent>
-#include <QDate>
 
-static QString f(int s){int m=qMax(0,s)/60,h=m/60;m%=60;return h>0?QString("%1h%2m").arg(h).arg(m,2,10,QChar('0')):QString("%1m").arg(m);}
+HeroCard::HeroCard(QWidget *parent)
+    : CardFrame(QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf"), parent)
+{
+    contentLayout()->setContentsMargins(24, 18, 24, 22);
+    contentLayout()->setSpacing(4);
 
-HeroCard::HeroCard(QWidget *p):QFrame(p){
-    setMinimumHeight(220);
-    setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Minimum);
-    setStyleSheet("HeroCard{background:transparent;}");
+    m_timeLabel = new QLabel("0m", this);
+    m_timeLabel->setFont(DesignTokens::appFont(36, QFont::Bold));
+    m_timeLabel->setStyleSheet(
+        QString("color: %1; background: transparent;")
+            .arg(DesignTokens::kTextStrong().name()));
+    contentLayout()->addWidget(m_timeLabel);
 
-    auto *L=new QVBoxLayout(this);L->setContentsMargins(0,8,0,8);L->setSpacing(0);
-    auto *R=new QHBoxLayout();
-    auto *d=new QLabel(QStringLiteral("TODAY \u00B7 ")+QDate::currentDate().toString("yyyy-MM-dd"),this);
-    d->setFont(DesignTokens::eyebrowFont(11));
-    d->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextFaint().name()));
-    R->addWidget(d);R->addStretch();L->addLayout(R);L->addSpacing(12);
+    m_subLabel = new QLabel(this);
+    m_subLabel->setFont(DesignTokens::appFont(13));
+    m_subLabel->setStyleSheet(
+        QString("color: %1; background: transparent;")
+            .arg(DesignTokens::kTextMute().name()));
+    contentLayout()->addWidget(m_subLabel);
 
-    m_time=new QLabel("0m",this);m_time->setFont(DesignTokens::appFont(44,QFont::Bold));
-    m_time->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextStrong().name()));
-    L->addWidget(m_time);L->addSpacing(4);
+    contentLayout()->addStretch();
 
-    m_sub=new QLabel(QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf"),this);
-    m_sub->setFont(DesignTokens::appFont(14));
-    m_sub->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextMute().name()));
-    L->addWidget(m_sub);
-
-    L->addStretch();
-    m_ring=new QLabel(this);m_ring->setFont(DesignTokens::appFont(18,QFont::Medium));
-    m_ring->setStyleSheet(QString("color:%1;padding:8px 16px;background:%2;border-radius:16px;")
-        .arg(DesignTokens::kAccent().name(),DesignTokens::kAccentLight().name()));
-    m_ring->setAlignment(Qt::AlignCenter);L->addWidget(m_ring,0,Qt::AlignRight);
+    m_goalLabel = new QLabel(this);
+    m_goalLabel->setFont(DesignTokens::appFont(13, QFont::Medium));
+    m_goalLabel->setStyleSheet(
+        QString("color: %1; background: transparent;")
+            .arg(DesignTokens::kAccent().name()));
+    contentLayout()->addWidget(m_goalLabel);
 
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, [this](ThemeManager::Theme) {
-        QLabel* d = findChild<QLabel*>();
-        if (d) d->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextFaint().name()));
-        m_time->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextStrong().name()));
-        m_sub->setStyleSheet(QString("color:%1;background:transparent;").arg(DesignTokens::kTextMute().name()));
-        m_ring->setStyleSheet(QString("color:%1;padding:8px 16px;background:%2;border-radius:16px;")
-            .arg(DesignTokens::kAccent().name(), DesignTokens::kAccentLight().name()));
+        m_timeLabel->setStyleSheet(
+            QString("color: %1; background: transparent;")
+                .arg(DesignTokens::kTextStrong().name()));
+        m_subLabel->setStyleSheet(
+            QString("color: %1; background: transparent;")
+                .arg(DesignTokens::kTextMute().name()));
+        m_goalLabel->setStyleSheet(
+            QString("color: %1; background: transparent;")
+                .arg(DesignTokens::kAccent().name()));
+        update();
     });
 }
-void HeroCard::setData(int t,int y,int g,const QVector<QVariantMap>&){m_today=t;m_yesterday=y;m_goal=g;updateDisplay();}
-void HeroCard::updateDisplay(){
-    QString s=f(m_today);if(m_goal>0)s+=QString("  /%1h").arg(qMax(0,m_goal)/3600);m_time->setText(s);
-    QString b=QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf");
-    if(m_yesterday>0){int d=(int)((m_today-m_yesterday)*100.0/m_yesterday);if(d>0)b+=QString("  \u2191%1%").arg(d);else if(d<0)b+=QString("  \u2193%1%").arg(-d);else b+="  \u21920%";}
-    m_sub->setText(b);
-    m_ring->setText(QString("%1%").arg(m_goal>0?qMin(100,m_today*100/m_goal):0));
+
+void HeroCard::setData(int todaySeconds, int yesterdaySeconds, int goalSeconds)
+{
+    m_today = todaySeconds;
+    m_yesterday = yesterdaySeconds;
+    m_goal = goalSeconds;
+    updateDisplay();
+    update();
 }
-void HeroCard::mousePressEvent(QMouseEvent *e){QFrame::mousePressEvent(e);if(e->button()==Qt::LeftButton)emit clicked();}
+
+void HeroCard::updateDisplay()
+{
+    m_timeLabel->setText(UiUtils::formatDuration(m_today));
+
+    QString sub = QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf");
+    if (m_yesterday > 0) {
+        const int delta = UiUtils::percentChange(m_today, m_yesterday);
+        if (delta > 0)
+            sub += QString::fromUtf8("  \xe2\x86\x91 %1%").arg(delta);
+        else if (delta < 0)
+            sub += QString::fromUtf8("  \xe2\x86\x93 %1%").arg(-delta);
+        else
+            sub += QString::fromUtf8("  \xe2\x80\x94 0%");
+    }
+    m_subLabel->setText(sub);
+
+    if (m_goal > 0) {
+        const int pct = qMin(100, m_today * 100 / m_goal);
+        m_goalLabel->setText(
+            QString::fromUtf8("\xe7\x9b\xae\xe6\xa0\x87 %1h \xc2\xb7 %2%")
+                .arg(qMax(0, m_goal) / 3600)
+                .arg(pct));
+    } else {
+        m_goalLabel->clear();
+    }
+}
+
+void HeroCard::paintEvent(QPaintEvent *event)
+{
+    CardFrame::paintEvent(event);
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+
+    // Goal ring in the top-right corner.
+    const int ringSize = 84;
+    const QRectF ringRect(width() - ringSize - 24, 24, ringSize, ringSize);
+    const qreal lineWidth = 8.0;
+    const qreal radius = (ringSize - lineWidth) / 2.0;
+
+    QPen bgPen(DesignTokens::kProgressBg(), lineWidth);
+    bgPen.setCapStyle(Qt::RoundCap);
+    painter.setPen(bgPen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(ringRect.center(), radius, radius);
+
+    if (m_goal > 0 && m_today > 0) {
+        const qreal ratio = qMin(1.0, static_cast<qreal>(m_today) / m_goal);
+        QPen fgPen(DesignTokens::kAccent(), lineWidth);
+        fgPen.setCapStyle(Qt::RoundCap);
+        painter.setPen(fgPen);
+        painter.drawArc(ringRect, 90 * 16, -qRound(ratio * 360 * 16));
+
+        QFont pctFont = DesignTokens::appFont(14, QFont::Bold);
+        painter.setFont(pctFont);
+        painter.setPen(DesignTokens::kTextStrong());
+        painter.drawText(ringRect, Qt::AlignCenter,
+                         QString("%1%").arg(qMin(100, m_today * 100 / m_goal)));
+    }
+}

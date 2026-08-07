@@ -1,16 +1,16 @@
-#ifndef MAIN_WINDOW_H
-#define MAIN_WINDOW_H
+#pragma once
 
 #include <QMainWindow>
 #include <QTimer>
-#include <QDialog>
-#include <QMap>
-#include <QGridLayout>
 
 class DatabaseManager;
 class QPushButton;
 class QLabel;
-class QWidget;
+
+class HeroCard;
+class TrendCard;
+class RankCard;
+class CompareCard;
 
 class MainWindow : public QMainWindow
 {
@@ -20,7 +20,9 @@ public:
 
 public slots:
     void refreshData();
-    void loadLayout();
+
+signals:
+    void settingsChanged();
 
 protected:
     void showEvent(QShowEvent *event) override;
@@ -30,23 +32,15 @@ private slots:
     void onExport();
     void onSettings();
 
-signals:
-    void settingsChanged();
-
 private:
-    QWidget *createCard(const QString &cardId);
-    void clearLayout();
-
-    DatabaseManager *m_db;
-    QTimer *m_refreshTimer;
-    QWidget *m_centralWidget;
-    QPushButton *m_themeBtn;
-    QLabel *m_titleLabel;
-    QPushButton *m_settingsBtn;
-    QPushButton *m_exportBtn;
-    QPushButton *m_refreshBtn;
-    QGridLayout *m_contentGrid;
-    QMap<QString, QWidget*> m_cards;
+    DatabaseManager *m_db = nullptr;
+    QTimer *m_refreshTimer = nullptr;
+    QPushButton *m_themeBtn = nullptr;
+    QPushButton *m_settingsBtn = nullptr;
+    QPushButton *m_exportBtn = nullptr;
+    QPushButton *m_refreshBtn = nullptr;
+    HeroCard *m_heroCard = nullptr;
+    TrendCard *m_trendCard = nullptr;
+    RankCard *m_rankCard = nullptr;
+    CompareCard *m_compareCard = nullptr;
 };
-
-#endif // MAIN_WINDOW_H

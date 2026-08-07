@@ -1,5 +1,4 @@
-#ifndef SETTINGS_DIALOG_H
-#define SETTINGS_DIALOG_H
+#pragma once
 
 #include <QDialog>
 #include <QTabWidget>
@@ -9,12 +8,9 @@
 #include <QSpinBox>
 #include <QPushButton>
 #include <QLineEdit>
-#include <QColor>
 #include <QLabel>
-#include <QComboBox>
 
 class DatabaseManager;
-class DashboardGridEditor;
 
 class SettingsDialog : public QDialog
 {
@@ -43,30 +39,26 @@ private:
 
     DatabaseManager *m_db;
 
-    QTabWidget *m_tabWidget;
-    QListWidget *m_knownAppsList;
-    QListWidget *m_ignoredAppsList;
-    QTableWidget *m_aliasTable;
-    QCheckBox *m_trackingEnabled;
-    QSpinBox *m_pollInterval;
-    QSpinBox *m_idleThreshold;
-    QSpinBox *m_minTrackingSeconds;
-    QSpinBox *m_minRecordThreshold;
-    QCheckBox *m_autoStart;
-    QLineEdit *m_knownSearch;
-    QLineEdit *m_ignoredSearch;
+    QTabWidget *m_tabWidget = nullptr;
+    QListWidget *m_knownAppsList = nullptr;
+    QListWidget *m_ignoredAppsList = nullptr;
+    QTableWidget *m_aliasTable = nullptr;
+    QCheckBox *m_trackingEnabled = nullptr;
+    QSpinBox *m_pollInterval = nullptr;
+    QSpinBox *m_idleThreshold = nullptr;
+    QSpinBox *m_minTrackingSeconds = nullptr;
+    QSpinBox *m_minRecordThreshold = nullptr;
+    QCheckBox *m_autoStart = nullptr;
+    QCheckBox *m_darkMode = nullptr;
+    QSpinBox *m_dailyGoal = nullptr;
+    QLineEdit *m_knownSearch = nullptr;
+    QLineEdit *m_ignoredSearch = nullptr;
 
-    QCheckBox *m_linewebEnabled;
-    QLineEdit *m_linewebEndpoint;
-    QLineEdit *m_linewebToken;
-    QPushButton *m_linewebTokenToggle;
-    QSpinBox *m_linewebInterval;
-    QPushButton *m_linewebTestBtn;
-    QLabel *m_linewebStatus;
-
-    DashboardGridEditor *m_gridEditor;
-    QListWidget *m_componentLibrary;
-    QComboBox *m_rowCountCombo;
+    QCheckBox *m_linewebEnabled = nullptr;
+    QLineEdit *m_linewebEndpoint = nullptr;
+    QLineEdit *m_linewebToken = nullptr;
+    QPushButton *m_linewebTokenToggle = nullptr;
+    QSpinBox *m_linewebInterval = nullptr;
+    QPushButton *m_linewebTestBtn = nullptr;
+    QLabel *m_linewebStatus = nullptr;
 };
-
-#endif // SETTINGS_DIALOG_H
