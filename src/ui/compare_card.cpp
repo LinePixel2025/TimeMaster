@@ -4,94 +4,122 @@
 #include "ui/ui_utils.h"
 
 #include <QPainter>
-#include <QPainterPath>
+#include <QVBoxLayout>
+
+namespace {
+
+QString deltaText(int deltaSeconds, int changePercent, bool hasYesterday)
+{
+    if (!hasYesterday)
+        return QStringLiteral("昨日暂无数据");
+
+    const QString arrow = deltaSeconds < 0 ? QStringLiteral("↓") : QStringLiteral("↑");
+    const QString duration = UiUtils::formatDuration(qAbs(deltaSeconds));
+    return QStringLiteral("%1 %2 · %3%").arg(arrow, duration)
+        .arg(qAbs(changePercent));
+}
+
+} // namespace
+
+class CompareArea : public QWidget
+{
+public:
+    explicit CompareArea(QWidget *parent = nullptr)
+        : QWidget(parent)
+    {
+        setMinimumHeight(120);
+        connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+                this, [this](ThemeManager::Theme) { update(); });
+    }
+
+    void setData(int todaySeconds, int yesterdaySeconds)
+    {
+        m_today = todaySeconds;
+        m_yesterday = yesterdaySeconds;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setRenderHint(QPainter::TextAntialiasing);
+
+        const qreal w = width();
+        const qreal h = height();
+        if (m_today == 0 && m_yesterday == 0) {
+            p.setFont(DesignTokens::appFont(13));
+            p.setPen(DesignTokens::kTextFaint());
+            p.drawText(rect(), Qt::AlignCenter, QStringLiteral("暂无数据"));
+            return;
+        }
+
+        const bool hasYesterday = m_yesterday > 0;
+        const int delta = m_today - m_yesterday;
+        const int percent = UiUtils::percentChange(m_today, m_yesterday);
+
+        // A compact conclusion sits above the values; the values remain the
+        // strongest visual element in the card.
+        p.setFont(DesignTokens::appFont(12));
+        p.setPen(DesignTokens::kTextMute());
+        p.drawText(QRectF(0, 2, w, 18), Qt::AlignCenter, QStringLiteral("相较昨日"));
+
+        p.setFont(DesignTokens::appFont(16, QFont::DemiBold));
+        p.setPen(delta <= 0 ? DesignTokens::kAccent() : DesignTokens::kError());
+        p.drawText(QRectF(0, 19, w, 26), Qt::AlignCenter,
+                   deltaText(delta, percent, hasYesterday));
+
+        const qreal centerX = w / 2.0;
+        const qreal valueY = 58;
+        const qreal labelH = 20;
+        const qreal valueH = qMax<qreal>(42, h - valueY - 4);
+        const qreal leftCenter = w * 0.27;
+        const qreal rightCenter = w * 0.73;
+
+        p.setPen(QPen(DesignTokens::kSeparator(), 1));
+        p.drawLine(QPointF(centerX, valueY), QPointF(centerX, valueY + valueH));
+
+        p.setFont(DesignTokens::eyebrowFont(12));
+        p.setPen(DesignTokens::kAccent());
+        p.drawText(QRectF(leftCenter - 70, valueY, 140, labelH),
+                   Qt::AlignCenter, QStringLiteral("今日"));
+        p.setPen(DesignTokens::kTextMute());
+        p.drawText(QRectF(rightCenter - 70, valueY, 140, labelH),
+                   Qt::AlignCenter, QStringLiteral("昨日"));
+
+        const QString todayText = UiUtils::formatDuration(m_today);
+        const QString yesterdayText = UiUtils::formatDuration(m_yesterday);
+        const int maxTextWidth = qMax(40, qRound(centerX - 30));
+        const QFont baseFont = DesignTokens::appFont(38, QFont::Bold);
+        int valueFontSize = 38;
+        QFontMetrics baseMetrics(baseFont);
+        const int widest = qMax(baseMetrics.horizontalAdvance(todayText),
+                                baseMetrics.horizontalAdvance(yesterdayText));
+        if (widest > maxTextWidth)
+            valueFontSize = qMax(22, qRound(38.0 * maxTextWidth / widest));
+        p.setFont(DesignTokens::appFont(valueFontSize, QFont::Bold));
+        p.setPen(DesignTokens::kTextStrong());
+        p.drawText(QRectF(0, valueY + labelH - 2, centerX - 14, valueH - labelH + 2),
+                   Qt::AlignCenter, todayText);
+        p.drawText(QRectF(centerX + 14, valueY + labelH - 2, centerX - 14, valueH - labelH + 2),
+                   Qt::AlignCenter, yesterdayText);
+    }
+
+private:
+    int m_today = 0;
+    int m_yesterday = 0;
+};
 
 CompareCard::CompareCard(QWidget *parent)
-    : CardFrame(QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe4\xb8\x8e\xe6\x98\xa8\xe6\x97\xa5\xe5\xaf\xb9\xe6\xaf\x94"), parent)
+    : CardFrame(QStringLiteral("今日与昨日对比"), parent)
 {
-    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, [this](ThemeManager::Theme) { update(); });
+    m_area = new CompareArea(this);
+    contentLayout()->addWidget(m_area, 1);
 }
 
 void CompareCard::setData(int todaySeconds, int yesterdaySeconds)
 {
-    m_today = todaySeconds;
-    m_yesterday = yesterdaySeconds;
-    update();
-}
-
-void CompareCard::paintEvent(QPaintEvent *event)
-{
-    CardFrame::paintEvent(event);
-
-    QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing);
-    p.setRenderHint(QPainter::TextAntialiasing);
-
-    const qreal w = width();
-    const qreal h = height();
-    const qreal pad = 20;
-    const qreal top = 56;
-    const qreal gap = 48;
-    const qreal colW = (w - pad * 2 - gap) / 2.0;
-    const qreal availH = h - top - 16;
-    const qreal colH = qBound<qreal>(80.0, availH, 116.0);
-    const qreal colY = top + (availH - colH) / 2.0;
-
-    if (m_today == 0 && m_yesterday == 0) {
-        p.setFont(DesignTokens::appFont(13));
-        p.setPen(DesignTokens::kTextFaint());
-        p.drawText(QRectF(0, top, w, h - top), Qt::AlignCenter,
-                   QString::fromUtf8("\xe6\x9a\x82\xe6\x97\xa0\xe6\x95\xb0\xe6\x8d\xae"));
-        return;
-    }
-
-    const qreal radius = 12;
-    const struct { const char *label; int value; QColor bg; QColor bar; bool accent; } cols[2] = {
-        {"\xe4\xbb\x8a\xe6\x97\xa5", m_today,
-         DesignTokens::kCompareTodayBg(), DesignTokens::kAccent(), true},
-        {"\xe6\x98\xa8\xe6\x97\xa5", m_yesterday,
-         DesignTokens::kCompareYesterdayBg(), DesignTokens::kCompareYesterdayBar(), false}
-    };
-
-    for (int i = 0; i < 2; ++i) {
-        const qreal x = pad + i * (colW + gap);
-        QRectF r(x, colY, colW, colH);
-        QPainterPath clip;
-        clip.addRoundedRect(r, radius, radius);
-        p.setClipPath(clip);
-        p.fillRect(r, cols[i].bg);
-        p.setClipping(false);
-        p.setPen(QPen(DesignTokens::kBorder(), 1));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(r, radius, radius);
-
-        // Eyebrow label.
-        p.setFont(DesignTokens::eyebrowFont(11));
-        p.setPen(cols[i].accent ? DesignTokens::kAccent() : DesignTokens::kTextMute());
-        p.drawText(QRectF(x, colY + 10, colW, 20), Qt::AlignCenter,
-                   QString::fromUtf8(cols[i].label));
-
-        // Big number.
-        p.setFont(DesignTokens::appFont(qMin(26, qRound(colW * 0.2)), QFont::Bold));
-        p.setPen(DesignTokens::kTextStrong());
-        p.drawText(QRectF(x, colY + 32, colW, 36), Qt::AlignCenter,
-                   UiUtils::formatDuration(cols[i].value));
-
-        // Progress bar.
-        const qreal barY = colY + colH - 20;
-        const qreal barH = 5;
-        QRectF barRect(x + 14, barY, colW - 28, barH);
-        p.setPen(Qt::NoPen);
-        p.setBrush(DesignTokens::kProgressBg());
-        p.drawRoundedRect(barRect, barH / 2.0, barH / 2.0);
-
-        const int maxVal = qMax(m_today, m_yesterday);
-        if (maxVal > 0 && cols[i].value > 0) {
-            const qreal ratio = static_cast<qreal>(cols[i].value) / maxVal;
-            QRectF fillRect(barRect.x(), barRect.y(), barRect.width() * ratio, barH);
-            p.setBrush(cols[i].bar);
-            p.drawRoundedRect(fillRect, barH / 2.0, barH / 2.0);
-        }
-    }
+    if (m_area)
+        m_area->setData(todaySeconds, yesterdaySeconds);
 }

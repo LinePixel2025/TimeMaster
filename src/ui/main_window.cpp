@@ -20,6 +20,9 @@
 #include <QWidget>
 #include <QApplication>
 #include <QLabel>
+#include <QScreen>
+#include <QGuiApplication>
+#include <QDate>
 
 #include <windows.h>
 #include <dwmapi.h>
@@ -41,15 +44,18 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
     : QMainWindow(parent), m_db(db)
 {
     setWindowTitle("Time Master");
-    setMinimumSize(960, 640);
-    resize(1100, 720);
+    // Four dashboard cards need this stable floor to keep text and charts
+    // readable while the user resizes the window.
+    setMinimumSize(980, 680);
+
+    // Qt 返回逻辑像素，直接按可用工作区计算默认尺寸。
+    const QRect avail = QGuiApplication::primaryScreen()->availableGeometry();
+    const QSize defSize(qMin(1120, qRound(avail.width() * 0.86)),
+                        qMin(740, qRound(avail.height() * 0.86)));
+    resize(defSize);
 
     QColor bg = DesignTokens::kBg();
     QColor textStrong = DesignTokens::kTextStrong();
-    QColor textMute = DesignTokens::kTextMute();
-    QColor accent = DesignTokens::kAccent();
-    QColor accentHover = DesignTokens::kAccentHover();
-    QColor accentPressed = DesignTokens::kAccentPressed();
 
     QPalette pal = palette();
     pal.setColor(QPalette::Window, bg);
@@ -64,31 +70,29 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
     setCentralWidget(central);
 
     auto *layout = new QVBoxLayout(central);
-    layout->setContentsMargins(24, 20, 24, 24);
-    layout->setSpacing(16);
+    layout->setContentsMargins(28, 22, 28, 28);
+    layout->setSpacing(18);
 
-    // ---- Header ----
     auto *headerLayout = new QHBoxLayout();
-    headerLayout->setSpacing(10);
+    headerLayout->setSpacing(8);
 
-    auto *titleLabel = new QLabel("Time Master", central);
-    titleLabel->setFont(DesignTokens::appFont(19, QFont::Medium));
-    titleLabel->setStyleSheet(QString("color: %1; background: transparent;").arg(textStrong.name()));
-    headerLayout->addWidget(titleLabel);
+    auto *titleColumn = new QVBoxLayout();
+    titleColumn->setSpacing(1);
+    m_titleLabel = new QLabel("Time Master", central);
+    m_titleLabel->setFont(DesignTokens::appFont(20, QFont::DemiBold));
+    titleColumn->addWidget(m_titleLabel);
+    m_dateLabel = new QLabel(QDate::currentDate().toString(QString::fromUtf8("yyyy年M月d日  dddd")), central);
+    m_dateLabel->setFont(DesignTokens::appFont(10));
+    titleColumn->addWidget(m_dateLabel);
+    headerLayout->addLayout(titleColumn);
     headerLayout->addStretch();
-
-    const QString iconBtnQss = QString(
-        "QPushButton { background-color: transparent; color: %1; border: none;"
-        " font-size: 17px; padding: 4px 8px; border-radius: 6px; }"
-        "QPushButton:hover { background-color: %2; }")
-        .arg(textMute.name(), DesignTokens::kButtonHoverBg().name());
 
     m_themeBtn = new QPushButton(
         ThemeManager::instance()->isDark()
             ? QString::fromUtf8("\xe2\x98\x80")
             : QString::fromUtf8("\xf0\x9f\x8c\x99"),
         central);
-    m_themeBtn->setStyleSheet(iconBtnQss);
+    m_themeBtn->setFixedSize(36, 36);
     m_themeBtn->setToolTip(
         ThemeManager::instance()->isDark()
             ? QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe4\xba\xae\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f")
@@ -99,31 +103,23 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
     headerLayout->addWidget(m_themeBtn);
 
     m_settingsBtn = new QPushButton(QString::fromUtf8("\xe2\x9a\x99"), central);
-    m_settingsBtn->setStyleSheet(iconBtnQss);
+    m_settingsBtn->setFixedSize(36, 36);
     m_settingsBtn->setToolTip(QString::fromUtf8("\xe8\xae\xbe\xe7\xbd\xae"));
     connect(m_settingsBtn, &QPushButton::clicked, this, &MainWindow::onSettings);
     headerLayout->addWidget(m_settingsBtn);
 
-    const QString primaryBtnQss = QString(
-        "QPushButton { background-color: %1; color: white; border: none;"
-        " border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 500; }"
-        "QPushButton:hover { background-color: %2; }"
-        "QPushButton:pressed { background-color: %3; }")
-        .arg(accent.name(), accentHover.name(), accentPressed.name());
-
     m_exportBtn = new QPushButton(QString::fromUtf8("\xe5\xaf\xbc\xe5\x87\xba\xe8\xae\xb0\xe5\xbd\x95"), central);
-    m_exportBtn->setStyleSheet(primaryBtnQss);
+    m_exportBtn->setMinimumHeight(36);
     connect(m_exportBtn, &QPushButton::clicked, this, &MainWindow::onExport);
     headerLayout->addWidget(m_exportBtn);
 
     m_refreshBtn = new QPushButton(QString::fromUtf8("\xe5\x88\xb7\xe6\x96\xb0"), central);
-    m_refreshBtn->setStyleSheet(primaryBtnQss);
+    m_refreshBtn->setMinimumHeight(36);
     connect(m_refreshBtn, &QPushButton::clicked, this, &MainWindow::refreshData);
     headerLayout->addWidget(m_refreshBtn);
 
     layout->addLayout(headerLayout);
 
-    // ---- Cards: 2x2 grid ----
     auto *grid = new QGridLayout();
     grid->setSpacing(16);
     grid->setContentsMargins(0, 0, 0, 0);
@@ -144,7 +140,6 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
 
     layout->addLayout(grid, 1);
 
-    // Persist chart type when the user toggles it.
     connect(m_trendCard, &TrendCard::chartTypeChanged, this,
             [this](const QString &type) {
         m_db->setSetting("chart_type", type);
@@ -155,7 +150,6 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
     connect(m_refreshTimer, &QTimer::timeout, this, &MainWindow::refreshData);
     m_refreshTimer->start();
 
-    // ---- Theme change handling ----
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, [this](ThemeManager::Theme theme) {
         const bool dark = (theme == ThemeManager::Dark);
@@ -166,52 +160,64 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
                 ? QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe4\xba\xae\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f")
                 : QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"));
 
-        QColor bg = DesignTokens::kBg();
-        QColor textStrong = DesignTokens::kTextStrong();
-        QColor textMute = DesignTokens::kTextMute();
-
-        QPalette pal = palette();
-        pal.setColor(QPalette::Window, bg);
-        pal.setColor(QPalette::Base, DesignTokens::kSurface());
-        pal.setColor(QPalette::Text, textStrong);
-        pal.setColor(QPalette::WindowText, textStrong);
-        setPalette(pal);
-
-        centralWidget()->setStyleSheet(
-            QString("#centralWidget { background-color: %1; }").arg(bg.name()));
-
-        auto *titleLabel = qobject_cast<QLabel*>(
-            centralWidget()->layout()->itemAt(0)->layout()->itemAt(0)->widget());
-        if (titleLabel) {
-            titleLabel->setStyleSheet(
-                QString("color: %1; background: transparent;").arg(textStrong.name()));
-        }
-
-        const QString iconBtnQss = QString(
-            "QPushButton { background-color: transparent; color: %1; border: none;"
-            " font-size: 17px; padding: 4px 8px; border-radius: 6px; }"
-            "QPushButton:hover { background-color: %2; }")
-            .arg(textMute.name(), DesignTokens::kButtonHoverBg().name());
-        m_themeBtn->setStyleSheet(iconBtnQss);
-        m_settingsBtn->setStyleSheet(iconBtnQss);
-
-        const QString primaryBtnQss = QString(
-            "QPushButton { background-color: %1; color: white; border: none;"
-            " border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 500; }"
-            "QPushButton:hover { background-color: %2; }"
-            "QPushButton:pressed { background-color: %3; }")
-            .arg(DesignTokens::kAccent().name(),
-                 DesignTokens::kAccentHover().name(),
-                 DesignTokens::kAccentPressed().name());
-        m_exportBtn->setStyleSheet(primaryBtnQss);
-        m_refreshBtn->setStyleSheet(primaryBtnQss);
+        applyTheme();
 
         if (isVisible()) {
             applyDwmTitleBar(reinterpret_cast<HWND>(winId()), dark);
         }
     });
 
+    applyTheme();
     refreshData();
+}
+
+void MainWindow::applyTheme()
+{
+    const QColor bg = DesignTokens::kBg();
+    QPalette pal = palette();
+    pal.setColor(QPalette::Window, bg);
+    pal.setColor(QPalette::Base, DesignTokens::kSurface());
+    pal.setColor(QPalette::Text, DesignTokens::kTextStrong());
+    pal.setColor(QPalette::WindowText, DesignTokens::kTextStrong());
+    setPalette(pal);
+    centralWidget()->setStyleSheet(
+        QString("#centralWidget { background-color: %1; }").arg(bg.name()));
+
+    m_titleLabel->setStyleSheet(QString("color: %1; background: transparent;")
+        .arg(DesignTokens::kTextStrong().name()));
+    m_dateLabel->setStyleSheet(QString("color: %1; background: transparent;")
+        .arg(DesignTokens::kTextMute().name()));
+
+    const QString iconStyle = QString(
+        "QPushButton { background: transparent; color: %1; border: 1px solid transparent;"
+        " border-radius: 6px; font-size: 16px; padding: 0; }"
+        "QPushButton:hover { background: %2; border-color: %3; }"
+        "QPushButton:focus { border-color: %4; }")
+        .arg(DesignTokens::kTextMute().name(),
+             DesignTokens::kButtonHoverBg().name(),
+             DesignTokens::kBorder().name(),
+             DesignTokens::kAccent().name());
+    m_themeBtn->setStyleSheet(iconStyle);
+    m_settingsBtn->setStyleSheet(iconStyle);
+
+    const QString secondaryStyle = QString(
+        "QPushButton { background: %1; color: %2; border: 1px solid %3;"
+        " border-radius: 6px; padding: 0 16px; font-size: 12px; }"
+        "QPushButton:hover { background: %4; }"
+        "QPushButton:focus { border-color: %5; }")
+        .arg(DesignTokens::kSurface().name(), DesignTokens::kText().name(),
+             DesignTokens::kBorder().name(), DesignTokens::kButtonHoverBg().name(),
+             DesignTokens::kAccent().name());
+    m_exportBtn->setStyleSheet(secondaryStyle);
+
+    const QString primaryStyle = QString(
+        "QPushButton { background: %1; color: white; border: 1px solid %1;"
+        " border-radius: 6px; padding: 0 18px; font-size: 12px; font-weight: 600; }"
+        "QPushButton:hover { background: %2; border-color: %2; }"
+        "QPushButton:pressed { background: %3; border-color: %3; }")
+        .arg(DesignTokens::kAccent().name(), DesignTokens::kAccentHover().name(),
+             DesignTokens::kAccentPressed().name());
+    m_refreshBtn->setStyleSheet(primaryStyle);
 }
 
 void MainWindow::showEvent(QShowEvent *event)

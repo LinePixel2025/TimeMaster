@@ -3,6 +3,7 @@
 #include "ui/card_frame.h"
 
 class QLabel;
+class GoalRing;
 
 /// Today's total time: big number, goal ring, and day-over-day change.
 class HeroCard : public CardFrame
@@ -13,9 +14,6 @@ public:
 
     void setData(int todaySeconds, int yesterdaySeconds, int goalSeconds);
 
-protected:
-    void paintEvent(QPaintEvent *event) override;
-
 private:
     void updateDisplay();
 
@@ -25,4 +23,5 @@ private:
     QLabel *m_timeLabel = nullptr;
     QLabel *m_subLabel = nullptr;
     QLabel *m_goalLabel = nullptr;
+    GoalRing *m_ring = nullptr;
 };

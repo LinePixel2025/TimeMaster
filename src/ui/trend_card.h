@@ -9,6 +9,8 @@
 #include <QVector>
 
 class QButtonGroup;
+class QWidget;
+class TrendChartArea;
 
 /// Weekly usage trend: bar/line chart with a view toggle.
 class TrendCard : public CardFrame
@@ -24,17 +26,11 @@ public:
 signals:
     void chartTypeChanged(const QString &type);
 
-protected:
-    void paintEvent(QPaintEvent *event) override;
-
 private:
-    void rebuild();
     QString toggleStyle(QPushButton *btn) const;
 
-    QMap<QString, int> m_data;
-    int m_maxVal = 1;
-    QString m_type = QStringLiteral("bar");
     QButtonGroup *m_group = nullptr;
     QPushButton *m_barBtn = nullptr;
     QPushButton *m_lineBtn = nullptr;
+    TrendChartArea *m_chartArea = nullptr;
 };

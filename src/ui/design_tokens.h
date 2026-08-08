@@ -12,14 +12,14 @@ inline bool isDarkTheme() {
 }
 
 // ============== COLORS ==============
-inline QColor kBg()           { return isDarkTheme() ? QColor("#1E1E2E") : QColor("#F8F9FB"); }
-inline QColor kSurface()      { return isDarkTheme() ? QColor("#2D2D3F") : QColor("#FFFFFF"); }
-inline QColor kBorder()       { return isDarkTheme() ? QColor(255,255,255,8) : QColor(0,0,0,8); }
-inline QColor kAccent()       { return isDarkTheme() ? QColor("#818CF8") : QColor("#6366F1"); }
-inline QColor kAccentLight()  { return isDarkTheme() ? QColor("#6366F1") : QColor("#A5B4FC"); }
-inline QColor kAccentHover()  { return isDarkTheme() ? QColor("#A5B4FC") : QColor("#4F46E5"); }
-inline QColor kAccentPressed(){ return isDarkTheme() ? QColor("#C7D2FE") : QColor("#4338CA"); }
-inline QColor kAccentGlow()   { return isDarkTheme() ? QColor(129,140,248,25) : QColor(99,102,241,20); }
+inline QColor kBg()           { return isDarkTheme() ? QColor("#171C1B") : QColor("#F3F6F5"); }
+inline QColor kSurface()      { return isDarkTheme() ? QColor("#222927") : QColor("#FFFFFF"); }
+inline QColor kBorder()       { return isDarkTheme() ? QColor("#39423F") : QColor("#DCE4E1"); }
+inline QColor kAccent()       { return isDarkTheme() ? QColor("#4DD6B0") : QColor("#087F6B"); }
+inline QColor kAccentLight()  { return isDarkTheme() ? QColor("#183E35") : QColor("#D9F2EB"); }
+inline QColor kAccentHover()  { return isDarkTheme() ? QColor("#72E2C2") : QColor("#066B5B"); }
+inline QColor kAccentPressed(){ return isDarkTheme() ? QColor("#98EBD2") : QColor("#05584C"); }
+inline QColor kAccentGlow()   { return isDarkTheme() ? QColor(77,214,176,28) : QColor(8,127,107,22); }
 inline QColor kSuccess()      { return isDarkTheme() ? QColor("#34D399") : QColor("#10B981"); }
 inline QColor kError()        { return isDarkTheme() ? QColor("#F87171") : QColor("#EF4444"); }
 inline QColor kTextStrong()   { return isDarkTheme() ? QColor("#F1F5F9") : QColor("#111827"); }
@@ -28,16 +28,16 @@ inline QColor kTextMute()     { return isDarkTheme() ? QColor("#94A3B8") : QColo
 inline QColor kTextFaint()    { return isDarkTheme() ? QColor("#64748B") : QColor("#9CA3AF"); }
 
 // ============== NEW TOKENS (formerly hardcoded) ==============
-inline QColor kCardBorder()          { return isDarkTheme() ? QColor(255,255,255,10) : QColor(0,0,0,20); }
-inline QColor kButtonHoverBg()       { return isDarkTheme() ? QColor(255,255,255,20) : QColor("#E5E7EB"); }
-inline QColor kChartGradientTop()    { return isDarkTheme() ? QColor("#6366F1") : QColor("#A5B4FC"); }
-inline QColor kChartGradientBottom() { return isDarkTheme() ? QColor("#4338CA") : QColor("#6366F1"); }
-inline QColor kChartAreaTop()        { return isDarkTheme() ? QColor(99,102,241,40) : QColor(165,180,252,60); }
-inline QColor kChartAreaBottom()     { return isDarkTheme() ? QColor(99,102,241,0) : QColor(165,180,252,0); }
-inline QColor kTodayGlow()           { return isDarkTheme() ? QColor(129,140,248,45) : QColor(99,102,241,38); }
-inline QColor kTodayDotBg()          { return isDarkTheme() ? QColor("#2D2D3F") : QColor("#FFFFFF"); }
-inline QColor kProgressBg()          { return isDarkTheme() ? QColor(255,255,255,31) : QColor("#E5E7EB"); }
-inline QColor kCompareTodayBg()      { return isDarkTheme() ? QColor(129,140,248,25) : QColor(99,102,241,20); }
+inline QColor kCardBorder()          { return kBorder(); }
+inline QColor kButtonHoverBg()       { return isDarkTheme() ? QColor("#303936") : QColor("#E7EEEB"); }
+inline QColor kChartGradientTop()    { return isDarkTheme() ? QColor("#72E2C2") : QColor("#35B99A"); }
+inline QColor kChartGradientBottom() { return isDarkTheme() ? QColor("#15977B") : QColor("#087F6B"); }
+inline QColor kChartAreaTop()        { return isDarkTheme() ? QColor(77,214,176,45) : QColor(53,185,154,55); }
+inline QColor kChartAreaBottom()     { return isDarkTheme() ? QColor(77,214,176,0) : QColor(53,185,154,0); }
+inline QColor kTodayGlow()           { return isDarkTheme() ? QColor(77,214,176,45) : QColor(8,127,107,35); }
+inline QColor kTodayDotBg()          { return kSurface(); }
+inline QColor kProgressBg()          { return isDarkTheme() ? QColor("#3A4542") : QColor("#E2EAE7"); }
+inline QColor kCompareTodayBg()      { return isDarkTheme() ? QColor("#193B33") : QColor("#E8F5F1"); }
 inline QColor kCompareYesterdayBg()  { return isDarkTheme() ? QColor(255,255,255,2) : QColor(0,0,0,4); }
 inline QColor kCompareYesterdayBar() { return isDarkTheme() ? QColor("#475569") : QColor("#D1D5DB"); }
 inline QColor kPlaceholderIcon()     { return isDarkTheme() ? QColor("#64748B") : QColor("#9CA3AF"); }
@@ -82,9 +82,9 @@ inline constexpr int kSpacing2xl = 32;
 inline constexpr int kSpacing3xl = 48;
 
 // ============== RADII ==============
-inline constexpr int kRadiusCard  = 16;
-inline constexpr int kRadiusBtn   = 10;
-inline constexpr int kRadiusInput = 8;
+inline constexpr int kRadiusCard  = 8;
+inline constexpr int kRadiusBtn   = 6;
+inline constexpr int kRadiusInput = 6;
 inline constexpr int kRadiusChip  = 999;
 
 // ============== LAYOUT ==============

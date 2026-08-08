@@ -2,6 +2,9 @@
 
 #include "ui/card_frame.h"
 
+class QWidget;
+class CompareArea;
+
 /// Today vs yesterday comparison bars.
 class CompareCard : public CardFrame
 {
@@ -11,10 +14,6 @@ public:
 
     void setData(int todaySeconds, int yesterdaySeconds);
 
-protected:
-    void paintEvent(QPaintEvent *event) override;
-
 private:
-    int m_today = 0;
-    int m_yesterday = 0;
+    CompareArea *m_area = nullptr;
 };

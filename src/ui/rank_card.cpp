@@ -20,7 +20,7 @@ public:
         : QWidget(parent), m_rank(rank), m_appName(appName),
           m_totalSeconds(totalSeconds), m_icon(icon)
     {
-        setFixedHeight(44);
+        setFixedHeight(40);
     }
 
 protected:
@@ -108,8 +108,8 @@ RankCard::RankCard(QWidget *parent)
     m_listWidget = new QWidget();
     m_listWidget->setStyleSheet("background: transparent;");
     m_listLayout = new QVBoxLayout(m_listWidget);
-    m_listLayout->setContentsMargins(0, 4, 8, 0);
-    m_listLayout->setSpacing(2);
+    m_listLayout->setContentsMargins(0, 2, 4, 0);
+    m_listLayout->setSpacing(0);
     m_listLayout->addStretch();
 
     m_scrollArea->setWidget(m_listWidget);

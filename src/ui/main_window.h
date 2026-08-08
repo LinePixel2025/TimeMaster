@@ -33,12 +33,16 @@ private slots:
     void onSettings();
 
 private:
+    void applyTheme();
+
     DatabaseManager *m_db = nullptr;
     QTimer *m_refreshTimer = nullptr;
     QPushButton *m_themeBtn = nullptr;
     QPushButton *m_settingsBtn = nullptr;
     QPushButton *m_exportBtn = nullptr;
     QPushButton *m_refreshBtn = nullptr;
+    QLabel *m_titleLabel = nullptr;
+    QLabel *m_dateLabel = nullptr;
     HeroCard *m_heroCard = nullptr;
     TrendCard *m_trendCard = nullptr;
     RankCard *m_rankCard = nullptr;

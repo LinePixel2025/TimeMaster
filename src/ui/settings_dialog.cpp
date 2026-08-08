@@ -58,14 +58,45 @@ QString secondaryButtonStyle()
              DesignTokens::kSeparator().name(QColor::HexArgb));
 }
 
+QString settingsStyle()
+{
+    return QString(
+        "QDialog { background: %1; }"
+        "QTabWidget::pane { background: %2; border: 1px solid %3; border-radius: 8px; }"
+        "QTabBar { background: transparent; }"
+        "QTabBar::tab { color: %4; background: transparent; border: none;"
+        " padding: 9px 16px; margin: 0 3px; min-width: 96px; }"
+        "QTabBar::tab:hover { color: %5; background: %6; border-radius: 6px; }"
+        "QTabBar::tab:selected { color: %7; background: %8; border-radius: 6px; font-weight: 600; }"
+        "QLineEdit, QSpinBox { color: %9; background: %2; border: 1px solid %3;"
+        " border-radius: 6px; padding: 7px 9px; min-height: 18px; }"
+        "QLineEdit:focus, QSpinBox:focus { border-color: %7; }"
+        "QListWidget, QTableWidget { color: %9; background: %2; border: 1px solid %3;"
+        " border-radius: 6px; alternate-background-color: %10; }"
+        "QListWidget::item { padding: 7px 8px; border-radius: 4px; }"
+        "QListWidget::item:selected, QTableWidget::item:selected { color: %9; background: %8; }"
+        "QHeaderView::section { color: %4; background: %10; border: none;"
+        " border-bottom: 1px solid %3; padding: 8px; font-weight: 600; }"
+        "QCheckBox { color: %9; spacing: 8px; padding: 5px 0; }"
+        "QCheckBox::indicator { width: 17px; height: 17px; }"
+        "QGroupBox { color: %9; border: 1px solid %3; border-radius: 8px;"
+        " margin-top: 12px; padding: 18px 14px 12px; font-weight: 600; }"
+        "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; background: %1; }")
+        .arg(DesignTokens::kBg().name(), DesignTokens::kSurface().name(),
+             DesignTokens::kBorder().name(), DesignTokens::kTextMute().name(),
+             DesignTokens::kText().name(), DesignTokens::kButtonHoverBg().name(),
+             DesignTokens::kAccent().name(), DesignTokens::kAccentLight().name(),
+             DesignTokens::kTextStrong().name(), DesignTokens::kSeparator().name());
+}
+
 } // namespace
 
 SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     : QDialog(parent), m_db(db)
 {
     setWindowTitle(QString::fromUtf8("\xe8\xae\xbe\xe7\xbd\xae"));
-    resize(860, 560);
-    setMinimumSize(760, 500);
+    resize(940, 620);
+    setMinimumSize(820, 540);
 
     QPalette pal = palette();
     pal.setColor(QPalette::Window, DesignTokens::kBg());
@@ -74,18 +105,24 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     pal.setColor(QPalette::WindowText, DesignTokens::kTextStrong());
     setPalette(pal);
 
+    setStyleSheet(settingsStyle());
+
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(16, 16, 16, 16);
-    mainLayout->setSpacing(12);
+    mainLayout->setContentsMargins(20, 20, 20, 16);
+    mainLayout->setSpacing(16);
 
     m_tabWidget = new QTabWidget(this);
+    // North keeps Chinese labels horizontal and leaves the content area wide.
+    m_tabWidget->setTabPosition(QTabWidget::North);
+    m_tabWidget->setDocumentMode(true);
+    m_tabWidget->setUsesScrollButtons(false);
     mainLayout->addWidget(m_tabWidget);
 
     // ================= Tab 1: App Management =================
     auto *appTab = new QWidget(this);
     auto *appLayout = new QVBoxLayout(appTab);
-    appLayout->setContentsMargins(8, 8, 8, 8);
-    appLayout->setSpacing(8);
+    appLayout->setContentsMargins(20, 16, 20, 16);
+    appLayout->setSpacing(12);
 
     auto *splitLayout = new QHBoxLayout();
     splitLayout->setSpacing(8);
@@ -202,8 +239,8 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     // ================= Tab 2: Tracking =================
     auto *trackTab = new QWidget(this);
     auto *trackLayout = new QVBoxLayout(trackTab);
-    trackLayout->setContentsMargins(16, 16, 16, 16);
-    trackLayout->setSpacing(14);
+    trackLayout->setContentsMargins(24, 22, 24, 22);
+    trackLayout->setSpacing(10);
 
     m_trackingEnabled = new QCheckBox(
         QString::fromUtf8("\xe5\x90\xaf\xe7\x94\xa8\xe8\xbf\xbd\xe8\xb8\xaa"), this);
@@ -252,8 +289,8 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     // ================= Tab 3: Personalization =================
     auto *personalTab = new QWidget(this);
     auto *personalLayout = new QVBoxLayout(personalTab);
-    personalLayout->setContentsMargins(16, 16, 16, 16);
-    personalLayout->setSpacing(14);
+    personalLayout->setContentsMargins(24, 22, 24, 22);
+    personalLayout->setSpacing(10);
 
     m_darkMode = new QCheckBox(
         QString::fromUtf8("\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"), this);
@@ -283,8 +320,8 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     // ================= Tab 4: Cloud Sync =================
     auto *cloudTab = new QWidget(this);
     auto *cloudLayout = new QVBoxLayout(cloudTab);
-    cloudLayout->setContentsMargins(16, 16, 16, 16);
-    cloudLayout->setSpacing(14);
+    cloudLayout->setContentsMargins(24, 22, 24, 22);
+    cloudLayout->setSpacing(10);
 
     m_linewebEnabled = new QCheckBox(
         QString::fromUtf8("\xe5\x90\xaf\xe7\x94\xa8\xe6\x8e\xa8\xe9\x80\x81"), this);
@@ -384,7 +421,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     // ================= Tab 5: About =================
     auto *aboutTab = new QWidget(this);
     auto *aboutLayout = new QVBoxLayout(aboutTab);
-    aboutLayout->setContentsMargins(8, 8, 8, 8);
+    aboutLayout->setContentsMargins(24, 22, 24, 22);
     aboutLayout->setAlignment(Qt::AlignCenter);
 
     auto *appNameLabel = new QLabel(QString::fromUtf8("Time Master"), aboutTab);
@@ -416,6 +453,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
 
     // ================= Bottom buttons =================
     auto *btnLayout = new QHBoxLayout();
+    btnLayout->setSpacing(8);
     btnLayout->addStretch();
 
     auto *cancelBtn = new QPushButton(
