@@ -1,6 +1,6 @@
 # AGENTS.md - Time Master
 
-Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 4.0.1。
+Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 4.1.0。
 
 ## 语言与环境
 
@@ -49,7 +49,7 @@ ctest --test-dir build-tests --output-on-failure
 
 - 主程序构建产物：`build\src\TimeMaster.exe`。
 - 当前仓库没有 `package_installer.ps1`；不要在文档或脚本中假设该文件存在。
-- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-4.0.1.exe`。
+- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-4.1.0.exe`。
 - 发布前手动准备 `dist\TimeMaster`：复制主程序，执行 `windeployqt --no-translations --no-compiler-runtime --release`，再放入 MinGW 的 `libgcc_s_seh-1.dll`、`libstdc++-6.dll` 和 `libwinpthread-1.dll`。
 - 安装目标默认为 `C:\Program Files\Time Master`；数据库保存在 `%LOCALAPPDATA%\TimeMaster\data.db`，不应写入安装目录。
 - 生成安装包需要 Inno Setup 6，默认编译器路径通常为 `C:\Users\22798\AppData\Local\Programs\Inno Setup 6\ISCC.exe`。
