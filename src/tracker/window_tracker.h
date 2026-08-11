@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QString>
 #include <QMap>
+#include <QSet>
 #include <QAtomicInt>
 #include <QMutex>
 #include <QWaitCondition>
@@ -43,6 +44,10 @@ private:
     QAtomicInt m_running = 0;
     TrackingConfig m_config;
     QMap<QString, QString> m_aliases;
+    // 进程键 → exe 版本资源 FileDescription 的缓存,避免轮询时反复读取同一文件
+    QMap<QString, QString> m_descriptionCache;
+    // 已确认没有 FileDescription 的进程键,防止对同一 exe 反复失败重试
+    QSet<QString> m_descriptionMissed;
     QMutex m_settingsMutex;
     QWaitCondition m_waitCondition;
     quint64 m_configRevision = 0;

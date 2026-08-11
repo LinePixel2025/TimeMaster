@@ -76,4 +76,5 @@ target_link_libraries(TimeMaster PRIVATE
     dwmapi
     shell32
     gdi32
+    version
 )

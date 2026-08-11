@@ -4,6 +4,8 @@
 
 #include <QElapsedTimer>
 #include <windows.h>
+#include <winver.h>
+#include <cwchar>
 
 static const QMap<QString, QString> APP_NAME_MAP = {
     {"chrome.exe", "Chrome"},
@@ -45,6 +47,54 @@ static const QMap<QString, QString> APP_NAME_MAP = {
     {"photoshop.exe", "Photoshop"},
 };
 
+static QString fallbackName(const QString &key)
+{
+    const int dotPos = key.lastIndexOf('.');
+    return dotPos >= 0 ? key.left(dotPos) : key;
+}
+
+// 从 exe 的 Windows 版本资源中读取 FileDescription 字段,大多数应用自带该显示名
+static QString readFileDescription(const QString &exePath)
+{
+    if (exePath.isEmpty())
+        return {};
+
+    const std::wstring path = exePath.toStdWString();
+    DWORD versionHandle = 0;
+    const DWORD size = GetFileVersionInfoSizeW(path.c_str(), &versionHandle);
+    if (size == 0)
+        return {};
+
+    QByteArray buffer(size, Qt::Uninitialized);
+    if (!GetFileVersionInfoW(path.c_str(), versionHandle, size, buffer.data()))
+        return {};
+
+    // 版本资源可能按语言/代码页分块,遍历取第一条可用的 FileDescription
+    struct LangAndCodePage { WORD language; WORD codePage; };
+    LangAndCodePage *translations = nullptr;
+    UINT translationBytes = 0;
+    if (!VerQueryValueW(buffer.data(), L"\\VarFileInfo\\Translation",
+                        reinterpret_cast<void **>(&translations), &translationBytes))
+        return {};
+
+    const UINT translationCount = translationBytes / sizeof(LangAndCodePage);
+    for (UINT i = 0; i < translationCount; ++i) {
+        wchar_t blockName[64] = {0};
+        swprintf(blockName, 64, L"\\StringFileInfo\\%04x%04x\\FileDescription",
+                 translations[i].language, translations[i].codePage);
+        wchar_t *description = nullptr;
+        UINT descriptionLen = 0;
+        if (VerQueryValueW(buffer.data(), blockName,
+                           reinterpret_cast<void **>(&description), &descriptionLen) &&
+            description != nullptr) {
+            const QString result = QString::fromWCharArray(description).trimmed();
+            if (!result.isEmpty())
+                return result;
+        }
+    }
+    return {};
+}
+
 WindowTracker::WindowTracker(DatabaseManager *db, QObject *parent)
     : QThread(parent), m_db(db)
 {
@@ -60,16 +110,36 @@ void WindowTracker::stop()
 QString WindowTracker::classifyApp(const QString &processName)
 {
     const QString key = ProcessIdentity::normalizeKey(processName);
-    QMutexLocker lock(&m_settingsMutex);
-    const auto alias = m_aliases.constFind(key);
-    if (alias != m_aliases.cend())
-        return alias.value();
+    {
+        QMutexLocker lock(&m_settingsMutex);
+        const auto alias = m_aliases.constFind(key);
+        if (alias != m_aliases.cend())
+            return alias.value();
+    }
 
     const auto builtIn = APP_NAME_MAP.constFind(key);
     if (builtIn != APP_NAME_MAP.cend())
         return builtIn.value();
-    const int dotPos = key.lastIndexOf('.');
-    return dotPos >= 0 ? key.left(dotPos) : key;
+
+    // 版本资源读取结果按进程键缓存;已确认缺失的进程直接走兜底,不做重复 I/O
+    {
+        QMutexLocker lock(&m_settingsMutex);
+        const auto cached = m_descriptionCache.constFind(key);
+        if (cached != m_descriptionCache.cend())
+            return cached.value();
+        if (m_descriptionMissed.contains(key))
+            return fallbackName(key);
+    }
+
+    // 文件 I/O 在锁外执行,避免持锁期间读取 exe 文件
+    const QString description = readFileDescription(processName);
+    QMutexLocker lock(&m_settingsMutex);
+    if (!description.isEmpty()) {
+        m_descriptionCache.insert(key, description);
+        return description;
+    }
+    m_descriptionMissed.insert(key);
+    return fallbackName(key);
 }
 
 void WindowTracker::run()
