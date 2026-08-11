@@ -20,6 +20,7 @@ void test_push_signals_on_invalid_endpoint()
     db.setSetting("lineweb_interval", "10");
 
     LineWebPusher pusher(&db);
+    pusher.start();
     QSignalSpy failedSpy(&pusher, &LineWebPusher::pushFailed);
 
     pusher.pushNow();
@@ -96,6 +97,7 @@ void test_request_body_format()
     db.setSetting("lineweb_interval", "10");
 
     LineWebPusher pusher(&db);
+    pusher.start();
     QSignalSpy failedSpy(&pusher, &LineWebPusher::pushFailed);
 
     pusher.pushNow();
@@ -117,6 +119,7 @@ void test_pushnow_timeout()
     db.setSetting("lineweb_interval", "10");
 
     LineWebPusher pusher(&db);
+    pusher.start();
     QSignalSpy failedSpy(&pusher, &LineWebPusher::pushFailed);
 
     pusher.pushNow();

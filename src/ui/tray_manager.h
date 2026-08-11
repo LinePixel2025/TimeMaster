@@ -24,6 +24,7 @@ private slots:
 
 private:
     QIcon loadIcon();
+    void applyMenuTheme();
     QSystemTrayIcon *m_tray;
     QMenu *m_menu;
 };

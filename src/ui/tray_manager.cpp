@@ -1,4 +1,6 @@
 #include "tray_manager.h"
+#include "ui/design_tokens.h"
+#include "ui/theme_manager.h"
 #include <QCoreApplication>
 #include <QFile>
 #include <QDir>
@@ -20,6 +22,10 @@ TrayManager::TrayManager(const QString &appName, QObject *parent)
     QAction *quitAction = m_menu->addAction(QString::fromUtf8("\xe9\x80\x80\xe5\x87\xba"));
     connect(quitAction, &QAction::triggered, this, &TrayManager::quitApp);
 
+    applyMenuTheme();
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, [this]() { applyMenuTheme(); });
+
     m_tray->setContextMenu(m_menu);
     connect(m_tray, &QSystemTrayIcon::activated, this, &TrayManager::onActivated);
 }
@@ -32,6 +38,20 @@ QIcon TrayManager::loadIcon()
     if (QFile::exists(iconPath))
         return QIcon(iconPath);
     return QIcon();
+}
+
+void TrayManager::applyMenuTheme()
+{
+    m_menu->setStyleSheet(QString(
+        "QMenu { background-color: %1; color: %2; border: 1px solid %3; padding: 4px; }"
+        "QMenu::item { padding: 6px 24px 6px 12px; border-radius: 4px; }"
+        "QMenu::item:selected { background-color: %4; color: %5; }"
+        "QMenu::separator { height: 1px; background: %3; margin: 4px 8px; }")
+        .arg(DesignTokens::kSurface().name(),
+             DesignTokens::kTextStrong().name(),
+             DesignTokens::kBorder().name(),
+             DesignTokens::kAccentLight().name(),
+             DesignTokens::kTextStrong().name()));
 }
 
 void TrayManager::show()

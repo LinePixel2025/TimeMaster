@@ -5,6 +5,7 @@
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
 #include "ui/ui_utils.h"
+#include "utility/process_identity.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -561,12 +562,13 @@ void SettingsDialog::refreshKnownAppsList()
     const QMap<QString, QString> aliases = m_db->getAppAliases();
 
     for (const QString &path : processNames) {
-        QString name = aliases.contains(path)
-            ? aliases[path] : UiUtils::friendlyAppName(path);
+        const QString key = ProcessIdentity::normalizeKey(path);
+        QString name = aliases.contains(key)
+            ? aliases[key] : UiUtils::friendlyAppName(path);
         QIcon icon = AppIconProvider::instance()->icon(path, 20);
         auto *item = new QListWidgetItem(icon, name);
         item->setData(Qt::UserRole, path);
-        if (ignoredNames.contains(path))
+        if (ignoredNames.contains(key))
             item->setForeground(DesignTokens::kTextFaint());
         m_knownAppsList->addItem(item);
     }
@@ -582,8 +584,9 @@ void SettingsDialog::refreshIgnoredList()
 
     for (auto it = ignored.begin(); it != ignored.end(); ++it) {
         const QString path = it.value();
-        const QString name = aliases.contains(path)
-            ? aliases[path] : UiUtils::friendlyAppName(path);
+        const QString key = ProcessIdentity::normalizeKey(path);
+        const QString name = aliases.contains(key)
+            ? aliases[key] : UiUtils::friendlyAppName(path);
         QIcon icon = AppIconProvider::instance()->icon(path, 20);
         auto *item = new QListWidgetItem(icon, name);
         item->setData(Qt::UserRole, it.key());
@@ -623,7 +626,8 @@ void SettingsDialog::onAddIgnored()
 {
     QList<QListWidgetItem *> selected = m_knownAppsList->selectedItems();
     for (QListWidgetItem *item : selected) {
-        m_db->addIgnoredApp(item->data(Qt::UserRole).toString());
+        m_db->addIgnoredApp(ProcessIdentity::normalizeKey(
+            item->data(Qt::UserRole).toString()));
     }
     refreshKnownAppsList();
     refreshIgnoredList();
@@ -658,7 +662,7 @@ void SettingsDialog::onAddAlias()
         QLineEdit::Normal, QString(), &ok);
     if (!ok || displayName.isEmpty()) return;
 
-    m_db->setAppAlias(processName, displayName);
+    m_db->setAppAlias(ProcessIdentity::normalizeKey(processName), displayName);
     refreshAliasTable();
 }
 

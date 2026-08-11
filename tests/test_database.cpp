@@ -3,6 +3,9 @@
 #include <QCoreApplication>
 #include <QTemporaryFile>
 #include <QDateTime>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QUuid>
 #include "database/database_manager.h"
 
 void test_create_table()
@@ -258,6 +261,68 @@ void test_get_all_known_process_names()
     std::cout << "test_get_all_known_process_names PASS" << std::endl;
 }
 
+void test_process_identity_normalization()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    const QDateTime now = QDateTime::currentDateTime();
+    db.insertSession("C:\\Apps\\Chrome.EXE", "Google", "Chrome", now, now, 100);
+    db.addIgnoredApp("C:\\Other\\CHROME.exe");
+    assert(db.getIgnoredApps().values().contains("chrome.exe"));
+    assert(db.getTodayTotal() == 0);
+
+    db.setAppAlias("C:\\Apps\\Code.EXE", "First");
+    db.setAppAlias("code.exe", "Latest");
+    const QMap<QString, QString> aliases = db.getAppAliases();
+    assert(aliases.size() == 1);
+    assert(aliases.value("code.exe") == "Latest");
+    std::cout << "test_process_identity_normalization PASS" << std::endl;
+}
+
+void test_legacy_database_migration()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    const QString connectionName = QUuid::createUuid().toString();
+    {
+        QSqlDatabase legacy = QSqlDatabase::addDatabase("QSQLITE", connectionName);
+        legacy.setDatabaseName(path);
+        assert(legacy.open());
+        QSqlQuery q(legacy);
+        assert(q.exec("CREATE TABLE sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, process_name TEXT NOT NULL, window_title TEXT NOT NULL DEFAULT '', app_name TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT, duration_seconds INTEGER DEFAULT 0)"));
+        assert(q.exec("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)"));
+        assert(q.exec("CREATE TABLE ignored_apps (id INTEGER PRIMARY KEY AUTOINCREMENT, process_name TEXT NOT NULL UNIQUE)"));
+        assert(q.exec("CREATE TABLE app_aliases (id INTEGER PRIMARY KEY AUTOINCREMENT, process_name TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL)"));
+        assert(q.exec("INSERT INTO sessions (process_name, window_title, app_name, start_time, duration_seconds) VALUES ('C:\\Apps\\Chrome.EXE', 'Google', 'Chrome', '2026-08-11T10:00:00', 100)"));
+        assert(q.exec("INSERT INTO ignored_apps (process_name) VALUES ('C:\\Apps\\Chrome.EXE')"));
+        assert(q.exec("INSERT INTO ignored_apps (process_name) VALUES ('chrome.exe')"));
+        assert(q.exec("INSERT INTO app_aliases (process_name, display_name) VALUES ('C:\\Apps\\Code.EXE', 'Old')"));
+        assert(q.exec("INSERT INTO app_aliases (process_name, display_name) VALUES ('code.exe', 'Latest')"));
+        legacy.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    DatabaseManager db(path);
+    assert(db.getIgnoredApps().size() == 1);
+    assert(db.getIgnoredApps().values().contains("chrome.exe"));
+    assert(db.getAppAliases().size() == 1);
+    assert(db.getAppAliases().value("code.exe") == "Latest");
+    db.setSetting("min_record_threshold", "0");
+    assert(db.getAllSessions().isEmpty());
+
+    db.removeIgnoredApp(db.getIgnoredApps().firstKey());
+    const QVector<QVariantMap> sessions = db.getAllSessions();
+    assert(sessions.size() == 1);
+    std::cout << "test_legacy_database_migration PASS" << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -273,6 +338,8 @@ int main(int argc, char *argv[])
     test_ignored_filtered_from_stats();
     test_app_aliases();
     test_get_all_known_process_names();
+    test_process_identity_normalization();
+    test_legacy_database_migration();
     std::cout << "All database tests passed!" << std::endl;
     return 0;
 }

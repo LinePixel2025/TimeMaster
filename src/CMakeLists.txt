@@ -2,6 +2,7 @@ set(SOURCES
     main.cpp
     database/database_manager.cpp
     tracker/window_tracker.cpp
+    tracker/tracking_engine.cpp
     icon/app_icon_provider.cpp
     ui/main_window.cpp
     ui/settings_dialog.cpp
@@ -22,6 +23,8 @@ set(SOURCES
 set(HEADERS
     database/database_manager.h
     tracker/window_tracker.h
+    tracker/tracking_engine.h
+    tracker/tracking_store.h
     icon/app_icon_provider.h
     ui/main_window.h
     ui/settings_dialog.h
@@ -37,6 +40,7 @@ set(HEADERS
     export/exporter.h
     export/xlsx_writer.h
     utility/autostart_helper.h
+    utility/process_identity.h
     push/lineweb_pusher.h
 )
 

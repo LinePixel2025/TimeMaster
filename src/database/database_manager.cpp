@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QStandardPaths>
 #include <QUuid>
+#include "utility/process_identity.h"
 
 DatabaseManager::DatabaseManager(const QString &dbPath)
     : m_dbPath(dbPath)
@@ -18,6 +19,8 @@ DatabaseManager::DatabaseManager(const QString &dbPath)
     m_db.setDatabaseName(m_dbPath);
     if (!m_db.open())
         qFatal("Failed to open database: %s", qPrintable(m_db.lastError().text()));
+    QSqlQuery pragma(m_db);
+    pragma.exec("PRAGMA busy_timeout = 5000");
     migrate();
 }
 
@@ -29,6 +32,8 @@ DatabaseManager::~DatabaseManager()
 void DatabaseManager::migrate()
 {
     QSqlQuery q(m_db);
+    if (!m_db.transaction())
+        qWarning() << "Failed to start database migration transaction:" << m_db.lastError();
     q.exec(
         "CREATE TABLE IF NOT EXISTS sessions ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -39,8 +44,34 @@ void DatabaseManager::migrate()
         "end_time TEXT, "
         "duration_seconds INTEGER DEFAULT 0)"
     );
+
+    bool hasProcessKey = false;
+    q.exec("PRAGMA table_info(sessions)");
+    while (q.next()) {
+        if (q.value("name").toString() == "process_key") {
+            hasProcessKey = true;
+            break;
+        }
+    }
+    if (!hasProcessKey)
+        q.exec("ALTER TABLE sessions ADD COLUMN process_key TEXT NOT NULL DEFAULT ''");
+
+    q.exec("SELECT id, process_name FROM sessions WHERE process_key = '' OR process_key IS NULL");
+    QVector<QPair<qint64, QString>> missingKeys;
+    while (q.next())
+        missingKeys.append({q.value(0).toLongLong(), ProcessIdentity::normalizeKey(q.value(1).toString())});
+    QSqlQuery updateKey(m_db);
+    updateKey.prepare("UPDATE sessions SET process_key = ? WHERE id = ?");
+    for (const auto &entry : missingKeys) {
+        updateKey.bindValue(0, entry.second);
+        updateKey.bindValue(1, entry.first);
+        if (!updateKey.exec())
+            qWarning() << "Failed to backfill process_key:" << updateKey.lastError();
+    }
+
     q.exec("CREATE INDEX IF NOT EXISTS idx_sessions_start ON sessions(start_time)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_sessions_app ON sessions(app_name)");
+    q.exec("CREATE INDEX IF NOT EXISTS idx_sessions_process_key ON sessions(process_key)");
 
     q.exec(
         "CREATE TABLE IF NOT EXISTS settings ("
@@ -65,6 +96,38 @@ void DatabaseManager::migrate()
     q.exec("INSERT OR IGNORE INTO settings (key, value) VALUES ('poll_interval', '1')");
     q.exec("INSERT OR IGNORE INTO settings (key, value) VALUES ('idle_threshold', '60')");
     q.exec("INSERT OR IGNORE INTO settings (key, value) VALUES ('auto_start', 'false')");
+
+    q.exec("SELECT process_name FROM ignored_apps ORDER BY id ASC");
+    QSet<QString> ignoredKeys;
+    while (q.next())
+        ignoredKeys.insert(ProcessIdentity::normalizeKey(q.value(0).toString()));
+    q.exec("DELETE FROM ignored_apps");
+    QSqlQuery insertIgnored(m_db);
+    insertIgnored.prepare("INSERT OR IGNORE INTO ignored_apps (process_name) VALUES (?)");
+    for (const QString &key : ignoredKeys) {
+        if (key.isEmpty())
+            continue;
+        insertIgnored.bindValue(0, key);
+        insertIgnored.exec();
+    }
+
+    q.exec("SELECT process_name, display_name FROM app_aliases ORDER BY id ASC");
+    QMap<QString, QString> aliases;
+    while (q.next())
+        aliases[ProcessIdentity::normalizeKey(q.value(0).toString())] = q.value(1).toString();
+    q.exec("DELETE FROM app_aliases");
+    QSqlQuery insertAlias(m_db);
+    insertAlias.prepare("INSERT OR REPLACE INTO app_aliases (process_name, display_name) VALUES (?, ?)");
+    for (auto it = aliases.cbegin(); it != aliases.cend(); ++it) {
+        if (it.key().isEmpty())
+            continue;
+        insertAlias.bindValue(0, it.key());
+        insertAlias.bindValue(1, it.value());
+        insertAlias.exec();
+    }
+
+    if (!m_db.commit())
+        qWarning() << "Failed to commit database migration:" << m_db.lastError();
 }
 
 qint64 DatabaseManager::insertSession(const QString &processName, const QString &windowTitle,
@@ -73,20 +136,23 @@ qint64 DatabaseManager::insertSession(const QString &processName, const QString 
 {
     QMutexLocker lock(&m_mutex);
     QSqlQuery q(m_db);
-    q.prepare("INSERT INTO sessions (process_name, window_title, app_name, start_time, end_time, duration_seconds) "
-              "VALUES (?, ?, ?, ?, ?, ?)");
+    q.prepare("INSERT INTO sessions (process_name, process_key, window_title, app_name, start_time, end_time, duration_seconds) "
+              "VALUES (?, ?, ?, ?, ?, ?, ?)");
     q.addBindValue(processName);
+    q.addBindValue(ProcessIdentity::normalizeKey(processName));
     q.addBindValue(windowTitle);
     q.addBindValue(appName);
     q.addBindValue(startTime.toString(Qt::ISODate));
     q.addBindValue(endTime.isValid() ? endTime.toString(Qt::ISODate) : QVariant());
     q.addBindValue(durationSeconds);
-    if (!q.exec())
+    if (!q.exec()) {
         qWarning() << "insertSession failed:" << q.lastError();
+        return -1;
+    }
     return q.lastInsertId().toLongLong();
 }
 
-void DatabaseManager::updateSessionEnd(qint64 sessionId, const QDateTime &endTime, int durationSeconds)
+bool DatabaseManager::updateSessionEnd(qint64 sessionId, const QDateTime &endTime, int durationSeconds)
 {
     QMutexLocker lock(&m_mutex);
     QSqlQuery q(m_db);
@@ -94,19 +160,30 @@ void DatabaseManager::updateSessionEnd(qint64 sessionId, const QDateTime &endTim
     q.addBindValue(endTime.toString(Qt::ISODate));
     q.addBindValue(durationSeconds);
     q.addBindValue(sessionId);
-    if (!q.exec())
+    if (!q.exec()) {
         qWarning() << "updateSessionEnd failed:" << q.lastError();
+        return false;
+    }
+    return q.numRowsAffected() > 0;
 }
 
-void DatabaseManager::updateSessionDuration(qint64 sessionId, int durationSeconds)
+bool DatabaseManager::updateSessionDuration(qint64 sessionId, int durationSeconds)
 {
     QMutexLocker lock(&m_mutex);
     QSqlQuery q(m_db);
     q.prepare("UPDATE sessions SET duration_seconds=? WHERE id=?");
     q.addBindValue(durationSeconds);
     q.addBindValue(sessionId);
-    if (!q.exec())
+    if (!q.exec()) {
         qWarning() << "updateSessionDuration failed:" << q.lastError();
+        return false;
+    }
+    return q.numRowsAffected() > 0;
+}
+
+QString DatabaseManager::databasePath() const
+{
+    return m_dbPath;
 }
 
 QVector<QVariantMap> DatabaseManager::getTodaySummary()
@@ -119,8 +196,7 @@ QVector<QVariantMap> DatabaseManager::getTodaySummary()
               "FROM sessions WHERE date(start_time) = ? "
               "AND duration_seconds >= ? "
               "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-              "WHERE sessions.process_name = ia.process_name "
-              "OR sessions.process_name LIKE '%\\' || ia.process_name) "
+              "WHERE sessions.process_key = ia.process_name) "
               "GROUP BY app_name ORDER BY total_seconds DESC");
     q.addBindValue(QDate::currentDate().toString(Qt::ISODate));
     q.addBindValue(threshold);
@@ -145,8 +221,7 @@ int DatabaseManager::getTodayTotal()
               "FROM sessions WHERE date(start_time) = ? "
               "AND duration_seconds >= ? "
               "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-              "WHERE sessions.process_name = ia.process_name "
-              "OR sessions.process_name LIKE '%\\' || ia.process_name)");
+              "WHERE sessions.process_key = ia.process_name)");
     QString todayStr = QDate::currentDate().toString(Qt::ISODate);
     q.addBindValue(todayStr);
     q.addBindValue(threshold);
@@ -166,8 +241,7 @@ int DatabaseManager::getYesterdayTotal()
               "FROM sessions WHERE date(start_time) = ? "
               "AND duration_seconds >= ? "
               "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-              "WHERE sessions.process_name = ia.process_name "
-              "OR sessions.process_name LIKE '%\\' || ia.process_name)");
+              "WHERE sessions.process_key = ia.process_name)");
     q.addBindValue(QDate::currentDate().addDays(-1).toString(Qt::ISODate));
     q.addBindValue(threshold);
     q.exec();
@@ -188,8 +262,7 @@ QVector<QVariantMap> DatabaseManager::getWeekSummary()
               "FROM sessions WHERE date(start_time) >= ? AND date(start_time) <= ? "
               "AND duration_seconds >= ? "
               "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-              "WHERE sessions.process_name = ia.process_name "
-              "OR sessions.process_name LIKE '%\\' || ia.process_name) "
+              "WHERE sessions.process_key = ia.process_name) "
               "GROUP BY date(start_time) ORDER BY d ASC");
     q.addBindValue(monday.toString(Qt::ISODate));
     q.addBindValue(today.toString(Qt::ISODate));
@@ -217,16 +290,14 @@ QVector<QVariantMap> DatabaseManager::getAppRank(const QDate &targetDate)
         "   WHERE s2.app_name = s1.app_name AND date(s2.start_time) = ? "
         "   AND s2.duration_seconds >= ? "
         "   AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-        "   WHERE s2.process_name = ia.process_name "
-        "   OR s2.process_name LIKE '%\\' || ia.process_name) "
+        "   WHERE s2.process_key = ia.process_name) "
         "   GROUP BY s2.process_name "
         "   ORDER BY SUM(s2.duration_seconds) DESC LIMIT 1) as process_name, "
         "  SUM(s1.duration_seconds) as total_seconds "
         "FROM sessions s1 WHERE date(s1.start_time) = ? "
         "AND s1.duration_seconds >= ? "
         "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-        "WHERE s1.process_name = ia.process_name "
-        "OR s1.process_name LIKE '%\\' || ia.process_name) "
+        "WHERE s1.process_key = ia.process_name) "
         "GROUP BY s1.app_name ORDER BY total_seconds DESC");
     q.addBindValue(targetDate.toString(Qt::ISODate));
     q.addBindValue(threshold);
@@ -254,8 +325,7 @@ QVector<QVariantMap> DatabaseManager::getAllSessions(const QString &startDate, c
         q.prepare("SELECT * FROM sessions WHERE date(start_time) >= ? AND date(start_time) <= ? "
                   "AND duration_seconds >= ? "
                   "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-                  "WHERE sessions.process_name = ia.process_name "
-                  "OR sessions.process_name LIKE '%\\' || ia.process_name) "
+                  "WHERE sessions.process_key = ia.process_name) "
                   "ORDER BY start_time ASC");
         q.addBindValue(startDate);
         q.addBindValue(endDate);
@@ -264,8 +334,7 @@ QVector<QVariantMap> DatabaseManager::getAllSessions(const QString &startDate, c
         q.prepare("SELECT * FROM sessions "
                   "WHERE duration_seconds >= ? "
                   "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-                  "WHERE sessions.process_name = ia.process_name "
-                  "OR sessions.process_name LIKE '%\\' || ia.process_name) "
+                  "WHERE sessions.process_key = ia.process_name) "
                   "ORDER BY start_time ASC");
         q.addBindValue(threshold);
     }
@@ -296,8 +365,7 @@ QVector<QVariantMap> DatabaseManager::getDailySummaries(const QString &startDate
                   "FROM sessions WHERE date(start_time) >= ? AND date(start_time) <= ? "
                   "AND duration_seconds >= ? "
                   "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-                  "WHERE sessions.process_name = ia.process_name "
-                  "OR sessions.process_name LIKE '%\\' || ia.process_name) "
+                  "WHERE sessions.process_key = ia.process_name) "
                   "GROUP BY d, app_name ORDER BY d ASC, total_seconds DESC");
         q.addBindValue(startDate);
         q.addBindValue(endDate);
@@ -305,8 +373,7 @@ QVector<QVariantMap> DatabaseManager::getDailySummaries(const QString &startDate
     } else {
         q.prepare("SELECT date(start_time) as d, app_name, SUM(duration_seconds) as total_seconds "
                   "FROM sessions WHERE NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-                  "WHERE sessions.process_name = ia.process_name "
-                  "OR sessions.process_name LIKE '%\\' || ia.process_name) "
+                  "WHERE sessions.process_key = ia.process_name) "
                   "AND duration_seconds >= ? "
                   "GROUP BY d, app_name ORDER BY d ASC, total_seconds DESC");
         q.addBindValue(threshold);
@@ -360,14 +427,17 @@ QMap<int, QString> DatabaseManager::getIgnoredApps()
 int DatabaseManager::addIgnoredApp(const QString &processName)
 {
     QMutexLocker lock(&m_mutex);
+    const QString processKey = ProcessIdentity::normalizeKey(processName);
+    if (processKey.isEmpty())
+        return -1;
     QSqlQuery q(m_db);
     q.prepare("SELECT id FROM ignored_apps WHERE process_name = ?");
-    q.addBindValue(processName);
+    q.addBindValue(processKey);
     q.exec();
     if (q.next())
         return q.value("id").toInt();
     q.prepare("INSERT INTO ignored_apps (process_name) VALUES (?)");
-    q.addBindValue(processName);
+    q.addBindValue(processKey);
     if (!q.exec()) {
         qWarning() << "addIgnoredApp failed:" << q.lastError();
         return -1;
@@ -399,9 +469,12 @@ QMap<QString, QString> DatabaseManager::getAppAliases()
 int DatabaseManager::setAppAlias(const QString &processName, const QString &displayName)
 {
     QMutexLocker lock(&m_mutex);
+    const QString processKey = ProcessIdentity::normalizeKey(processName);
+    if (processKey.isEmpty())
+        return -1;
     QSqlQuery q(m_db);
     q.prepare("INSERT OR REPLACE INTO app_aliases (process_name, display_name) VALUES (?, ?)");
-    q.addBindValue(processName);
+    q.addBindValue(processKey);
     q.addBindValue(displayName);
     if (!q.exec()) {
         qWarning() << "setAppAlias failed:" << q.lastError();
@@ -425,7 +498,7 @@ void DatabaseManager::removeAppAliasByProcessName(const QString &processName)
     QMutexLocker lock(&m_mutex);
     QSqlQuery q(m_db);
     q.prepare("DELETE FROM app_aliases WHERE process_name = ?");
-    q.addBindValue(processName);
+    q.addBindValue(ProcessIdentity::normalizeKey(processName));
     if (!q.exec())
         qWarning() << "removeAppAliasByProcessName failed:" << q.lastError();
 }

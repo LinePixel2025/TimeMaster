@@ -11,18 +11,22 @@
 #include <QSet>
 #include <QMap>
 #include <QStringList>
+#include "tracker/tracking_store.h"
 
-class DatabaseManager
+class DatabaseManager : public TrackingStore
 {
 public:
     explicit DatabaseManager(const QString &dbPath = QString());
-    ~DatabaseManager();
+    ~DatabaseManager() override;
 
     qint64 insertSession(const QString &processName, const QString &windowTitle,
                          const QString &appName, const QDateTime &startTime,
-                         const QDateTime &endTime, int durationSeconds);
-    void updateSessionEnd(qint64 sessionId, const QDateTime &endTime, int durationSeconds);
-    void updateSessionDuration(qint64 sessionId, int durationSeconds);
+                         const QDateTime &endTime, int durationSeconds) override;
+    bool updateSessionEnd(qint64 sessionId, const QDateTime &endTime,
+                          int durationSeconds) override;
+    bool updateSessionDuration(qint64 sessionId, int durationSeconds) override;
+
+    QString databasePath() const;
 
     QVector<QVariantMap> getTodaySummary();
     int getTodayTotal();

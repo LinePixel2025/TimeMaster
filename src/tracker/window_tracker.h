@@ -6,8 +6,9 @@
 #include <QString>
 #include <QMap>
 #include <QAtomicInt>
-#include <QSet>
 #include <QMutex>
+#include <QWaitCondition>
+#include "tracker/tracking_engine.h"
 
 class DatabaseManager;
 
@@ -27,41 +28,23 @@ protected:
     void run() override;
 
 private:
-    void tick();
-    void closeCurrentSession(const QDateTime &now);
     struct WindowInfo {
         unsigned long pid;
         QString processName;
+        QString processKey;
         QString windowTitle;
         QString appName;
     };
     WindowInfo getForegroundWindowInfo();
+    qint64 getIdleMilliseconds() const;
 
     DatabaseManager *m_db;
     QAtomicInt m_running;
-    qint64 m_currentSessionId = -1;
-    unsigned long m_currentPid = 0;
-    QString m_currentTitle;
-    QDateTime m_sessionStart;
-    float m_idleSeconds = 0;
-    bool m_isIdle = false;
-
-    unsigned long m_pendingPid = 0;
-    QString m_pendingTitle;
-    QString m_pendingProcessName;
-    QString m_pendingAppName;
-    QDateTime m_pendingStart;
-
-    QSet<QString> m_ignoredApps;
+    TrackingConfig m_config;
     QMap<QString, QString> m_aliases;
-    bool m_trackingEnabled = true;
-    float m_pollInterval = POLL_INTERVAL;
-    float m_idleThreshold = IDLE_THRESHOLD;
-    float m_minTrackingSeconds = 0;
     QMutex m_settingsMutex;
-
-    static constexpr float POLL_INTERVAL = 1.0f;
-    static constexpr float IDLE_THRESHOLD = 60.0f;
+    QWaitCondition m_waitCondition;
+    quint64 m_configRevision = 0;
 };
 
 #endif // WINDOW_TRACKER_H

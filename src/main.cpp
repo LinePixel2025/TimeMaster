@@ -37,7 +37,6 @@ int main(int argc, char *argv[])
 
     WindowTracker tracker(&db);
     tracker.start();
-    tracker.reloadSettings();
 
     TrayManager tray("Time Master");
     QObject::connect(&tray, &TrayManager::showMainWindow, [&]() {
