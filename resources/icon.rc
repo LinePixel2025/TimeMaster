@@ -1,1 +1,38 @@
 IDI_ICON1 ICON "icon.ico"
+
+// 版本资源:FILEVERSION/PRODUCTVERSION 数值来自 src/CMakeLists.txt 中 windres 传入的
+// APP_VERSION_NUM(逗号分隔);APP_VERSION 是点分版本,用 cpp 字符串化生成字符串字面量
+#define STR2(x) #x
+#define STR1(x) STR2(x)
+// Windows 约定版本资源必须是 RT_VERSION 且资源 ID 为 1;微软 rc 预定义 VS_VERSION_INFO=1,
+// 而 windres 不预定义,这里显式补上,否则会生成命名资源导致 GetFileVersionInfo 找不到
+#define VS_VERSION_INFO 1
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION APP_VERSION_NUM
+ PRODUCTVERSION APP_VERSION_NUM
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x00040004L            // VOS_NT_WINDOWS32
+ FILETYPE 0x1L                 // VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"      // 简体中文, Unicode(1200)
+        BEGIN
+            VALUE "CompanyName", "TimeMaster"
+            VALUE "FileDescription", "Time Master"
+            VALUE "FileVersion", STR1(APP_VERSION)
+            VALUE "InternalName", "TimeMaster"
+            VALUE "LegalCopyright", "Copyright (c) 2026 TimeMaster"
+            VALUE "OriginalFilename", "TimeMaster.exe"
+            VALUE "ProductName", "Time Master"
+            VALUE "ProductVersion", STR1(APP_VERSION)
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END
