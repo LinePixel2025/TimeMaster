@@ -38,6 +38,10 @@ public:
     /// 公开以便测试直接触发（定时器间隔最短 5 分钟，测试不便等待）。
     void doPush();
 
+    /// 主界面「云端同步」按钮入口：立即推送补推/今日并拉取云端状态。
+    /// 未启用或未配置时返回 false（不发起任何请求）。
+    bool syncNow();
+
 signals:
     void pushSucceeded();
     void pushFailed(const QString &error);

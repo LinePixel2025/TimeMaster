@@ -113,6 +113,12 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
     connect(m_exportBtn, &QPushButton::clicked, this, &MainWindow::onExport);
     headerLayout->addWidget(m_exportBtn);
 
+    m_cloudSyncBtn = new QPushButton(QString::fromUtf8("\xe4\xba\x91\xe7\xab\xaf\xe5\x90\x8c\xe6\xad\xa5"), central);
+    m_cloudSyncBtn->setMinimumHeight(36);
+    m_cloudSyncBtn->setToolTip(QString::fromUtf8("\xe7\xab\x8b\xe5\x8d\xb3\xe6\x8e\xa8\xe9\x80\x81\xe4\xbb\x8a\xe6\x97\xa5\xe6\x97\xb6\xe9\x95\xbf\xe5\xb9\xb6\xe5\x90\x8c\xe6\xad\xa5\xe4\xba\x91\xe7\xab\xaf\xe7\x9b\xae\xe6\xa0\x87"));
+    connect(m_cloudSyncBtn, &QPushButton::clicked, this, &MainWindow::cloudSyncRequested);
+    headerLayout->addWidget(m_cloudSyncBtn);
+
     m_refreshBtn = new QPushButton(QString::fromUtf8("\xe5\x88\xb7\xe6\x96\xb0"), central);
     m_refreshBtn->setMinimumHeight(36);
     connect(m_refreshBtn, &QPushButton::clicked, this, &MainWindow::refreshData);
@@ -218,6 +224,7 @@ void MainWindow::applyTheme()
         .arg(DesignTokens::kAccent().name(), DesignTokens::kAccentHover().name(),
              DesignTokens::kAccentPressed().name());
     m_refreshBtn->setStyleSheet(primaryStyle);
+    m_cloudSyncBtn->setStyleSheet(primaryStyle);
 }
 
 void MainWindow::showEvent(QShowEvent *event)

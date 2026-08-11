@@ -23,6 +23,8 @@ public slots:
 
 signals:
     void settingsChanged();
+    /// 用户点击主界面「云端同步」按钮，请求立即执行云端同步。
+    void cloudSyncRequested();
 
 protected:
     void showEvent(QShowEvent *event) override;
@@ -41,6 +43,7 @@ private:
     QPushButton *m_settingsBtn = nullptr;
     QPushButton *m_exportBtn = nullptr;
     QPushButton *m_refreshBtn = nullptr;
+    QPushButton *m_cloudSyncBtn = nullptr;
     QLabel *m_titleLabel = nullptr;
     QLabel *m_dateLabel = nullptr;
     HeroCard *m_heroCard = nullptr;

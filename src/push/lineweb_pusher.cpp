@@ -58,8 +58,7 @@ void LineWebPusher::doPush()
     if (!m_enabled || m_token.isEmpty() || m_endpoint.isEmpty())
         return;
 
-    const QDate today = QDate::currentDate();
-    const QString todayStr = today.toString(Qt::ISODate);
+    const QDate today = QDate::currentDate();    const QString todayStr = today.toString(Qt::ISODate);
 
     // 1. 补推上次失败保留的日期（服务端按日期覆盖写入，重复推送无害）。
     if (!m_pendingPushDate.isEmpty() && m_pendingPushDate != todayStr)
@@ -75,6 +74,14 @@ void LineWebPusher::doPush()
     sendPush(today, qBound(0, m_db->getTodayTotal(), kMaxTotalSeconds));
 
     m_lastPushedDate = todayStr;
+}
+
+bool LineWebPusher::syncNow()
+{
+    if (!m_enabled || m_token.isEmpty() || m_endpoint.isEmpty())
+        return false;
+    doPush();
+    return true;
 }
 
 void LineWebPusher::sendPush(const QDate &date, int totalSeconds)
