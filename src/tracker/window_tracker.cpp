@@ -12,6 +12,7 @@ static const QMap<QString, QString> APP_NAME_MAP = {
     {"msedge.exe", "Edge"},
     {"firefox.exe", "Firefox"},
     {"code.exe", "VS Code"},
+    {"timemaster.exe", "Time Master"},
     {"wechat.exe", "WeChat"},
     {"wechatwork.exe", "WeCom"},
     {"sublime_text.exe", "Sublime Text"},

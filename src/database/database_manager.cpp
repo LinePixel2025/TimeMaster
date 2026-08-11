@@ -9,19 +9,32 @@
 
 namespace {
 
-// SQLite 的 GROUP BY 对 app_name 区分大小写;同一应用可能因历史兜底名或
-// 版本资源 FileDescription 的大小写差异被记成多行(如 "chrome"/"Chrome")。
-// 在 C++ 侧按小写应用名合并,显示名(及 process_name)保留组内累计时长
+// 同一应用可能被记成多种 app_name 变体:历史兜底名(可执行文件名)、版本资源
+// FileDescription,两者除大小写外还常差空格,如 "TimeMaster"/"Time Master"。
+// SQLite 的 GROUP BY 对 app_name 区分大小写,无法在 SQL 层合并,故在 C++ 侧按
+// "小写+去空格" 归一化应用名合并,显示名(及 process_name)保留组内累计时长
 // 最大的变体。getDailySummaries 还带日期维度 d,合并键需包含日期。
-void mergeCaseInsensitiveApps(QVector<QVariantMap> &rows)
+QString normalizedAppNameKey(const QString &name)
+{
+    const QString lower = name.toLower();
+    QString key;
+    key.reserve(lower.size());
+    for (const QChar c : lower) {
+        if (!c.isSpace())
+            key.append(c);
+    }
+    return key;
+}
+
+void mergeAppNameVariants(QVector<QVariantMap> &rows)
 {
     QVector<QVariantMap> merged;
-    QHash<QString, int> index;        // d + app_name(小写) -> merged 中的下标
+    QHash<QString, int> index;        // d + 归一化应用名 -> merged 中的下标
     QHash<QString, int> bestSeconds;  // 同上键 -> 组内单行最大时长,用于选规范变体
     index.reserve(rows.size());
     for (const QVariantMap &row : rows) {
         const QString appName = row.value(QStringLiteral("app_name")).toString();
-        QString key = appName.toLower();
+        QString key = normalizedAppNameKey(appName);
         const QString day = row.value(QStringLiteral("d")).toString();
         if (!day.isEmpty())
             key = day + QLatin1Char('\x1f') + key;
@@ -251,7 +264,7 @@ QVector<QVariantMap> DatabaseManager::getTodaySummary()
         row["total_seconds"] = q.value("total_seconds");
         results.append(row);
     }
-    mergeCaseInsensitiveApps(results);
+    mergeAppNameVariants(results);
     std::sort(results.begin(), results.end(),
               [](const QVariantMap &a, const QVariantMap &b) {
                   return a.value(QStringLiteral("total_seconds")).toInt() >
@@ -351,7 +364,7 @@ QVector<QVariantMap> DatabaseManager::getAppRank(const QDate &targetDate)
         row["total_seconds"] = q.value("total_seconds");
         results.append(row);
     }
-    mergeCaseInsensitiveApps(results);
+    mergeAppNameVariants(results);
     std::sort(results.begin(), results.end(),
               [](const QVariantMap &a, const QVariantMap &b) {
                   return a.value(QStringLiteral("total_seconds")).toInt() >
@@ -432,7 +445,7 @@ QVector<QVariantMap> DatabaseManager::getDailySummaries(const QString &startDate
         row["total_seconds"] = q.value("total_seconds");
         results.append(row);
     }
-    mergeCaseInsensitiveApps(results);
+    mergeAppNameVariants(results);
     std::sort(results.begin(), results.end(),
               [](const QVariantMap &a, const QVariantMap &b) {
                   const int cmp = a.value(QStringLiteral("d")).toString().compare(

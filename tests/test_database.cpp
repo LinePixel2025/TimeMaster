@@ -104,6 +104,36 @@ void test_app_rank_case_insensitive_merge()
     std::cout << "test_app_rank_case_insensitive_merge PASS" << std::endl;
 }
 
+void test_app_rank_whitespace_insensitive_merge()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    QDateTime now = QDateTime::currentDateTime();
+    // 同一 exe 的历史 app_name 变体可能只差空格:版本资源 FileDescription("Time Master")
+    // 与旧版按可执行文件名兜底的 "TimeMaster"/"timemaster" 同时存在
+    db.insertSession("C:\\Program Files\\Time Master\\TimeMaster.exe", "Time Master", "Time Master", now, now, 173);
+    db.insertSession("C:\\Program Files\\Time Master\\TimeMaster.exe", "Time Master", "TimeMaster", now, now, 1272);
+    db.insertSession("D:\\AICOP\\Projects\\Time Master\\build\\src\\TimeMaster.exe", "Time Master", "timemaster", now, now, 8129);
+
+    QVector<QVariantMap> rank = db.getAppRank();
+    assert(rank.size() == 1);
+    assert(rank[0]["total_seconds"].toInt() == 173 + 1272 + 8129);
+
+    QVector<QVariantMap> summary = db.getTodaySummary();
+    assert(summary.size() == 1);
+    assert(summary[0]["total_seconds"].toInt() == 173 + 1272 + 8129);
+
+    QVector<QVariantMap> daily = db.getDailySummaries(
+        QDate::currentDate().toString(Qt::ISODate), QDate::currentDate().toString(Qt::ISODate));
+    assert(daily.size() == 1);
+    assert(daily[0]["total_seconds"].toInt() == 173 + 1272 + 8129);
+    std::cout << "test_app_rank_whitespace_insensitive_merge PASS" << std::endl;
+}
+
 void test_update_session_end()
 {
     QTemporaryFile tmpFile;
@@ -361,6 +391,7 @@ int main(int argc, char *argv[])
     test_week_summary();
     test_app_rank();
     test_app_rank_case_insensitive_merge();
+    test_app_rank_whitespace_insensitive_merge();
     test_update_session_end();
     test_settings_default();
     test_settings_set_get();
