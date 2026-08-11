@@ -1,5 +1,5 @@
 #define AppName "Time Master"
-#define AppVersion "4.2.0"
+#define AppVersion "4.3.1"
 #define AppPublisher "TimeMaster"
 #define AppURL "https://github.com/yourorg/timemaster"
 #define AppExeName "TimeMaster.exe"
