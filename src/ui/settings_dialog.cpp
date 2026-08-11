@@ -6,6 +6,7 @@
 #include "ui/design_tokens.h"
 #include "ui/ui_utils.h"
 #include "utility/process_identity.h"
+#include "push/lineweb_pusher.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -22,18 +23,9 @@
 #include <QNetworkRequest>
 #include <QUrl>
 #include <QApplication>
+#include <QTimer>
 
 namespace {
-
-QString normalizeEndpoint(const QString &endpoint)
-{
-    QString result = endpoint.trimmed();
-    while (result.endsWith(QLatin1Char('/')))
-        result.chop(1);
-    if (result.endsWith(QLatin1String("/api/health/push")))
-        result = result.left(result.length() - 16);
-    return result;
-}
 
 QString accentButtonStyle()
 {
@@ -305,7 +297,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
 
     auto *dailyGoalRow = new QHBoxLayout();
     auto *dailyGoalLabel = new QLabel(
-        QString::fromUtf8("\xe6\xaf\x8f\xe6\x97\xa5\xe7\x9b\xae\xe6\xa0\x87\xef\xbc\x88\xe5\xb0\x8f\xe6\x97\xb6\xef\xbc\x89:"), this);
+        QString::fromUtf8("\xe6\x9c\xac\xe5\x9c\xb0\xe9\xbb\x98\xe8\xae\xa4\xe7\x9b\xae\xe6\xa0\x87\xef\xbc\x88\xe4\xba\x91\xe7\xab\xaf\xe6\x9c\xaa\xe8\xae\xbe\xe7\xbd\xae\xe6\x97\xb6\xe7\x94\x9f\xe6\x95\x88\xef\xbc\x8c\xe5\xb0\x8f\xe6\x97\xb6\xef\xbc\x89:"), this);
     dailyGoalLabel->setFont(DesignTokens::appFont(13));
     dailyGoalRow->addWidget(dailyGoalLabel);
     m_dailyGoal = new QSpinBox(this);
@@ -385,20 +377,22 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         body["totalSeconds"] = m_db->getTodayTotal();
         body["date"] = QDate::currentDate().toString("yyyy-MM-dd");
 
-        QUrl url(normalizeEndpoint(endpoint) + "/api/health/push");
+        QUrl url(normalizeLineWebEndpoint(endpoint) + "/api/health/push");
         QNetworkRequest req(url);
         req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         req.setRawHeader("X-Screen-Time-Token", token.toUtf8());
 
         auto *nam = new QNetworkAccessManager(this);
         QNetworkReply *reply = nam->post(req, QJsonDocument(body).toJson());
-        connect(reply, &QNetworkReply::finished, this, [this, reply, nam]() {
+        connect(reply, &QNetworkReply::finished, this, [this, reply, nam, endpoint, token]() {
             reply->deleteLater();
             nam->deleteLater();
             if (reply->error() == QNetworkReply::NoError) {
                 QMessageBox::information(this,
                     QString::fromUtf8("\xe6\xb5\x8b\xe8\xaf\x95\xe6\x88\x90\xe5\x8a\x9f"),
                     QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe6\xb5\x8b\xe8\xaf\x95\xe6\x88\x90\xe5\x8a\x9f\xef\xbc\x81"));
+                // 推送验证成功后顺带拉取云端目标写回 daily_goal（云端优先、本地兜底）。
+                fetchGoalFromCloud(endpoint, token);
             } else {
                 QMessageBox::warning(this,
                     QString::fromUtf8("\xe6\xb5\x8b\xe8\xaf\x95\xe5\xa4\xb1\xe8\xb4\xa5"),
@@ -487,6 +481,13 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
                 .arg(DesignTokens::kTextMute().name()));
     });
 
+    // 状态标签每 5 秒重读一次数据库，实时反映推送/拉取结果。
+    m_linewebStatusTimer = new QTimer(this);
+    m_linewebStatusTimer->setInterval(5000);
+    connect(m_linewebStatusTimer, &QTimer::timeout,
+            this, &SettingsDialog::updateCloudStatus);
+    m_linewebStatusTimer->start();
+
     loadSettings();
 }
 
@@ -510,16 +511,55 @@ void SettingsDialog::loadSettings()
     m_linewebInterval->setValue(
         m_db->getSetting("lineweb_interval", "10").toInt());
 
-    const QString lastPush = m_db->getSetting("lineweb_last_push", "");
-    m_linewebStatus->setText(lastPush.isEmpty()
-        ? QString::fromUtf8("\xe5\xb0\x9a\xe6\x9c\xaa\xe6\x8e\xa8\xe9\x80\x81")
-        : lastPush);
+    updateCloudStatus();
 
     m_dailyGoal->setValue(m_db->getSetting("daily_goal", "28800").toInt() / 3600);
 
     refreshKnownAppsList();
     refreshIgnoredList();
     refreshAliasTable();
+}
+
+void SettingsDialog::updateCloudStatus()
+{
+    const QString lastPush = m_db->getSetting("lineweb_last_push", "");
+    const QString lastFetch = m_db->getSetting("lineweb_last_fetch", "");
+    if (!lastPush.isEmpty() && !lastFetch.isEmpty())
+        m_linewebStatus->setText(lastPush + "  ·  " + lastFetch);
+    else if (!lastPush.isEmpty())
+        m_linewebStatus->setText(lastPush);
+    else if (!lastFetch.isEmpty())
+        m_linewebStatus->setText(lastFetch);
+    else
+        m_linewebStatus->setText(QString::fromUtf8("\xe5\xb0\x9a\xe6\x9c\xaa\xe5\x90\x8c\xe6\xad\xa5"));
+}
+
+void SettingsDialog::fetchGoalFromCloud(const QString &endpoint, const QString &token)
+{
+    QUrl url(normalizeLineWebEndpoint(endpoint) + "/api/health/daily-goal/data");
+    QNetworkRequest req(url);
+    req.setRawHeader("X-Screen-Time-Token", token.toUtf8());
+
+    auto *nam = new QNetworkAccessManager(this);
+    QNetworkReply *reply = nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, nam]() {
+        reply->deleteLater();
+        nam->deleteLater();
+        if (reply->error() != QNetworkReply::NoError)
+            return;
+        const QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
+        if (!obj.contains("dailyGoalSeconds") || !obj["dailyGoalSeconds"].isDouble())
+            return;
+        const int goal = qBound(0, obj["dailyGoalSeconds"].toInt(), kMaxTotalSeconds);
+        if (goal <= 0)
+            return; // 云端未设置目标，保留本地默认值。
+        m_db->setSetting("daily_goal", QString::number(goal));
+        m_dailyGoal->setValue(goal / 3600);
+        QMessageBox::information(this,
+            QString::fromUtf8("\xe4\xba\x91\xe7\xab\xaf\xe7\x9b\xae\xe6\xa0\x87\xe5\xb7\xb2\xe5\x90\x8c\xe6\xad\xa5"),
+            QString::fromUtf8("\xe5\xb7\xb2\xe5\x90\x8c\xe6\xad\xa5\xe4\xba\x91\xe7\xab\xaf\xe7\x9b\xae\xe6\xa0\x87\xef\xbc\x9a%1h")
+                .arg(goal / 3600));
+    });
 }
 
 void SettingsDialog::saveSettings()

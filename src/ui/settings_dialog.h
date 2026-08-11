@@ -9,6 +9,7 @@
 #include <QPushButton>
 #include <QLineEdit>
 #include <QLabel>
+#include <QTimer>
 
 class DatabaseManager;
 
@@ -33,6 +34,8 @@ private slots:
 private:
     void loadSettings();
     void saveSettings();
+    void updateCloudStatus();
+    void fetchGoalFromCloud(const QString &endpoint, const QString &token);
     void refreshKnownAppsList();
     void refreshIgnoredList();
     void refreshAliasTable();
@@ -61,4 +64,5 @@ private:
     QSpinBox *m_linewebInterval = nullptr;
     QPushButton *m_linewebTestBtn = nullptr;
     QLabel *m_linewebStatus = nullptr;
+    QTimer *m_linewebStatusTimer = nullptr;
 };

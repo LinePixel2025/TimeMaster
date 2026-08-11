@@ -39,6 +39,18 @@ if(BUILD_TESTING)
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
     add_test(NAME test_lineweb_pusher COMMAND test_lineweb_pusher)
 
+    add_executable(test_cloud_sync
+        test_cloud_sync.cpp
+        ${CMAKE_SOURCE_DIR}/src/database/database_manager.cpp
+        ${CMAKE_SOURCE_DIR}/src/push/lineweb_pusher.cpp
+    )
+    target_include_directories(test_cloud_sync PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_cloud_sync PRIVATE Qt6::Core Qt6::Sql Qt6::Network Qt6::Test)
+    target_compile_options(test_cloud_sync PRIVATE
+        $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
+    add_test(NAME test_cloud_sync COMMAND test_cloud_sync)
+
     add_executable(test_window_tracker
         test_window_tracker.cpp
         ${CMAKE_SOURCE_DIR}/src/tracker/tracking_engine.cpp
@@ -53,7 +65,7 @@ if(BUILD_TESTING)
     get_filename_component(QT_INSTALL_ROOT "${Qt6_DIR}/../../.." ABSOLUTE)
     get_filename_component(COMPILER_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
     set_tests_properties(
-        test_database test_exporter test_lineweb_pusher test_window_tracker
+        test_database test_exporter test_lineweb_pusher test_cloud_sync test_window_tracker
         PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         ENVIRONMENT_MODIFICATION

@@ -68,6 +68,18 @@ int main(int argc, char *argv[])
         app.quit();
     });
 
+    // 云端目标写回后刷新仪表盘（HeroCard 环与文案随目标更新）。
+    QObject::connect(&pusher, &LineWebPusher::goalUpdated,
+                     &window, &MainWindow::refreshData);
+
+    // 当日首次超目标弹一次托盘提醒。
+    QObject::connect(&pusher, &LineWebPusher::goalExceeded, [&tray](int overMinutes) {
+        tray.showNotification(
+            QString::fromUtf8("Time Master \xe6\x97\xb6\xe9\x97\xb4\xe6\x8f\x90\xe9\x86\x92"),
+            QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe5\xb7\xb2\xe8\xb6\x85\xe7\x9b\xae\xe6\xa0\x87 %1 \xe5\x88\x86\xe9\x92\x9f")
+                .arg(overMinutes));
+    });
+
     tray.show();
     window.refreshData();
 

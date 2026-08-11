@@ -26,6 +26,19 @@ public:
         update();
     }
 
+    void setProgressColor(const QColor &color)
+    {
+        if (m_progressColor != color) {
+            m_progressColor = color;
+            update();
+        }
+    }
+
+    void resetProgressColor()
+    {
+        setProgressColor(DesignTokens::kAccent());
+    }
+
 protected:
     void paintEvent(QPaintEvent *) override
     {
@@ -49,7 +62,7 @@ protected:
         painter.drawEllipse(ringRect.center(), radius, radius);
 
         if (m_pct > 0) {
-            QPen fgPen(DesignTokens::kAccent(), lineWidth);
+            QPen fgPen(m_progressColor, lineWidth);
             fgPen.setCapStyle(Qt::RoundCap);
             painter.setPen(fgPen);
             painter.drawArc(ringRect, 90 * 16, -qRound(m_pct * 3.6 * 16));
@@ -62,6 +75,7 @@ protected:
 
 private:
     int m_pct = 0;
+    QColor m_progressColor = DesignTokens::kAccent();
 };
 
 HeroCard::HeroCard(QWidget *parent)
@@ -148,12 +162,34 @@ void HeroCard::updateDisplay()
     if (m_goal > 0) {
         const int pct = qMin(100, m_today * 100 / m_goal);
         m_ring->setProgress(pct);
-        m_goalLabel->setText(
-            QString::fromUtf8("\xe7\x9b\xae\xe6\xa0\x87 %1h \xc2\xb7 %2%")
-                .arg(qMax(0, m_goal) / 3600)
-                .arg(pct));
+        if (m_today >= m_goal) {
+            // 达到或超出目标：环变色提示（达成绿 / 超出红）。
+            m_ring->setProgressColor(DesignTokens::kSuccess());
+            m_goalLabel->setStyleSheet(
+                QString("color: %1; background: transparent;")
+                    .arg(DesignTokens::kError().name()));
+            const int overMinutes = (m_today - m_goal) / 60;
+            m_goalLabel->setText(overMinutes > 0
+                ? QString::fromUtf8("\xe7\x9b\xae\xe6\xa0\x87 %1h \xc2\xb7 \xe5\xb7\xb2\xe8\xb6\x85 %2 \xe5\x88\x86\xe9\x92\x9f")
+                    .arg(qMax(0, m_goal) / 3600).arg(overMinutes)
+                : QString::fromUtf8("\xe7\x9b\xae\xe6\xa0\x87 %1h \xc2\xb7 \xe5\xb7\xb2\xe8\xbe\xbe\xe6\x88\x90")
+                    .arg(qMax(0, m_goal) / 3600));
+        } else {
+            m_ring->resetProgressColor();
+            m_goalLabel->setStyleSheet(
+                QString("color: %1; background: transparent;")
+                    .arg(DesignTokens::kAccent().name()));
+            m_goalLabel->setText(
+                QString::fromUtf8("\xe7\x9b\xae\xe6\xa0\x87 %1h \xc2\xb7 %2%")
+                    .arg(qMax(0, m_goal) / 3600)
+                    .arg(pct));
+        }
     } else {
         m_ring->setProgress(0);
+        m_ring->resetProgressColor();
+        m_goalLabel->setStyleSheet(
+            QString("color: %1; background: transparent;")
+                .arg(DesignTokens::kAccent().name()));
         m_goalLabel->clear();
     }
 }
