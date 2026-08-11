@@ -4,7 +4,50 @@
 #include <QDir>
 #include <QStandardPaths>
 #include <QUuid>
+#include <algorithm>
 #include "utility/process_identity.h"
+
+namespace {
+
+// SQLite 的 GROUP BY 对 app_name 区分大小写;同一应用可能因历史兜底名或
+// 版本资源 FileDescription 的大小写差异被记成多行(如 "chrome"/"Chrome")。
+// 在 C++ 侧按小写应用名合并,显示名(及 process_name)保留组内累计时长
+// 最大的变体。getDailySummaries 还带日期维度 d,合并键需包含日期。
+void mergeCaseInsensitiveApps(QVector<QVariantMap> &rows)
+{
+    QVector<QVariantMap> merged;
+    QHash<QString, int> index;        // d + app_name(小写) -> merged 中的下标
+    QHash<QString, int> bestSeconds;  // 同上键 -> 组内单行最大时长,用于选规范变体
+    index.reserve(rows.size());
+    for (const QVariantMap &row : rows) {
+        const QString appName = row.value(QStringLiteral("app_name")).toString();
+        QString key = appName.toLower();
+        const QString day = row.value(QStringLiteral("d")).toString();
+        if (!day.isEmpty())
+            key = day + QLatin1Char('\x1f') + key;
+
+        const int seconds = row.value(QStringLiteral("total_seconds")).toInt();
+        const auto it = index.constFind(key);
+        if (it == index.cend()) {
+            index.insert(key, merged.size());
+            bestSeconds.insert(key, seconds);
+            merged.append(row);
+            continue;
+        }
+        QVariantMap &target = merged[it.value()];
+        target[QStringLiteral("total_seconds")] =
+            target.value(QStringLiteral("total_seconds")).toInt() + seconds;
+        if (seconds > bestSeconds.value(key)) {
+            bestSeconds.insert(key, seconds);
+            target[QStringLiteral("app_name")] = appName;
+            if (row.contains(QStringLiteral("process_name")))
+                target[QStringLiteral("process_name")] = row.value(QStringLiteral("process_name"));
+        }
+    }
+    rows.swap(merged);
+}
+
+} // namespace
 
 DatabaseManager::DatabaseManager(const QString &dbPath)
     : m_dbPath(dbPath)
@@ -208,6 +251,12 @@ QVector<QVariantMap> DatabaseManager::getTodaySummary()
         row["total_seconds"] = q.value("total_seconds");
         results.append(row);
     }
+    mergeCaseInsensitiveApps(results);
+    std::sort(results.begin(), results.end(),
+              [](const QVariantMap &a, const QVariantMap &b) {
+                  return a.value(QStringLiteral("total_seconds")).toInt() >
+                         b.value(QStringLiteral("total_seconds")).toInt();
+              });
     return results;
 }
 
@@ -285,22 +334,12 @@ QVector<QVariantMap> DatabaseManager::getAppRank(const QDate &targetDate)
 
     QSqlQuery q(m_db);
     q.prepare(
-        "SELECT app_name, "
-        "  (SELECT s2.process_name FROM sessions s2 "
-        "   WHERE s2.app_name = s1.app_name AND date(s2.start_time) = ? "
-        "   AND s2.duration_seconds >= ? "
-        "   AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-        "   WHERE s2.process_key = ia.process_name) "
-        "   GROUP BY s2.process_name "
-        "   ORDER BY SUM(s2.duration_seconds) DESC LIMIT 1) as process_name, "
-        "  SUM(s1.duration_seconds) as total_seconds "
-        "FROM sessions s1 WHERE date(s1.start_time) = ? "
-        "AND s1.duration_seconds >= ? "
+        "SELECT app_name, process_name, SUM(duration_seconds) as total_seconds "
+        "FROM sessions WHERE date(start_time) = ? "
+        "AND duration_seconds >= ? "
         "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
-        "WHERE s1.process_key = ia.process_name) "
-        "GROUP BY s1.app_name ORDER BY total_seconds DESC");
-    q.addBindValue(targetDate.toString(Qt::ISODate));
-    q.addBindValue(threshold);
+        "WHERE sessions.process_key = ia.process_name) "
+        "GROUP BY app_name, process_name");
     q.addBindValue(targetDate.toString(Qt::ISODate));
     q.addBindValue(threshold);
     q.exec();
@@ -312,6 +351,12 @@ QVector<QVariantMap> DatabaseManager::getAppRank(const QDate &targetDate)
         row["total_seconds"] = q.value("total_seconds");
         results.append(row);
     }
+    mergeCaseInsensitiveApps(results);
+    std::sort(results.begin(), results.end(),
+              [](const QVariantMap &a, const QVariantMap &b) {
+                  return a.value(QStringLiteral("total_seconds")).toInt() >
+                         b.value(QStringLiteral("total_seconds")).toInt();
+              });
     return results;
 }
 
@@ -387,6 +432,16 @@ QVector<QVariantMap> DatabaseManager::getDailySummaries(const QString &startDate
         row["total_seconds"] = q.value("total_seconds");
         results.append(row);
     }
+    mergeCaseInsensitiveApps(results);
+    std::sort(results.begin(), results.end(),
+              [](const QVariantMap &a, const QVariantMap &b) {
+                  const int cmp = a.value(QStringLiteral("d")).toString().compare(
+                      b.value(QStringLiteral("d")).toString());
+                  if (cmp != 0)
+                      return cmp < 0;
+                  return a.value(QStringLiteral("total_seconds")).toInt() >
+                         b.value(QStringLiteral("total_seconds")).toInt();
+              });
     return results;
 }
 

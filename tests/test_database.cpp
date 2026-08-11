@@ -74,6 +74,36 @@ void test_app_rank()
     std::cout << "test_app_rank PASS" << std::endl;
 }
 
+void test_app_rank_case_insensitive_merge()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    QDateTime now = QDateTime::currentDateTime();
+    // 历史兜底名与新版应用名解析可能把同一应用记成仅大小写不同的 app_name
+    db.insertSession("C:\\Apps\\chrome.exe", "Google", "Chrome", now, now, 60);
+    db.insertSession("C:\\Apps\\chrome.exe", "Google", "chrome", now, now, 40);
+
+    QVector<QVariantMap> rank = db.getAppRank();
+    assert(rank.size() == 1);
+    assert(rank[0]["app_name"].toString() == "Chrome");
+    assert(rank[0]["total_seconds"].toInt() == 100);
+
+    QVector<QVariantMap> summary = db.getTodaySummary();
+    assert(summary.size() == 1);
+    assert(summary[0]["total_seconds"].toInt() == 100);
+
+    QVector<QVariantMap> daily = db.getDailySummaries(
+        QDate::currentDate().toString(Qt::ISODate), QDate::currentDate().toString(Qt::ISODate));
+    assert(daily.size() == 1);
+    assert(daily[0]["app_name"].toString() == "Chrome");
+    assert(daily[0]["total_seconds"].toInt() == 100);
+    std::cout << "test_app_rank_case_insensitive_merge PASS" << std::endl;
+}
+
 void test_update_session_end()
 {
     QTemporaryFile tmpFile;
@@ -330,6 +360,7 @@ int main(int argc, char *argv[])
     test_insert_and_query();
     test_week_summary();
     test_app_rank();
+    test_app_rank_case_insensitive_merge();
     test_update_session_end();
     test_settings_default();
     test_settings_set_get();
