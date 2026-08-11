@@ -1,184 +1,143 @@
-# AGENTS.md — Time Master
+# AGENTS.md - Time Master
 
-Windows 桌面时间追踪应用。C++17、Qt6 Widgets+Sql、CMake + Ninja。
+Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 4.0.1。
 
-## 环境要求
+## 语言与环境
 
-- **Qt6 SDK** 安装于 `D:\AICOP\requirements\QT6`（6.11.1，MinGW 64 位）
-  - MinGW 13.1.0 位于 `Tools\mingw1310_64`
-  - Ninja 位于 `Tools\Ninja`
-  - CMake 位于 `Tools\CMake_64`
-- **备选方案（vcpkg）：** `CMakePresets.json` 也提供了 `default` preset（Visual Studio 2022 + vcpkg），但主力工作流为 MinGW。
+- 所有助手的自然语言回复、推理说明和新增代码注释使用简体中文。
+- 代码标识符、Qt API、命令和现有英文注释保持英文。
+- 终端为 PowerShell 7；命令示例使用 PowerShell 语法。
+- 目标平台为 Windows 10/11，当前主力工具链是 Qt 6.11.1 MinGW 64 位：
+  - Qt：`D:\AICOP\requirements\QT6\6.11.1\mingw_64`
+  - MinGW：`D:\AICOP\requirements\QT6\Tools\mingw1310_64`
+  - Ninja：`D:\AICOP\requirements\QT6\Tools\Ninja`
+  - CMake：`D:\AICOP\requirements\QT6\Tools\CMake_64`
+- `CMakePresets.json` 中的 `default` 是 Visual Studio 2022 + vcpkg 方案；MinGW 方案由 `build_mingw.ps1` 直接调用 Qt 的 `qt-cmake.bat` 配置。
+- `README.md` 仍偏向 vcpkg/Visual Studio 工作流，执行构建时以本文件、`build_mingw.ps1` 和实际 CMake 配置为准。
 
 ## 常用命令
 
 ```powershell
-# 一键构建（脚本）
+# 推荐：清理 build，使用 Qt MinGW 配置并构建 Release 主程序（不构建测试）
 .\build_mingw.ps1
 
-# 运行
+# 运行主程序；程序默认常驻系统托盘
 .\run.ps1
+```
 
-# ---- 或手动执行 ----
+手动构建或运行测试时，先设置工具链路径：
 
-# 设置 MinGW 的 PATH（任何构建/运行命令之前必须执行）
+```powershell
 $env:PATH = "D:\AICOP\requirements\QT6\Tools\mingw1310_64\bin;D:\AICOP\requirements\QT6\6.11.1\mingw_64\bin;D:\AICOP\requirements\QT6\Tools\Ninja;D:\AICOP\requirements\QT6\Tools\CMake_64\bin;$env:PATH"
-
-# 配置
-cmake --preset mingw
-
-# 构建
-cmake --build build
-
-# 运行测试（需要 QT_PLUGIN_PATH 加载 SQL 驱动）
 $env:QT_PLUGIN_PATH = "D:\AICOP\requirements\QT6\6.11.1\mingw_64\plugins"
-.\build\tests\test_database.exe
-.\build\tests\test_exporter.exe
 
-# 打包发布
-$env:PATH = "D:\AICOP\requirements\QT6\6.11.1\mingw_64\bin;D:\AICOP\requirements\QT6\Tools\mingw1310_64\bin;$env:PATH"
-Remove-Item -Recurse -Force dist\TimeMaster -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Path dist\TimeMaster -Force | Out-Null
-Copy-Item build\src\TimeMaster.exe dist\TimeMaster\
-& windeployqt --no-translations --no-compiler-runtime --release dist\TimeMaster\TimeMaster.exe
-Copy-Item D:\AICOP\requirements\QT6\Tools\mingw1310_64\bin\libgcc_s_seh-1.dll dist\TimeMaster\
-Copy-Item D:\AICOP\requirements\QT6\Tools\mingw1310_64\bin\libstdc++-6.dll dist\TimeMaster\
-Copy-Item D:\AICOP\requirements\QT6\Tools\mingw1310_64\bin\libwinpthread-1.dll dist\TimeMaster\
+# 配置测试构建；不要使用 build_mingw.ps1，因为它显式关闭 BUILD_TESTING
+& "D:\AICOP\requirements\QT6\6.11.1\mingw_64\bin\qt-cmake.bat" -S . -B build-tests -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+cmake --build build-tests
+ctest --test-dir build-tests --output-on-failure
 
-# 一键构建 + 打包 + 生成安装包（.exe）
-.\package_installer.ps1
-
-# 或仅生成安装包（需先构建并打包好 dist\TimeMaster）
-& "C:\Users\22798\AppData\Local\Programs\Inno Setup 6\ISCC.exe" installer.iss
+# 也可以直接运行单个测试
+.\build-tests\tests\test_database.exe
+.\build-tests\tests\test_exporter.exe
+.\build-tests\tests\test_lineweb_pusher.exe
+.\build-tests\tests\test_window_tracker.exe
 ```
 
-## 安装包
+测试目标是独立可执行文件，使用裸 `assert()` 和 Qt Test 的 `QSignalSpy`，没有 GoogleTest/Catch2。测试的 `main()` 必须创建 `QCoreApplication`，否则 Qt SQL 插件可能在启动时崩溃。`test_window_tracker` 用 `FakeStore` 驱动 `TrackingEngine`，不访问真实数据库。涉及网络的 `test_lineweb_pusher` 会访问本机无效端口和测试地址，不要把它改成真实服务依赖。
 
-通过 Inno Setup 6 生成单文件安装包，用户在其他电脑上可直接运行安装。
+## 发布与安装包
 
-- **安装脚本：** `installer.iss`（Inno Setup 配置）
-- **一键脚本：** `package_installer.ps1`（构建 → 打包 → 安装包）
-- **安装包依赖：** Inno Setup 6（`winget install JRSoftware.InnoSetup`）
-- **安装路径：** `C:\Program Files\Time Master`
-- **数据库位置：** `%LOCALAPPDATA%\TimeMaster\data.db`（AppData，无需管理员权限）
-- **输出：** `dist\TimeMaster-Setup-<version>.exe`
+- 主程序构建产物：`build\src\TimeMaster.exe`。
+- 当前仓库没有 `package_installer.ps1`；不要在文档或脚本中假设该文件存在。
+- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-4.0.1.exe`。
+- 发布前手动准备 `dist\TimeMaster`：复制主程序，执行 `windeployqt --no-translations --no-compiler-runtime --release`，再放入 MinGW 的 `libgcc_s_seh-1.dll`、`libstdc++-6.dll` 和 `libwinpthread-1.dll`。
+- 安装目标默认为 `C:\Program Files\Time Master`；数据库保存在 `%LOCALAPPDATA%\TimeMaster\data.db`，不应写入安装目录。
+- 生成安装包需要 Inno Setup 6，默认编译器路径通常为 `C:\Users\22798\AppData\Local\Programs\Inno Setup 6\ISCC.exe`。
+- 根目录当前可能存在未跟踪的 `Time Master.pro` 和 MinGW DLL。CMake 是正式构建入口，除非用户明确要求，不要擅自删除或纳入提交。
 
-```
+## 目录与架构
 
-项目无 lint、格式化或类型检查命令，无 CI/CD 流水线。
-
-## 架构
-
-```
+```text
 src/
-  main.cpp            — 入口（连接数据库、追踪器、主窗口、托盘）
-  database/           — SQLite 会话存储（DatabaseManager，构造时自动迁移）
-  tracker/            — 前台窗口轮询线程（WindowTracker : QThread）
-  icon/               — 应用图标提取与缓存（AppIconProvider，通过 SHGetFileInfoW 提取 EXE 图标）
-  ui/                 — MainWindow（纯色浅色背景）、StatsWidget、AppRankWidget、TrayManager
-  export/             — CSV 导出器 + 手写 XLSX 写入器（基于内置 miniz）
-  CMakeLists.txt      — 添加 src/include 目录，链接 Qt6::Widgets Qt6::Sql dwmapi shell32 gdi32
-third_party/miniz/    — 内置 miniz（zlib 兼容，C 源码封装为 .cpp）
-resources/            — 图标 + resources.qrc
-tests/                — 两个测试可执行文件，基于原始 assert()，无测试框架
-dist/                 — 预构建的 Time Master.exe + 所有 DLL（独立运行）
-.superpowers/sdd/     — SDD 任务跟踪（简报、报告、审查差异）
+  main.cpp                  入口：数据库、主题、推送、追踪线程、主窗口和托盘的生命周期
+  database/                 DatabaseManager：SQLite 会话、设置、忽略应用和应用别名
+  tracker/                  WindowTracker：QThread 前台窗口轮询、空闲检测，线程内建独立数据库连接
+                            TrackingEngine：会话状态机（Pending/Active/Idle），负责午夜切分、周期写库
+                            TrackingStore：会话持久化接口，DatabaseManager 实现它
+  icon/                     AppIconProvider：通过 Windows Shell 提取并缓存应用图标
+  ui/                       MainWindow、主题管理器、托盘管理器和四个仪表盘卡片
+                            HeroCard、TrendCard、RankCard、CompareCard、SettingsDialog
+  export/                   CSV 导出器和基于内置 miniz 的手写 XLSX 写入器
+  push/                     LineWebPusher：定时/退出前向 LineWeb 推送当日总时长
+  utility/                  Windows 自启动注册表辅助逻辑；ProcessIdentity 进程键归一化
+third_party/miniz/          内置 miniz ZIP 实现，以 miniz_all.cpp 编译
+resources/                  应用图标和 Qt resources.qrc
+tests/                      test_database、test_exporter、test_lineweb_pusher、test_window_tracker
+docs/                       设计规格、实现计划和 LineWeb 接入文档
+.superpowers/sdd/           任务简报、审查差异和报告
 ```
 
-## 核心约定
+根 CMakeLists 开启 `CMAKE_AUTOMOC` 和 `CMAKE_AUTORCC`，查找 Qt6 `Widgets Sql Svg Network Test`。主程序为 `WIN32` 子系统，不显示控制台，并链接 `dwmapi`、`shell32` 和 `gdi32`。
 
-- **包含路径：** `src/` 下的头文件作为私有包含添加，因此使用 `database/database_manager.h`（不加 `src/` 前缀）。`third_party/miniz/` 在 miniz cpp 封装中使用相对路径。
-- **Qt6 AUTOMOC/AUTORCC：** 根 CMakeLists 中两者均为 ON。`Q_OBJECT` 类和 `.qrc` 文件自动工作。
-- **测试：** 在 `tests/test_*.cpp` 中使用裸 `assert()`。每个测试是独立的可执行文件；生产源码直接编译进测试目标（无共享库）。临时数据库使用 `QTemporaryFile`。返回 0 表示通过。**测试的 `main()` 必须包含 `<QCoreApplication>`** — SQL 插件加载需要它。
-- **SQLite** 通过 Qt6 的 SQL 模块内嵌使用 — 无需独立库。
-- **XLSX：** 手写 `XlsxWriter` 类，无第三方库。将 Office Open XML 写入 miniz ZIP 流。**关键约束：`buildSharedStrings()` 必须在所有 `buildSheet()` 之后调用**，因为 `buildSheet()` 会延迟追加共享字符串索引。顺序错误会导致 `sharedStrings.xml` 中 `count="0"`，Excel 无法正确显示内容。
-- **数据库迁移：** `DatabaseManager::migrate()` 在构造时运行，使用 `IF NOT EXISTS`（无版本化迁移框架）。
-- **仅限 Windows：** 链接 `dwmapi` 用于标题栏主题。主 exe 使用 `WIN32` 隐藏控制台窗口。
-- **背景：** MICA 背景已移除。始终使用纯色 `#F0F2F5` 背景。**禁止**重新引入 `WA_TranslucentBackground`、`DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)`、`DwmExtendFrameIntoClientArea` — 它们在不同 Windows 版本上不稳定。
-- **构建产物：** `build/` 已在 gitignore 中，`.db` 文件和 `dist/` 同理。
-- **提交风格：** 约定式提交（`feat:`、`fix:`、`chore:`）。
+## 功能与数据约定
+
+- 程序启动后默认隐藏到系统托盘；通过托盘菜单显示主窗口或退出。验证主窗口时需要临时调用 `window.show()`，验证结束后恢复。
+- `WindowTracker` 轮询当前前台窗口，支持进程别名、忽略应用、追踪开关、轮询间隔、空闲阈值和最短追踪时长。轮询间隔使用数据库设置的 `poll_interval`，不能恢复成硬编码常量。4.0 起追踪逻辑抽为 `TrackingEngine` 状态机（Pending/Active/Idle），通过 `TrackingStore` 接口持久化，`WindowTracker` 只负责采集和线程管理。活跃会话按 `persistIntervalMs`（默认 30 秒）周期落库而非每秒写库，崩溃最多丢一个周期；时长以单调时钟为权威，墙钟偏差超过 5 秒时按"开始锚点 + 单调增量"推算（`sanitizeWallTime`），跨午夜会话自动切分且有段数上限（`kMaxMidnightSplits`）。
+- `MainWindow` 每 10 秒刷新数据，当前仪表盘固定包含 `HeroCard`、`TrendCard`、`RankCard` 和 `CompareCard`。不要重新引入已删除的 `StatsWidget`、`AppRankWidget`、`DashboardCard` 或旧的动态网格编辑器，除非任务明确要求。
+- `ThemeManager` 是主题单例，主题值为 `light`/`dark`，通过 `themeChanged` 通知卡片刷新，并更新应用调色板和 Windows 标题栏。颜色集中在 `ui/design_tokens.h`；新增 UI 优先使用设计 token。
+- 设置界面管理以下设置：`tracking_enabled`、`poll_interval`、`idle_threshold`、`min_tracking_seconds`、`min_record_threshold`、`auto_start`、`theme`、`daily_goal`、`lineweb_enabled`、`lineweb_endpoint`、`lineweb_token`、`lineweb_interval`、`lineweb_last_push`。新增设置沿用 `settings` 表的 key/value 形式并提供默认值。
+- 数据库构造时自动创建/迁移 `sessions`、`settings`、`ignored_apps`、`app_aliases` 表，迁移使用 `CREATE ... IF NOT EXISTS`，没有版本号迁移框架。
+- 统计查询会应用最短记录阈值 `min_record_threshold` 和忽略应用过滤；修改查询时要保持这两个行为一致。
+- LineWeb 推送请求发送到 `<endpoint>/api/health/push`，JSON 字段为 `totalSeconds`、`date`，认证头为 `X-Screen-Time-Token`。设置变更后必须让 `LineWebPusher` 和 `WindowTracker` 重新加载配置。
 
 ## 数据库线程安全
 
-**所有访问 `m_db` 的方法必须获取 `QMutexLocker lock(&m_mutex)`。** 追踪线程调用写入方法（`insertSession`、`updateSessionDuration`、`updateSessionEnd`），同时 UI 线程通过 10 秒 QTimer 调用读取方法（`getTodayTotal`、`getWeekSummary`、`getAppRank` 等）。读取方法不加锁会导致并发访问时在 `qsqlite.dll` 中产生 `0xc0000005`（访问冲突）崩溃。
+4.0 起追踪线程在 `run()` 内用 `DatabaseManager threadDb(m_db->databasePath())` 创建**独立 SQLite 连接**，不再与 GUI 线程共享 `m_db`；GUI 线程（设置、统计、主窗口、托盘）只访问自己的连接。`WindowTracker` 的运行时配置（`TrackingConfig` 快照、别名、`m_configRevision`）由 `m_settingsMutex` 保护。
+
+即便如此，`DatabaseManager` 的所有公开方法仍必须先获取 `QMutexLocker lock(&m_mutex)`，包括读取设置和统计的方法；不要只给写操作加锁。这是防双连接/多线程复用的兜底约定，也保持与 `TrackingStore` 接口一致。
 
 ```cpp
-// 正确 — 所有方法遵循此模式：
 int DatabaseManager::getTodayTotal()
 {
-    QMutexLocker lock(&m_mutex);   // <-- 必须
+    QMutexLocker lock(&m_mutex);
     QSqlQuery q(m_db);
     // ...
 }
 ```
 
-## 字体约定
+关闭顺序必须保持：停止 LineWeb 定时器并尝试最终推送，停止并等待 `WindowTracker`，然后调用 `DatabaseManager::close()`，最后退出 Qt 事件循环。`close()` 具有 `m_closed` 防重入保护，不要绕过它直接移除数据库连接。
 
-在 Windows 上使用 `Microsoft YaHei`（不要用 `PingFang SC`）。每个 UI 文件定义本地辅助函数：
+## 导出约定
 
-```cpp
-static QFont appFont(int size, QFont::Weight weight = QFont::Normal)
-{
-    QFont font("Microsoft YaHei", size, weight);
-    font.setStyleStrategy(QFont::PreferAntialias);
-    return font;
-}
-```
+- CSV 和 XLSX 导出逻辑位于 `src/export`，XLSX 是 Office Open XML + miniz ZIP 的本地实现，不要无必要引入新库。
+- `XlsxWriter::buildSheet()` 会延迟收集共享字符串索引，因此保存 XLSX 时必须先生成所有 sheet，再生成 `sharedStrings.xml`。若调整 `XlsxWriter::save()`，保持这个顺序，否则共享字符串计数可能为 0，Excel 内容会损坏。
+- 修改导出格式后至少运行 `test_exporter`，并检查生成的 XLSX 能被 ZIP/XML 工具读取。
 
-## UI 验证工作流
+## UI 约定
 
-本模型无法直接查看图像。验证 UI 更改的步骤：
-
-```powershell
-# 1. 构建并启动应用（临时在 main.cpp 中添加 window.show()）
-# 2. 截取全屏截图：
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-$screen = [System.Windows.Forms.Screen]::PrimaryScreen
-$bitmap = New-Object System.Drawing.Bitmap($screen.Bounds.Width, $screen.Bounds.Height)
-$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-$graphics.CopyFromScreen($screen.Bounds.X, $screen.Bounds.Y, 0, 0, $screen.Bounds.Size)
-$bitmap.Save("C:\Users\22798\AppData\Local\Temp\opencode\screenshot.png", [System.Drawing.Imaging.ImageFormat]::Png)
-$graphics.Dispose(); $bitmap.Dispose()
-
-# 3. 调用 image-to-markdown skill 分析截图（在对话中使用 skill 工具加载 "image-to-markdown"）
-
-# 4. 最终构建前恢复 main.cpp（移除 window.show()）
-```
-
-**重要：** 应用启动后默认隐藏到托盘（`main.cpp` 中未调用 `window.show()`）。截图验证前必须临时添加 `window.show()`，验证后恢复。
-
-## 崩溃调试
-
-Windows 事件日志是主要的调试工具：
-
-```powershell
-# 查看最近的应用崩溃（最近 2 小时）
-Get-WinEvent -FilterHashtable @{LogName='Application'; Level=2; StartTime=(Get-Date).AddHours(-2)} -MaxEvents 20 -ErrorAction SilentlyContinue | Where-Object { $_.Id -eq 1000 } | Format-Table TimeCreated, @{N='Exe';E={(([xml]$_.ToXml()).Event.EventData.Data)[0].'#text'}}, @{N='Module';E={(([xml]$_.ToXml()).Event.EventData.Data)[3].'#text'}} -AutoSize
-```
-
-关键崩溃码：`0xc0000005` = 访问冲突（通常是线程问题或空指针）。
+- Windows 字体使用 `Microsoft YaHei`，不要使用 `PingFang SC`。优先复用 `DesignTokens::appFont()` 和 `DesignTokens` 中的颜色、间距、圆角。
+- 保持纯色窗口背景和现有主题体系。禁止重新引入 `WA_TranslucentBackground`、`DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)` 或 `DwmExtendFrameIntoClientArea`；这些方案曾导致不同 Windows 版本出现黑色客户区。
+- 修改 UI 后先构建，再通过托盘显示窗口进行手动检查；检查浅色/深色主题、窄窗口、长中文文本、空数据和托盘退出流程。
+- 不要为了验证而提交临时的 `window.show()`、截图或运行时数据库。
 
 ## 已知陷阱
 
-| 陷阱 | 症状 | 修复方法 |
-|------|------|----------|
-| DB 读取缺少 `QMutexLocker` | qsqlite.dll 中 0xc0000005 | 所有方法加锁 |
-| 测试 `main()` 缺少 `QCoreApplication` | Qt6Sql.dll 启动时 0xc0000005 | 添加 `QCoreApplication app(argc, argv)` |
-| WeeklyBar 标签中文本过宽 | 显示乱码如 `h.46r` | 紧凑格式（`1h46`）、更小字体（8pt）、更宽文本区域 |
-| Windows 上使用 `PingFang SC` 字体 | 布局偏移、文本重叠 | 使用 `Microsoft YaHei` |
-| 使用 `WA_TranslucentBackground` 但无 MICA | 客户区全黑 | 永远不要使用透明背景 |
-| CircularProgress 最大值过大（24h） | 环形图看起来总是空的 | 使用 12h（43200 秒）最大值 |
-| 构建时 linker permission denied | 无法打开输出文件 | 构建前 `taskkill /f /im TimeMaster.exe` |
-| 运行测试缺少 MinGW/Qt PATH | `0xc0000135`（找不到 DLL） | 测试命令前设置完整 PATH + `QT_PLUGIN_PATH` |
-| `WindowTracker::run()` 使用硬编码轮询间隔 | 用户配置的轮询间隔无效 | 循环中必须使用 `m_pollInterval`，非 `POLL_INTERVAL` |
-| `DatabaseManager::close()` 被多次调用 | 第二次调用时 `m_db` 已无效 | 添加 `m_closed` 标志防重入 |
-| `addIgnoredApp` 用 `INSERT OR IGNORE` | 重复插入返回 0（被误认为有效 ID） | 先 SELECT 查询是否存在，存在则返回已有 ID |
+| 陷阱 | 症状 | 处理 |
+|------|------|------|
+| 数据库读取缺少 `QMutexLocker` | `qsqlite.dll` 中出现 `0xc0000005` | 所有 `m_db` 方法加锁 |
+| 测试 `main()` 缺少 `QCoreApplication` | Qt6Sql 启动时崩溃 | 在测试入口创建应用对象 |
+| 运行测试没有 `QT_PLUGIN_PATH` | 找不到 QSQLITE 驱动或 `0xc0000135` | 设置 Qt plugins 路径和完整 MinGW/Qt PATH |
+| 运行中的 `TimeMaster.exe` 占用输出文件 | linker permission denied | 构建前退出程序；必要时使用 `taskkill /f /im TimeMaster.exe` |
+| `WindowTracker` 使用硬编码轮询间隔 | 用户设置不生效 | 使用 `TrackingConfig::pollIntervalMs`，并在 reload 时读取 `poll_interval` |
+| 追踪线程共享 GUI 线程的 `QSqlDatabase` | 跨线程 SQLite 竞态/崩溃 | 在 `run()` 内用 `m_db->databasePath()` 创建独立 `DatabaseManager` |
+| `DatabaseManager::close()` 重复调用 | 移除无效连接或退出异常 | 保留并使用 `m_closed` 防重入 |
+| 忽略应用重复添加 | 返回 0 或重复项 | 先查询已有 ID，再插入 |
+| XLSX 先生成 `sharedStrings.xml` | Excel 中文/文本显示异常 | 先调用全部 `buildSheet()`，再调用 `buildSharedStrings()` |
+| 使用旧 UI 类名或旧布局文档 | 编译找不到头文件/源文件 | 以当前 `src/ui` 和 `src/CMakeLists.txt` 为准 |
 
-## SDD 流程
+## SDD 与 Git
 
-`.superpowers/sdd/` 包含任务简报和带审查差异的报告。实现 SDD 任务时，编写代码前先查看此目录中的规格说明。
-
-## 语言
-
-所有助手的回复、思考/推理过程、解释和代码注释必须使用简体中文。代码标识符（变量名、函数名等）保持英文。
+- 处理较大功能前先查看 `.superpowers/sdd/` 和 `docs/superpowers/specs/` 中相关规格；规格可能描述历史实现，若与当前代码冲突，以当前代码和用户任务为准。
+- 不要回滚或覆盖用户已有的未提交修改。开始编辑前检查 `git status`，完成后再次检查只包含任务相关变更。
+- 提交使用约定式提交，例如 `feat:`、`fix:`、`refactor:`、`chore:`。除非用户要求，不要自动创建提交、分支或修改发布产物。
+- 项目目前没有 lint、格式化、静态类型检查或 CI/CD 流水线；验证以构建、CTest、独立测试和必要的手动 UI 检查为主。
