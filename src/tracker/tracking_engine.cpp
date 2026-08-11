@@ -3,6 +3,33 @@
 #include <QTimeZone>
 #include <QtGlobal>
 
+// 双时钟约定:时长以单调时钟(QElapsedTimer)为权威,墙钟(QDateTime)只用于
+// 归属日期。若墙钟相对"开始锚点 + 单调增量"的偏差超过该容忍值(如 NTP 校正
+// 或用户改系统时间),则认为墙钟被跳变,改用单调推算的时间,避免时长被摊到
+// 错误日期或产生荒谬的跨天切分。
+static const qint64 kWallClockDriftToleranceMs = 5000;
+// 单次跨天切分的最大段数上限,防极端日期差(如墙钟前跳数天/数年)导致
+// splitAtMidnights 无界循环或产生巨量 session;达到上限后剩余时长由收尾
+// 的 updateSessionEnd 守恒写入最后一段。
+static const int kMaxMidnightSplits = 366;
+
+namespace {
+// 双时钟跳变防护:时长以单调时钟为权威,墙钟只负责归属日期。若传入的墙钟
+// 相对"开始锚点 + 单调增量"偏差超过容忍值(系统时间被 NTP 校正或手动调整),
+// 采用单调推算的墙钟,避免时长被摊到错误日期或产生荒谬的跨天切分。
+QDateTime sanitizeWallTime(const QDateTime &wallTime, const QDateTime &startTime,
+                           qint64 startMonotonicMs, qint64 endMonotonicMs)
+{
+    const QDateTime safeEndTime = wallTime < startTime ? startTime : wallTime;
+    const qint64 safeEndMonotonicMs = qMax(endMonotonicMs, startMonotonicMs);
+    const QDateTime endByMonotonic =
+        startTime.addMSecs(safeEndMonotonicMs - startMonotonicMs);
+    return qAbs(endByMonotonic.msecsTo(safeEndTime)) > kWallClockDriftToleranceMs
+               ? endByMonotonic
+               : safeEndTime;
+}
+} // namespace
+
 TrackingEngine::TrackingEngine(TrackingStore *store)
     : m_store(store)
 {
@@ -34,9 +61,18 @@ void TrackingEngine::process(const TrackingSample &sample, const TrackingConfig 
     }
 
     if (m_state == State::Active && sample.processKey == m_processKey) {
-        splitAtMidnights(sample.wallTime, sample.monotonicMs);
-        if (m_sessionId >= 0)
+        // 活跃期间的跨天切分同样应用双时钟防护(墙钟跳变时按单调推算切分)
+        const QDateTime effectiveEndTime = sanitizeWallTime(
+            sample.wallTime, m_startTime, m_startMonotonicMs, sample.monotonicMs);
+        splitAtMidnights(effectiveEndTime, sample.monotonicMs);
+        // 周期 flush:同窗口持续活跃时不每次轮询都写库,达到 persistIntervalMs
+        // 才持久化一次。窗口切换 / idle / 禁用 / 忽略 / stop() 仍会走
+        // finishActive 完整落库,唯一丢失窗口是崩溃,最多丢一个 flush 周期。
+        if (m_sessionId >= 0 &&
+            sample.monotonicMs - m_lastPersistMonotonicMs >= config.persistIntervalMs) {
             m_store->updateSessionDuration(m_sessionId, elapsedSeconds(sample.monotonicMs));
+            m_lastPersistMonotonicMs = sample.monotonicMs;
+        }
         return;
     }
 
@@ -101,17 +137,21 @@ void TrackingEngine::finishActive(const QDateTime &endTime, qint64 endMonotonicM
     if (m_state != State::Active || m_sessionId < 0)
         return;
 
-    const QDateTime safeEndTime = endTime < m_startTime ? m_startTime : endTime;
     const qint64 safeEndMonotonicMs = qMax(endMonotonicMs, m_startMonotonicMs);
-    splitAtMidnights(safeEndTime, safeEndMonotonicMs);
+    const QDateTime finalEndTime = sanitizeWallTime(
+        endTime, m_startTime, m_startMonotonicMs, endMonotonicMs);
+
+    splitAtMidnights(finalEndTime, safeEndMonotonicMs);
     if (m_sessionId >= 0)
-        m_store->updateSessionEnd(m_sessionId, safeEndTime,
+        m_store->updateSessionEnd(m_sessionId, finalEndTime,
                                   elapsedSeconds(safeEndMonotonicMs));
 }
 
 void TrackingEngine::splitAtMidnights(const QDateTime &endTime, qint64 endMonotonicMs)
 {
-    while (m_sessionId >= 0 && m_startTime.date() < endTime.date()) {
+    int splits = 0;
+    while (m_sessionId >= 0 && m_startTime.date() < endTime.date() &&
+           splits < kMaxMidnightSplits) {
         const QDateTime midnight(m_startTime.date().addDays(1), QTime(0, 0),
                                  m_startTime.timeZone());
         const qint64 wallMs = qMax<qint64>(0, m_startTime.msecsTo(midnight));
@@ -124,6 +164,9 @@ void TrackingEngine::splitAtMidnights(const QDateTime &endTime, qint64 endMonoto
 
         m_startTime = midnight;
         m_startMonotonicMs = boundaryMonotonic;
+        // 新段从自己的起始时刻重新累计 flush 间隔,避免刚跨天就立即触发一次写库
+        m_lastPersistMonotonicMs = boundaryMonotonic;
+        ++splits;
         m_sessionId = m_store->insertSession(
             m_processName, m_windowTitle, m_appName, m_startTime,
             QDateTime(), 0);
@@ -143,6 +186,8 @@ bool TrackingEngine::insertActive(const QDateTime &startTime,
         return false;
     m_startTime = startTime;
     m_startMonotonicMs = startMonotonicMs;
+    // 新会话从自己的起始时刻重新累计 flush 间隔
+    m_lastPersistMonotonicMs = startMonotonicMs;
     return true;
 }
 

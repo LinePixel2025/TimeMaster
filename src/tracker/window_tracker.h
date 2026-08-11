@@ -39,7 +39,8 @@ private:
     qint64 getIdleMilliseconds() const;
 
     DatabaseManager *m_db;
-    QAtomicInt m_running;
+    // QAtomicInt 默认构造不置零,而 run() 用 testAndSetOrdered(0,1) 抢占运行权,必须显式初始化为 0
+    QAtomicInt m_running = 0;
     TrackingConfig m_config;
     QMap<QString, QString> m_aliases;
     QMutex m_settingsMutex;

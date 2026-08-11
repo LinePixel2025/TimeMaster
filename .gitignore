@@ -15,6 +15,7 @@ test_*.txt
 *.exe
 .omo/
 build-test/
+build-tests/
 package_installer.ps1
 .superpowers/
 .claude/

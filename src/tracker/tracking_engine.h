@@ -12,6 +12,9 @@ struct TrackingConfig {
     int pollIntervalMs = 1000;
     int idleThresholdMs = 60000;
     int minTrackingMs = 0;
+    // 活跃会话写库周期:活跃期间不每次轮询都写库,间隔达到该值时
+    // 才调用 updateSessionDuration 持久化一次,降低 SQLite 写入频率。
+    int persistIntervalMs = 30000;
     QSet<QString> ignoredProcessKeys;
 };
 
@@ -56,6 +59,8 @@ private:
     QString m_appName;
     QDateTime m_startTime;
     qint64 m_startMonotonicMs = 0;
+    // 上次调用 updateSessionDuration 持久化时的单调时钟值,用于周期 flush
+    qint64 m_lastPersistMonotonicMs = 0;
 };
 
 #endif // TRACKING_ENGINE_H
