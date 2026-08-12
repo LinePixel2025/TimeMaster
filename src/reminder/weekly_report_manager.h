@@ -30,7 +30,13 @@ public:
 
     /// 检查 now 时刻是否命中配置的「周几 + 时刻」并触发周报生成。
     /// now 为空时使用当前时间；公开以便测试注入时间（定时器间隔 30 秒，测试不便等待）。
+    /// 配置日当天错过配置时刻后（如程序启动较晚）仍会补生成，幂等由去重键保证。
     void checkNow(const QTime &now = QTime());
+
+    /// 手动生成上周周报：不受 weekly_report_enabled 开关限制（主动行为）。
+    /// 同周已生成过且文件存在时直接打开已有文件（发 weeklyReportReady）；
+    /// 无数据或写入失败时返回 false。
+    bool generateNow();
 
     /// 输出目录（默认 Documents/TimeMaster）；测试注入临时目录。
     void setOutputDir(const QString &dir);

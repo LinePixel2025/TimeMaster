@@ -146,6 +146,18 @@ int main(int argc, char *argv[])
                      [](const QString &path) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     });
+    // 启动时回填已存在的周报路径（历史生成过的周报在弹窗内可打开）。
+    window.onWeeklyReportReady(
+        db.getSetting("weekly_report_path", ""));
+    // 主页「立即生成上周周报」按钮：手动触发生成（同周已生成过则打开已有文件）；
+    // 无数据时提示，不影响其他功能。
+    QObject::connect(&window, &MainWindow::weeklyReportGenerateRequested, [&]() {
+        if (!weekly.generateNow()) {
+            QMessageBox::warning(&window,
+                QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe5\x91\xa8\xe6\x8a\xa5\xe6\x9c\xaa\xe7\x94\x9f\xe6\x88\x90"),
+                QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe6\x97\xa0\xe4\xbd\xbf\xe7\x94\xa8\xe6\x95\xb0\xe6\x8d\xae\xef\xbc\x8c\xe6\x97\xa0\xe6\xb3\x95\xe7\x94\x9f\xe6\x88\x90\xe5\x91\xa8\xe6\x8a\xa5\xe3\x80\x82"));
+        }
+    });
 
     tray.show();
     window.refreshData();

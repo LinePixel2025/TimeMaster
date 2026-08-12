@@ -5,6 +5,7 @@
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
 #include "ui/ui_utils.h"
+#include "ui/settings_icons.h"
 #include "utility/process_identity.h"
 #include "push/lineweb_pusher.h"
 
@@ -15,6 +16,8 @@
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QShortcut>
+#include <QFrame>
+#include <QButtonGroup>
 #include <QDate>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -28,59 +31,137 @@
 
 namespace {
 
-QString accentButtonStyle()
-{
-    return QString(
-        "QPushButton { background-color: %1; color: white; border: none;"
-        " border-radius: 6px; padding: 6px 16px; font-size: 13px; }"
-        "QPushButton:hover { background-color: %2; }"
-        "QPushButton:pressed { background-color: %3; }")
-        .arg(DesignTokens::kAccent().name(),
-             DesignTokens::kAccentHover().name(),
-             DesignTokens::kAccentPressed().name());
-}
+// 左侧边栏导航项定义：图标种类、显示名、悬停提示。
+struct NavDef {
+    SettingsIcons::Kind kind;
+    QString text;
+    QString tooltip;
+};
 
-QString secondaryButtonStyle()
-{
-    return QString(
-        "QPushButton { background: %1; color: %2; border: 1px solid %3;"
-        " border-radius: 6px; padding: 6px 14px; font-size: 13px; }"
-        "QPushButton:hover { background: %4; }")
-        .arg(DesignTokens::kSurface().name(QColor::HexArgb),
-             DesignTokens::kText().name(QColor::HexArgb),
-             DesignTokens::kBorder().name(QColor::HexArgb),
-             DesignTokens::kSeparator().name(QColor::HexArgb));
-}
+const QList<NavDef> kNavDefs = {
+    { SettingsIcons::Apps,    QString::fromUtf8("应用管理"), QString::fromUtf8("管理已识别应用、屏蔽不需要统计的应用，以及应用别名") },
+    { SettingsIcons::Timer,   QString::fromUtf8("追踪设置"), QString::fromUtf8("调整前台窗口追踪的总开关与计时参数") },
+    { SettingsIcons::Palette, QString::fromUtf8("个性化"),   QString::fromUtf8("外观主题、开机自启与本地默认目标") },
+    { SettingsIcons::Bell,    QString::fromUtf8("提醒"),     QString::fromUtf8("定时使用提醒与每周周报的设置") },
+    { SettingsIcons::Cloud,   QString::fromUtf8("云端同步"), QString::fromUtf8("向云端推送当日时长并同步云端每日目标") },
+    { SettingsIcons::Sparkle, QString::fromUtf8("AI 智能"),  QString::fromUtf8("AI 报告、提醒文案与周报的接口配置") },
+    { SettingsIcons::Info,    QString::fromUtf8("关于"),     QString::fromUtf8("应用名称、版本与简介") },
+};
 
+// 对话框全局样式。所有颜色取自 DesignTokens，主题切换时整体重设，
+// 避免逐控件 setStyleSheet 造成旧主题颜色残留。
 QString settingsStyle()
 {
-    return QString(
+    const QString bg          = DesignTokens::kBg().name(QColor::HexArgb);
+    const QString surface     = DesignTokens::kSurface().name(QColor::HexArgb);
+    const QString border      = DesignTokens::kBorder().name(QColor::HexArgb);
+    const QString text        = DesignTokens::kText().name(QColor::HexArgb);
+    const QString textStrong  = DesignTokens::kTextStrong().name(QColor::HexArgb);
+    const QString textMute    = DesignTokens::kTextMute().name(QColor::HexArgb);
+    const QString textFaint   = DesignTokens::kTextFaint().name(QColor::HexArgb);
+    const QString accent      = DesignTokens::kAccent().name(QColor::HexArgb);
+    const QString accentHover = DesignTokens::kAccentHover().name(QColor::HexArgb);
+    const QString accentPress = DesignTokens::kAccentPressed().name(QColor::HexArgb);
+    const QString accentLight = DesignTokens::kAccentLight().name(QColor::HexArgb);
+    const QString hoverBg     = DesignTokens::kButtonHoverBg().name(QColor::HexArgb);
+
+    return QStringLiteral(
         "QDialog { background: %1; }"
-        "QTabWidget::pane { background: %2; border: 1px solid %3; border-radius: 8px; }"
-        "QTabBar { background: transparent; }"
-        "QTabBar::tab { color: %4; background: transparent; border: none;"
-        " padding: 9px 16px; margin: 0 3px; min-width: 96px; }"
-        "QTabBar::tab:hover { color: %5; background: %6; border-radius: 6px; }"
-        "QTabBar::tab:selected { color: %7; background: %8; border-radius: 6px; font-weight: 600; }"
-        "QLineEdit, QSpinBox { color: %9; background: %2; border: 1px solid %3;"
-        " border-radius: 6px; padding: 7px 9px; min-height: 18px; }"
-        "QLineEdit:focus, QSpinBox:focus { border-color: %7; }"
-        "QListWidget, QTableWidget { color: %9; background: %2; border: 1px solid %3;"
-        " border-radius: 6px; alternate-background-color: %10; }"
-        "QListWidget::item { padding: 7px 8px; border-radius: 4px; }"
-        "QListWidget::item:selected, QTableWidget::item:selected { color: %9; background: %8; }"
-        "QHeaderView::section { color: %4; background: %10; border: none;"
+        "QFrame#sidebar { background: %2; border-right: 1px solid %3; }"
+        "QFrame#sectionCard { background: %2; border: 1px solid %3; border-radius: 8px; }"
+        "QLabel#sideTitle { color: %5; background: transparent; }"
+
+        "QLabel#pageTitle { color: %5; font-size: 17px; font-weight: 600; background: transparent; }"
+        "QLabel#sectionTitle { color: %7; font-size: 12px; font-weight: 600; background: transparent; }"
+        "QLabel#statusLabel { color: %7; font-size: 12px; background: transparent; }"
+        "QLabel#aboutName { color: %5; background: transparent; }"
+        "QLabel#aboutVersion { color: %7; background: transparent; }"
+        "QLabel#aboutDesc { color: %8; background: transparent; }"
+
+        "QPushButton#navItem { background: transparent; color: %4; border: none; border-radius: 6px;"
+        " text-align: left; padding: 0 12px; font-size: 13px; }"
+        "QPushButton#navItem:hover { background: %13; }"
+        "QPushButton#navItem:checked { background: %12; color: %6; font-weight: 600; }"
+        "QPushButton#navItem:disabled { color: %8; }"
+
+        "QPushButton#accentBtn { background: %6; color: white; border: none; border-radius: 6px;"
+        " padding: 8px 22px; font-size: 13px; font-weight: 600; }"
+        "QPushButton#accentBtn:hover { background: %10; }"
+        "QPushButton#accentBtn:pressed { background: %11; }"
+        "QPushButton#accentBtn:disabled { background: %3; color: %8; }"
+
+        "QPushButton#secondaryBtn { background: %2; color: %4; border: 1px solid %3;"
+        " border-radius: 6px; padding: 7px 14px; font-size: 13px; }"
+        "QPushButton#secondaryBtn:hover { background: %13; }"
+        "QPushButton#secondaryBtn:pressed { background: %12; }"
+        "QPushButton#secondaryBtn:disabled { color: %8; background: transparent; }"
+
+        "QLineEdit, QSpinBox, QComboBox, QTimeEdit { color: %5; background: %2;"
+        " border: 1px solid %3; border-radius: 6px; padding: 7px 9px; min-height: 18px;"
+        " selection-background-color: %12; }"
+        "QLineEdit:hover, QSpinBox:hover, QComboBox:hover, QTimeEdit:hover { border-color: %8; }"
+        "QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QTimeEdit:focus { border-color: %6; }"
+        "QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled, QTimeEdit:disabled { color: %8; background: %13; }"
+        "QLineEdit::placeholder { color: %8; }"
+
+        "QComboBox::drop-down { border: none; width: 24px; }"
+        "QComboBox::down-arrow { image: none; width: 0; height: 0;"
+        " border-left: 4px solid transparent; border-right: 4px solid transparent;"
+        " border-top: 5px solid %7; }"
+        "QComboBox QAbstractItemView { background: %2; color: %4; border: 1px solid %3;"
+        " selection-background-color: %12; selection-color: %5; outline: 0; }"
+
+        "QSpinBox::up-button, QSpinBox::down-button, QTimeEdit::up-button, QTimeEdit::down-button {"
+        " border: none; background: transparent; width: 18px; }"
+        "QSpinBox::up-arrow { image: none; width: 0; height: 0;"
+        " border-left: 3px solid transparent; border-right: 3px solid transparent;"
+        " border-bottom: 4px solid %7; }"
+        "QSpinBox::down-arrow { image: none; width: 0; height: 0;"
+        " border-left: 3px solid transparent; border-right: 3px solid transparent;"
+        " border-top: 4px solid %7; }"
+        "QSpinBox::up-arrow:disabled, QSpinBox::down-arrow:disabled { border-bottom-color: %8; }"
+        "QSpinBox::down-arrow:disabled { border-top-color: %8; }"
+
+        "QCheckBox { color: %4; spacing: 9px; padding: 5px 0; }"
+        "QCheckBox:disabled { color: %8; }"
+        "QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; }"
+        "QCheckBox::indicator:unchecked { background: %2; border: 1px solid %3; }"
+        "QCheckBox::indicator:unchecked:hover { border-color: %6; }"
+        "QCheckBox::indicator:checked { background: %6; border: 1px solid %6; }"
+        "QCheckBox::indicator:checked:hover { background: %10; border-color: %10; }"
+        "QCheckBox::indicator:disabled { background: %13; border-color: %3; }"
+
+        "QListWidget, QTableWidget { color: %4; background: %2; border: 1px solid %3;"
+        " border-radius: 8px; alternate-background-color: %13; outline: 0; }"
+        "QListWidget::item { padding: 7px 10px; border-radius: 6px; }"
+        "QListWidget::item:hover, QTableWidget::item:hover { background: %13; }"
+        "QListWidget::item:selected, QTableWidget::item:selected { background: %12; color: %5; }"
+        "QHeaderView::section { color: %7; background: %2; border: none;"
         " border-bottom: 1px solid %3; padding: 8px; font-weight: 600; }"
-        "QCheckBox { color: %9; spacing: 8px; padding: 5px 0; }"
-        "QCheckBox::indicator { width: 17px; height: 17px; }"
-        "QGroupBox { color: %9; border: 1px solid %3; border-radius: 8px;"
-        " margin-top: 12px; padding: 18px 14px 12px; font-weight: 600; }"
-        "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; background: %1; }")
-        .arg(DesignTokens::kBg().name(), DesignTokens::kSurface().name(),
-             DesignTokens::kBorder().name(), DesignTokens::kTextMute().name(),
-             DesignTokens::kText().name(), DesignTokens::kButtonHoverBg().name(),
-             DesignTokens::kAccent().name(), DesignTokens::kAccentLight().name(),
-             DesignTokens::kTextStrong().name(), DesignTokens::kSeparator().name());
+        "QTableWidget { gridline-color: %3; }"
+
+        "QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }"
+        "QScrollBar::handle:vertical { background: %8; border-radius: 5px; min-height: 24px; }"
+        "QScrollBar::handle:vertical:hover { background: %7; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
+        "QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px; }"
+        "QScrollBar::handle:horizontal { background: %8; border-radius: 5px; min-width: 24px; }"
+        "QScrollBar::handle:horizontal:hover { background: %7; }"
+        "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }"
+        "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }")
+        .arg(bg)
+        .arg(surface)
+        .arg(border)
+        .arg(text)
+        .arg(textStrong)
+        .arg(accent)
+        .arg(textMute)
+        .arg(textFaint)
+        .arg(accentHover)
+        .arg(accentPress)
+        .arg(accentLight)
+        .arg(hoverBg);
 }
 
 } // namespace
@@ -88,601 +169,790 @@ QString settingsStyle()
 SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     : QDialog(parent), m_db(db)
 {
-    setWindowTitle(QString::fromUtf8("\xe8\xae\xbe\xe7\xbd\xae"));
-    resize(940, 620);
-    setMinimumSize(820, 540);
+    setWindowTitle(QString::fromUtf8("设置"));
+    resize(980, 640);
+    setMinimumSize(880, 560);
 
-    QPalette pal = palette();
-    pal.setColor(QPalette::Window, DesignTokens::kBg());
-    pal.setColor(QPalette::Base, DesignTokens::kSurface());
-    pal.setColor(QPalette::Text, DesignTokens::kTextStrong());
-    pal.setColor(QPalette::WindowText, DesignTokens::kTextStrong());
-    setPalette(pal);
+    // 暗色主题下默认 QToolTip 白底黑字过亮，对话框打开期间统一为 Surface 底。
+    m_prevAppStyleSheet = qApp->styleSheet();
+    qApp->setStyleSheet(m_prevAppStyleSheet + QStringLiteral(
+        "QToolTip { background-color: %1; color: %2; border: 1px solid %3;"
+        " padding: 6px 8px; font-size: 12px; }")
+        .arg(DesignTokens::kSurface().name(),
+             DesignTokens::kText().name(),
+             DesignTokens::kBorder().name()));
 
-    setStyleSheet(settingsStyle());
+    // 初始 palette 与样式（themeChanged 时由 applyTheme 整体重设）。
+    applyTheme();
 
-    auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(20, 20, 20, 16);
-    mainLayout->setSpacing(16);
+    auto *rootLayout = new QHBoxLayout(this);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
 
-    m_tabWidget = new QTabWidget(this);
-    // North keeps Chinese labels horizontal and leaves the content area wide.
-    m_tabWidget->setTabPosition(QTabWidget::North);
-    m_tabWidget->setDocumentMode(true);
-    m_tabWidget->setUsesScrollButtons(false);
-    mainLayout->addWidget(m_tabWidget);
+    // ================= 左侧边栏导航 =================
+    auto *sidebar = new QFrame(this);
+    sidebar->setObjectName(QStringLiteral("sidebar"));
+    sidebar->setFrameShape(QFrame::NoFrame);
+    sidebar->setFixedWidth(190);
+    auto *sideLayout = new QVBoxLayout(sidebar);
+    sideLayout->setContentsMargins(14, 20, 14, 16);
+    sideLayout->setSpacing(4);
 
-    // ================= Tab 1: App Management =================
-    auto *appTab = new QWidget(this);
-    auto *appLayout = new QVBoxLayout(appTab);
-    appLayout->setContentsMargins(20, 16, 20, 16);
-    appLayout->setSpacing(12);
+    auto *sideTitle = new QLabel(QString::fromUtf8("设置"), sidebar);
+    sideTitle->setObjectName(QStringLiteral("sideTitle"));
+    sideTitle->setFont(DesignTokens::appFont(16, QFont::DemiBold));
+    sideLayout->addWidget(sideTitle);
+    sideLayout->addSpacing(10);
 
-    auto *splitLayout = new QHBoxLayout();
-    splitLayout->setSpacing(8);
+    auto *navGroup = new QButtonGroup(this);
+    navGroup->setExclusive(true);
+    for (int i = 0; i < kNavDefs.size(); ++i) {
+        auto *btn = new QPushButton(kNavDefs[i].text, sidebar);
+        btn->setObjectName(QStringLiteral("navItem"));
+        btn->setCheckable(true);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFixedHeight(38);
+        btn->setIconSize(QSize(17, 17));
+        btn->setIcon(SettingsIcons::navIcon(kNavDefs[i].kind, false));
+        btn->setToolTip(kNavDefs[i].tooltip);
+        sideLayout->addWidget(btn);
+        m_navButtons.append(btn);
+        navGroup->addButton(btn, i);
+    }
+    sideLayout->addStretch();
+    rootLayout->addWidget(sidebar);
 
-    auto buildPanel = [this](const QString &labelText,
-                             QLineEdit **searchOut,
-                             QListWidget **listOut,
-                             bool multiSelect) {
-        auto *panel = new QVBoxLayout();
-        panel->setSpacing(6);
-        auto *label = new QLabel(labelText, this);
-        label->setFont(DesignTokens::appFont(12, QFont::Medium));
-        panel->addWidget(label);
+    // ================= 右侧内容区 =================
+    auto *content = new QWidget(this);
+    auto *contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(20, 20, 20, 16);
+    contentLayout->setSpacing(14);
 
-        auto *search = new QLineEdit(this);
-        search->setPlaceholderText(
-            QString::fromUtf8("\xe6\x90\x9c\xe7\xb4\xa2..."));
-        panel->addWidget(search);
+    m_stack = new QStackedWidget(content);
 
-        auto *list = new QListWidget(this);
-        list->setSelectionMode(multiSelect
-            ? QAbstractItemView::MultiSelection
-            : QAbstractItemView::SingleSelection);
-        panel->addWidget(list, 1);
-
-        if (searchOut) *searchOut = search;
-        if (listOut) *listOut = list;
-        return panel;
+    // 页面通用辅助：新建页面并添加页面标题。
+    auto startPage = [this](const QString &title) {
+        auto *page = new QWidget(this);
+        auto *layout = new QVBoxLayout(page);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(14);
+        auto *titleLabel = new QLabel(title, page);
+        titleLabel->setObjectName(QStringLiteral("pageTitle"));
+        layout->addWidget(titleLabel);
+        return layout;
     };
 
-    splitLayout->addLayout(buildPanel(
-        QString::fromUtf8("\xe5\xb7\xb2\xe7\x9f\xa5\xe5\xba\x94\xe7\x94\xa8"),
-        &m_knownSearch, &m_knownAppsList, true), 1);
-    connect(m_knownSearch, &QLineEdit::textChanged,
-            this, &SettingsDialog::filterKnownApps);
+    // 卡片辅助：带分区小标题的 Surface 卡片。
+    auto addSectionCard = [](QVBoxLayout *pageLayout, const QString &title,
+                             QWidget *parent, QVBoxLayout **cardLayoutOut,
+                             int stretch = 0) {
+        auto *card = new QFrame(parent);
+        card->setObjectName(QStringLiteral("sectionCard"));
+        auto *cardLayout = new QVBoxLayout(card);
+        cardLayout->setContentsMargins(16, 14, 16, 14);
+        cardLayout->setSpacing(8);
+        auto *titleLabel = new QLabel(title, parent);
+        titleLabel->setObjectName(QStringLiteral("sectionTitle"));
+        cardLayout->addWidget(titleLabel);
+        pageLayout->addWidget(card, stretch);
+        if (cardLayoutOut)
+            *cardLayoutOut = cardLayout;
+    };
 
-    auto *centerPanel = new QVBoxLayout();
-    centerPanel->setSpacing(8);
-    centerPanel->addStretch();
-
-    auto *addIgnoredBtn = new QPushButton(
-        QString::fromUtf8("\xe2\x86\x92 \xe5\x8a\xa0\xe5\x85\xa5\xe5\xb1\x8f\xe8\x94\xbd"), this);
-    addIgnoredBtn->setStyleSheet(secondaryButtonStyle());
-    connect(addIgnoredBtn, &QPushButton::clicked,
-            this, &SettingsDialog::onAddIgnored);
-    centerPanel->addWidget(addIgnoredBtn);
-
-    auto *removeIgnoredBtn = new QPushButton(
-        QString::fromUtf8("\xe2\x86\x90 \xe7\xa7\xbb\xe9\x99\xa4\xe5\xb1\x8f\xe8\x94\xbd"), this);
-    removeIgnoredBtn->setStyleSheet(secondaryButtonStyle());
-    connect(removeIgnoredBtn, &QPushButton::clicked,
-            this, &SettingsDialog::onRemoveIgnored);
-    centerPanel->addWidget(removeIgnoredBtn);
-
-    centerPanel->addStretch();
-    splitLayout->addLayout(centerPanel);
-
-    splitLayout->addLayout(buildPanel(
-        QString::fromUtf8("\xe5\xb7\xb2\xe5\xb1\x8f\xe8\x94\xbd\xe5\xba\x94\xe7\x94\xa8"),
-        &m_ignoredSearch, &m_ignoredAppsList, false), 1);
-    connect(m_ignoredSearch, &QLineEdit::textChanged,
-            this, &SettingsDialog::filterIgnoredApps);
-
-    auto *delShortcut = new QShortcut(QKeySequence::Delete, m_ignoredAppsList);
-    connect(delShortcut, &QShortcut::activated, this, [this]() {
-        if (m_ignoredAppsList->currentItem())
-            onRemoveIgnored();
-    });
-
-    appLayout->addLayout(splitLayout, 1);
-
-    auto *aliasLabel = new QLabel(
-        QString::fromUtf8("\xe5\xba\x94\xe7\x94\xa8\xe5\x90\x8d\xe7\xa7\xb0\xe5\x88\xab\xe5\x90\x8d"), this);
-    aliasLabel->setFont(DesignTokens::appFont(12, QFont::Medium));
-    appLayout->addWidget(aliasLabel);
-
-    m_aliasTable = new QTableWidget(0, 2, this);
-    m_aliasTable->setHorizontalHeaderLabels({
-        QString::fromUtf8("\xe8\xbf\x9b\xe7\xa8\x8b\xe5\x90\x8d"),
-        QString::fromUtf8("\xe6\x98\xbe\xe7\xa4\xba\xe5\x90\x8d")
-    });
-    m_aliasTable->horizontalHeader()->setStretchLastSection(true);
-    m_aliasTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_aliasTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_aliasTable->verticalHeader()->setVisible(false);
-    appLayout->addWidget(m_aliasTable);
-
-    auto *aliasBtnRow = new QHBoxLayout();
-    auto *addAliasBtn = new QPushButton(
-        QString::fromUtf8("\xe6\xb7\xbb\xe5\x8a\xa0\xe5\x88\xab\xe5\x90\x8d"), this);
-    addAliasBtn->setStyleSheet(secondaryButtonStyle());
-    connect(addAliasBtn, &QPushButton::clicked,
-            this, &SettingsDialog::onAddAlias);
-    aliasBtnRow->addWidget(addAliasBtn);
-
-    auto *editAliasBtn = new QPushButton(
-        QString::fromUtf8("\xe7\xbc\x96\xe8\xbe\x91"), this);
-    editAliasBtn->setStyleSheet(secondaryButtonStyle());
-    connect(editAliasBtn, &QPushButton::clicked,
-            this, &SettingsDialog::onEditAlias);
-    aliasBtnRow->addWidget(editAliasBtn);
-
-    auto *deleteAliasBtn = new QPushButton(
-        QString::fromUtf8("\xe5\x88\xa0\xe9\x99\xa4"), this);
-    deleteAliasBtn->setStyleSheet(secondaryButtonStyle());
-    connect(deleteAliasBtn, &QPushButton::clicked,
-            this, &SettingsDialog::onDeleteAlias);
-    aliasBtnRow->addWidget(deleteAliasBtn);
-    aliasBtnRow->addStretch();
-    appLayout->addLayout(aliasBtnRow);
-
-    m_tabWidget->addTab(appTab, QString::fromUtf8("\xe5\xba\x94\xe7\x94\xa8\xe7\xae\xa1\xe7\x90\x86"));
-
-    // ================= Tab 2: Tracking =================
-    auto *trackTab = new QWidget(this);
-    auto *trackLayout = new QVBoxLayout(trackTab);
-    trackLayout->setContentsMargins(24, 22, 24, 22);
-    trackLayout->setSpacing(10);
-
-    m_trackingEnabled = new QCheckBox(
-        QString::fromUtf8("\xe5\x90\xaf\xe7\x94\xa8\xe8\xbf\xbd\xe8\xb8\xaa"), this);
-    m_trackingEnabled->setFont(DesignTokens::appFont(13));
-    trackLayout->addWidget(m_trackingEnabled);
-
-    auto addSpinRow = [this, trackLayout](
-            const QString &text, const QString &tooltip,
-            int min, int max, int def, int step,
-            QSpinBox **out) {
+    // 表单行辅助：label 固定宽度对齐 + 控件（fill 为 true 时占满剩余宽度）。
+    auto addFormRow = [](QVBoxLayout *cardLayout, const QString &labelText,
+                         const QString &tooltip, QWidget *field,
+                         bool fill, QWidget *parent) {
         auto *row = new QHBoxLayout();
-        auto *label = new QLabel(text, this);
+        row->setSpacing(12);
+        auto *label = new QLabel(labelText, parent);
         label->setFont(DesignTokens::appFont(13));
+        label->setMinimumWidth(160);
+        if (!tooltip.isEmpty()) {
+            label->setToolTip(tooltip);
+            field->setToolTip(tooltip);
+        }
         row->addWidget(label);
-        auto *spin = new QSpinBox(this);
-        spin->setRange(min, max);
-        spin->setValue(def);
-        spin->setSingleStep(step);
-        if (!tooltip.isEmpty())
-            spin->setToolTip(tooltip);
-        row->addWidget(spin);
-        row->addStretch();
-        trackLayout->addLayout(row);
-        if (out) *out = spin;
+        row->addWidget(field, fill ? 1 : 0);
+        if (!fill)
+            row->addStretch(1);
+        cardLayout->addLayout(row);
     };
 
-    addSpinRow(
-        QString::fromUtf8("\xe8\xbd\xae\xe8\xaf\xa2\xe9\x97\xb4\xe9\x9a\x94\xef\xbc\x88\xe7\xa7\x92\xef\xbc\x89:"),
-        QString(), 1, 10, 1, 1, &m_pollInterval);
-    addSpinRow(
-        QString::fromUtf8("\xe7\xa9\xba\xe9\x97\xb2\xe5\x88\xa4\xe5\xae\x9a\xe6\x97\xb6\xe9\x97\xb4\xef\xbc\x88\xe7\xa7\x92\xef\xbc\x89:"),
-        QString(), 10, 600, 60, 10, &m_idleThreshold);
-    addSpinRow(
-        QString::fromUtf8("\xe6\x9c\x80\xe4\xbd\x8e\xe8\xae\xa1\xe6\x97\xb6\xe9\x98\x88\xe5\x80\xbc\xef\xbc\x88\xe7\xa7\x92\xef\xbc\x89:"),
-        QString::fromUtf8("\xe7\xaa\x97\xe5\x8f\xa3\xe5\x88\x87\xe6\x8d\xa2\xe5\x90\x8e\xe6\xb4\xbb\xe8\xb7\x83\xe8\xb6\x85\xe8\xbf\x87\xe8\xbf\x99\xe4\xb8\xaa\xe6\x97\xb6\xe9\x97\xb4\xe6\x89\x8d\xe5\xbc\x80\xe5\xa7\x8b\xe8\xae\xa1\xe6\x97\xb6\xef\xbc\x8c") + QString::fromUtf8("0\xe4\xb8\xba\xe4\xb8\x8d\xe9\x99\x90\xe5\x88\xb6"),
-        0, 30, 0, 1, &m_minTrackingSeconds);
-    addSpinRow(
-        QString::fromUtf8("\xe6\x9c\x80\xe4\xbd\x8e\xe8\xae\xb0\xe5\xbd\x95\xe9\x98\x88\xe5\x80\xbc\xef\xbc\x88\xe7\xa7\x92\xef\xbc\x89:"),
-        QString::fromUtf8("\xe5\x8d\x95\xe6\xac\xa1\xe4\xbd\xbf\xe7\x94\xa8\xe6\x97\xb6\xe9\x95\xbf\xe4\xbd\x8e\xe4\xba\x8e\xe6\xad\xa4\xe5\x80\xbc\xe7\x9a\x84\xe8\xae\xb0\xe5\xbd\x95\xe5\xb0\x86\xe4\xb8\x8d\xe8\xae\xa1\xe5\x85\xa5\xe7\xbb\x9f\xe8\xae\xa1\xe5\x92\x8c\xe5\xaf\xbc\xe5\x87\xba\xef\xbc\x8c") + QString::fromUtf8("0\xe4\xb8\xba\xe4\xb8\x8d\xe9\x99\x90\xe5\x88\xb6"),
-        0, 300, 40, 5, &m_minRecordThreshold);
-    m_minRecordThreshold->setSuffix(QString::fromUtf8(" \xe7\xa7\x92"));
+    // 主开关联动：开启时才允许操作关联控件。
+    auto bindToggle = [this](QCheckBox *check, const QList<QWidget *> &targets) {
+        const auto apply = [targets](bool on) {
+            for (QWidget *w : targets)
+                w->setEnabled(on);
+        };
+        apply(check->isChecked());
+        connect(check, &QCheckBox::toggled, this, apply);
+    };
 
-    trackLayout->addStretch();
-    m_tabWidget->addTab(trackTab, QString::fromUtf8("\xe8\xbf\xbd\xe8\xb8\xaa\xe8\xae\xbe\xe7\xbd\xae"));
+    // ================= 页面 1：应用管理 =================
+    {
+        QVBoxLayout *pageLayout = startPage(QString::fromUtf8("应用管理"));
+        QVBoxLayout *cardLayout = nullptr;
+        addSectionCard(pageLayout,
+                       QString::fromUtf8("屏蔽不需要统计的应用"),
+                       this, &cardLayout, 1);
 
-    // ================= Tab 3: Personalization =================
-    auto *personalTab = new QWidget(this);
-    auto *personalLayout = new QVBoxLayout(personalTab);
-    personalLayout->setContentsMargins(24, 22, 24, 22);
-    personalLayout->setSpacing(10);
+        auto *splitLayout = new QHBoxLayout();
+        splitLayout->setSpacing(10);
 
-    m_darkMode = new QCheckBox(
-        QString::fromUtf8("\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"), this);
-    m_darkMode->setFont(DesignTokens::appFont(13));
-    personalLayout->addWidget(m_darkMode);
+        auto buildPanel = [this](const QString &labelText, const QString &tip,
+                                 QLineEdit **searchOut,
+                                 QListWidget **listOut,
+                                 bool multiSelect) {
+            auto *panel = new QVBoxLayout();
+            panel->setSpacing(6);
+            auto *label = new QLabel(labelText, this);
+            label->setFont(DesignTokens::appFont(12, QFont::Medium));
+            label->setToolTip(tip);
+            panel->addWidget(label);
 
-    m_autoStart = new QCheckBox(
-        QString::fromUtf8("\xe5\xbc\x80\xe6\x9c\xba\xe8\x87\xaa\xe5\x90\xaf"), this);
-    m_autoStart->setFont(DesignTokens::appFont(13));
-    personalLayout->addWidget(m_autoStart);
+            auto *search = new QLineEdit(this);
+            search->setPlaceholderText(QString::fromUtf8("搜索..."));
+            search->setToolTip(tip);
+            panel->addWidget(search);
 
-    auto *dailyGoalRow = new QHBoxLayout();
-    auto *dailyGoalLabel = new QLabel(
-        QString::fromUtf8("\xe6\x9c\xac\xe5\x9c\xb0\xe9\xbb\x98\xe8\xae\xa4\xe7\x9b\xae\xe6\xa0\x87\xef\xbc\x88\xe4\xba\x91\xe7\xab\xaf\xe6\x9c\xaa\xe8\xae\xbe\xe7\xbd\xae\xe6\x97\xb6\xe7\x94\x9f\xe6\x95\x88\xef\xbc\x8c\xe5\xb0\x8f\xe6\x97\xb6\xef\xbc\x89:"), this);
-    dailyGoalLabel->setFont(DesignTokens::appFont(13));
-    dailyGoalRow->addWidget(dailyGoalLabel);
-    m_dailyGoal = new QSpinBox(this);
-    m_dailyGoal->setRange(1, 24);
-    m_dailyGoal->setValue(8);
-    dailyGoalRow->addWidget(m_dailyGoal);
-    dailyGoalRow->addStretch();
-    personalLayout->addLayout(dailyGoalRow);
+            auto *list = new QListWidget(this);
+            list->setToolTip(tip);
+            list->setSelectionMode(multiSelect
+                ? QAbstractItemView::MultiSelection
+                : QAbstractItemView::SingleSelection);
+            panel->addWidget(list, 1);
 
-    personalLayout->addStretch();
-    m_tabWidget->addTab(personalTab, QString::fromUtf8("\xe4\xb8\xaa\xe6\x80\xa7\xe5\x8c\x96"));
+            if (searchOut) *searchOut = search;
+            if (listOut) *listOut = list;
+            return panel;
+        };
 
-    // ================= Tab 4: 提醒 =================
-    auto *remindTab = new QWidget(this);
-    auto *remindLayout = new QVBoxLayout(remindTab);
-    remindLayout->setContentsMargins(24, 22, 24, 22);
-    remindLayout->setSpacing(10);
+        const QString knownTip =
+            QString::fromUtf8("已识别到的前台应用；可多选后点击「加入屏蔽」不再统计");
+        const QString ignoredTip =
+            QString::fromUtf8("被屏蔽的应用；选中后点击「移除屏蔽」或按 Delete 键恢复统计");
+        splitLayout->addLayout(buildPanel(
+            QString::fromUtf8("已知应用"), knownTip,
+            &m_knownSearch, &m_knownAppsList, true), 1);
+        connect(m_knownSearch, &QLineEdit::textChanged,
+                this, &SettingsDialog::filterKnownApps);
 
-    m_reminderEnabled = new QCheckBox(
-        QString::fromUtf8("\xe5\x90\xaf\xe7\x94\xa8\xe5\xae\x9a\xe6\x97\xb6\xe6\x8f\x90\xe9\x86\x92"), this);
-    m_reminderEnabled->setFont(DesignTokens::appFont(13));
-    m_reminderEnabled->setToolTip(
-        QString::fromUtf8("\xe5\x9c\xa8\xe4\xb8\x8b\xe9\x9d\xa2\xe9\x85\x8d\xe7\xbd\xae\xe7\x9a\x84\xe6\x97\xb6\xe9\x97\xb4\xe7\x82\xb9\xe6\x8f\x90\xe9\x86\x92\xe4\xbd\xbf\xe7\x94\xa8\xe6\x83\x85\xe5\x86\xb5"));
-    remindLayout->addWidget(m_reminderEnabled);
+        auto *centerPanel = new QVBoxLayout();
+        centerPanel->setSpacing(8);
+        centerPanel->addStretch();
 
-    auto *addRow = new QHBoxLayout();
-    addRow->addWidget(new QLabel(
-        QString::fromUtf8("\xe6\x97\xb6\xe9\x97\xb4\xe7\x82\xb9:"), this));
-    m_reminderTimeEdit = new QTimeEdit(this);
-    m_reminderTimeEdit->setDisplayFormat(QStringLiteral("HH:mm"));
-    m_reminderTimeEdit->setTime(QTime::currentTime());
-    addRow->addWidget(m_reminderTimeEdit);
-    m_reminderAddBtn = new QPushButton(
-        QString::fromUtf8("\xe6\xb7\xbb\xe5\x8a\xa0"), this);
-    m_reminderAddBtn->setStyleSheet(secondaryButtonStyle());
-    connect(m_reminderAddBtn, &QPushButton::clicked, this, [this]() {
-        const QString time = m_reminderTimeEdit->time().toString(QStringLiteral("HH:mm"));
-        for (int i = 0; i < m_reminderTimesList->count(); ++i) {
-            if (m_reminderTimesList->item(i)->text() == time) {
-                m_reminderTimesList->setCurrentRow(i);
-                return; // 已存在，只选中不重复添加。
-            }
-        }
-        m_reminderTimesList->addItem(time);
-        m_reminderTimesList->sortItems();
-    });
-    addRow->addWidget(m_reminderAddBtn);
-    m_reminderRemoveBtn = new QPushButton(
-        QString::fromUtf8("\xe5\x88\xa0\xe9\x99\xa4"), this);
-    m_reminderRemoveBtn->setStyleSheet(secondaryButtonStyle());
-    connect(m_reminderRemoveBtn, &QPushButton::clicked, this, [this]() {
-        delete m_reminderTimesList->takeItem(m_reminderTimesList->currentRow());
-    });
-    addRow->addWidget(m_reminderRemoveBtn);
-    addRow->addStretch();
-    remindLayout->addLayout(addRow);
+        auto *addIgnoredBtn = new QPushButton(
+            QString::fromUtf8("→ 加入屏蔽"), this);
+        addIgnoredBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        addIgnoredBtn->setToolTip(knownTip);
+        connect(addIgnoredBtn, &QPushButton::clicked,
+                this, &SettingsDialog::onAddIgnored);
+        centerPanel->addWidget(addIgnoredBtn);
 
-    m_reminderTimesList = new QListWidget(this);
-    m_reminderTimesList->setMinimumHeight(120);
-    remindLayout->addWidget(m_reminderTimesList);
+        auto *removeIgnoredBtn = new QPushButton(
+            QString::fromUtf8("← 移除屏蔽"), this);
+        removeIgnoredBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        removeIgnoredBtn->setToolTip(ignoredTip);
+        connect(removeIgnoredBtn, &QPushButton::clicked,
+                this, &SettingsDialog::onRemoveIgnored);
+        centerPanel->addWidget(removeIgnoredBtn);
 
-    // ---- 每周周报分组 ----
-    auto *weeklyLine = new QFrame(this);
-    weeklyLine->setFrameShape(QFrame::HLine);
-    weeklyLine->setStyleSheet(QString("color: %1;").arg(DesignTokens::kBorder().name()));
-    remindLayout->addWidget(weeklyLine);
+        centerPanel->addStretch();
+        splitLayout->addLayout(centerPanel);
 
-    m_weeklyReportEnabled = new QCheckBox(
-        QString::fromUtf8("\xe6\xaf\x8f\xe5\x91\xa8\xe8\x87\xaa\xe5\x8a\xa8\xe7\x94\x9f\xe6\x88\x90\xe5\x91\xa8\xe4\xbd\xbf\xe7\x94\xa8\xe6\x97\xa5\xe6\x8a\xa5"), this);
-    m_weeklyReportEnabled->setFont(DesignTokens::appFont(13));
-    m_weeklyReportEnabled->setToolTip(
-        QString::fromUtf8("\xe6\xaf\x8f\xe5\x91\xa8\xe5\x9c\xa8\xe4\xb8\x8b\xe9\x9d\xa2\xe7\x9a\x84\xe6\x97\xb6\xe5\x88\xbb\xe8\x87\xaa\xe5\x8a\xa8\xe7\x94\x9f\xe6\x88\x90\xe4\xb8\x8a\xe4\xb8\x80\xe5\x91\xa8\xe7\x9a\x84\xe7\x94\xa8\xe4\xbe\x8b\xe6\x97\xa5\xe6\x8a\xa5\xef\xbc\x88HTML\xef\xbc\x8c\xe5\xa1\x98\xe7\x9b\x98\xe9\x80\x9a\xe7\x9f\xa5\xe5\x90\x8e\xe5\x8f\xaf\xe4\xbb\x8e\xe4\xb8\xbb\xe9\xa1\xb5\xe6\x89\x93\xe5\xbc\x80\xe3\x80\x82\xe5\x90\xaf\xe7\x94\xa8 AI \xe6\x97\xb6\xe5\x90\xab AI \xe5\x88\x86\xe6\x9e\x90\xef\xbc\x8c\xe5\x90\xa6\xe5\x88\x99\xe4\xb8\xba\xe6\x9c\xac\xe5\x9c\xb0\xe6\x8a\xa5\xe5\x91\x8a\xe3\x80\x82"));
-    remindLayout->addWidget(m_weeklyReportEnabled);
+        splitLayout->addLayout(buildPanel(
+            QString::fromUtf8("已屏蔽应用"), ignoredTip,
+            &m_ignoredSearch, &m_ignoredAppsList, false), 1);
+        connect(m_ignoredSearch, &QLineEdit::textChanged,
+                this, &SettingsDialog::filterIgnoredApps);
 
-    auto *weeklyDayRow = new QHBoxLayout();
-    weeklyDayRow->addWidget(new QLabel(
-        QString::fromUtf8("\xe7\x94\x9f\xe6\x88\x90\xe6\x97\xa5:"), this));
-    m_weeklyReportDay = new QComboBox(this);
-    m_weeklyReportDay->addItems({
-        QString::fromUtf8("\xe5\x91\xa8\xe4\xb8\x80"),
-        QString::fromUtf8("\xe5\x91\xa8\xe4\xba\x8c"),
-        QString::fromUtf8("\xe5\x91\xa8\xe4\xb8\x89"),
-        QString::fromUtf8("\xe5\x91\xa8\xe5\x9b\x9b"),
-        QString::fromUtf8("\xe5\x91\xa8\xe4\xba\x94"),
-        QString::fromUtf8("\xe5\x91\xa8\xe5\x85\xad"),
-        QString::fromUtf8("\xe5\x91\xa8\xe6\x97\xa5"),
-    });
-    weeklyDayRow->addWidget(m_weeklyReportDay);
-    weeklyDayRow->addWidget(new QLabel(
-        QString::fromUtf8("\xe6\x97\xb6\xe5\x88\xbb:"), this));
-    m_weeklyReportTime = new QTimeEdit(this);
-    m_weeklyReportTime->setDisplayFormat(QStringLiteral("HH:mm"));
-    m_weeklyReportTime->setTime(QTime(9, 0));
-    weeklyDayRow->addWidget(m_weeklyReportTime);
-    weeklyDayRow->addStretch();
-    remindLayout->addLayout(weeklyDayRow);
-
-    m_reminderStatus = new QLabel(this);
-    m_reminderStatus->setStyleSheet(
-        QString("color: %1; font-size: 12px; background: transparent;")
-            .arg(DesignTokens::kTextMute().name()));
-    remindLayout->addWidget(m_reminderStatus);
-
-    remindLayout->addStretch();
-    m_tabWidget->addTab(remindTab, QString::fromUtf8("\xe6\x8f\x90\xe9\x86\x92"));
-
-    // ================= Tab 5: Cloud Sync =================
-    auto *cloudTab = new QWidget(this);
-    auto *cloudLayout = new QVBoxLayout(cloudTab);
-    cloudLayout->setContentsMargins(24, 22, 24, 22);
-    cloudLayout->setSpacing(10);
-
-    m_linewebEnabled = new QCheckBox(
-        QString::fromUtf8("\xe5\x90\xaf\xe7\x94\xa8\xe6\x8e\xa8\xe9\x80\x81"), this);
-    m_linewebEnabled->setFont(DesignTokens::appFont(13));
-    cloudLayout->addWidget(m_linewebEnabled);
-
-    auto *endpointRow = new QHBoxLayout();
-    endpointRow->addWidget(new QLabel(
-        QString::fromUtf8("API \xe5\x9c\xb0\xe5\x9d\x80:"), this));
-    m_linewebEndpoint = new QLineEdit(this);
-    m_linewebEndpoint->setPlaceholderText(
-        QString::fromUtf8("https://your-server.com"));
-    endpointRow->addWidget(m_linewebEndpoint, 1);
-    cloudLayout->addLayout(endpointRow);
-
-    auto *tokenRow = new QHBoxLayout();
-    tokenRow->addWidget(new QLabel(QString::fromUtf8("Token:"), this));
-    m_linewebToken = new QLineEdit(this);
-    m_linewebToken->setEchoMode(QLineEdit::Password);
-    m_linewebToken->setPlaceholderText("st_...");
-    tokenRow->addWidget(m_linewebToken, 1);
-    m_linewebTokenToggle = new QPushButton(
-        QString::fromUtf8("\xe6\x98\xbe\xe7\xa4\xba"), this);
-    m_linewebTokenToggle->setStyleSheet(secondaryButtonStyle());
-    connect(m_linewebTokenToggle, &QPushButton::clicked, this, [this]() {
-        const bool show = (m_linewebToken->echoMode() == QLineEdit::Password);
-        m_linewebToken->setEchoMode(show ? QLineEdit::Normal : QLineEdit::Password);
-        m_linewebTokenToggle->setText(
-            show ? QString::fromUtf8("\xe9\x9a\x90\xe8\x97\x8f")
-                 : QString::fromUtf8("\xe6\x98\xbe\xe7\xa4\xba"));
-    });
-    tokenRow->addWidget(m_linewebTokenToggle);
-    cloudLayout->addLayout(tokenRow);
-
-    auto *intervalRow = new QHBoxLayout();
-    intervalRow->addWidget(new QLabel(
-        QString::fromUtf8("\xe6\x8e\xa8\xe9\x80\x81\xe9\x97\xb4\xe9\x9a\x94\xef\xbc\x88\xe5\x88\x86\xe9\x92\x9f\xef\xbc\x89:"), this));
-    m_linewebInterval = new QSpinBox(this);
-    m_linewebInterval->setRange(5, 30);
-    m_linewebInterval->setValue(10);
-    intervalRow->addWidget(m_linewebInterval);
-    intervalRow->addStretch();
-    cloudLayout->addLayout(intervalRow);
-
-    auto *testRow = new QHBoxLayout();
-    m_linewebTestBtn = new QPushButton(
-        QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe6\xb5\x8b\xe8\xaf\x95"), this);
-    m_linewebTestBtn->setStyleSheet(secondaryButtonStyle());
-    connect(m_linewebTestBtn, &QPushButton::clicked, this, [this]() {
-        const QString token = m_linewebToken->text().trimmed();
-        const QString endpoint = m_linewebEndpoint->text().trimmed();
-        if (token.isEmpty() || endpoint.isEmpty()) {
-            QMessageBox::warning(this,
-                QString::fromUtf8("\xe9\x85\x8d\xe7\xbd\xae\xe4\xb8\x8d\xe5\xae\x8c\xe6\x95\xb4"),
-                QString::fromUtf8("\xe8\xaf\xb7\xe5\x85\x88\xe5\xa1\xab\xe5\x86\x99 API \xe5\x9c\xb0\xe5\x9d\x80\xe5\x92\x8c Token"));
-            return;
-        }
-
-        QJsonObject body;
-        body["totalSeconds"] = m_db->getTodayTotal();
-        body["date"] = QDate::currentDate().toString("yyyy-MM-dd");
-
-        QUrl url(normalizeLineWebEndpoint(endpoint) + "/api/health/push");
-        QNetworkRequest req(url);
-        req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        req.setRawHeader("X-Screen-Time-Token", token.toUtf8());
-
-        auto *nam = new QNetworkAccessManager(this);
-        QNetworkReply *reply = nam->post(req, QJsonDocument(body).toJson());
-        connect(reply, &QNetworkReply::finished, this, [this, reply, nam, endpoint, token]() {
-            reply->deleteLater();
-            nam->deleteLater();
-            if (reply->error() == QNetworkReply::NoError) {
-                QMessageBox::information(this,
-                    QString::fromUtf8("\xe6\xb5\x8b\xe8\xaf\x95\xe6\x88\x90\xe5\x8a\x9f"),
-                    QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe6\xb5\x8b\xe8\xaf\x95\xe6\x88\x90\xe5\x8a\x9f\xef\xbc\x81"));
-                // 推送验证成功后顺带拉取云端目标写回 daily_goal（云端优先、本地兜底）。
-                fetchGoalFromCloud(endpoint, token);
-            } else {
-                QMessageBox::warning(this,
-                    QString::fromUtf8("\xe6\xb5\x8b\xe8\xaf\x95\xe5\xa4\xb1\xe8\xb4\xa5"),
-                    QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe5\xa4\xb1\xe8\xb4\xa5\xef\xbc\x9a")
-                        + reply->errorString());
-            }
+        auto *delShortcut = new QShortcut(QKeySequence::Delete, m_ignoredAppsList);
+        connect(delShortcut, &QShortcut::activated, this, [this]() {
+            if (m_ignoredAppsList->currentItem())
+                onRemoveIgnored();
         });
-    });
-    testRow->addWidget(m_linewebTestBtn);
 
-    m_linewebStatus = new QLabel(this);
-    m_linewebStatus->setStyleSheet(
-        QString("color: %1; font-size: 12px; background: transparent;")
-            .arg(DesignTokens::kTextMute().name()));
-    testRow->addWidget(m_linewebStatus);
-    testRow->addStretch();
-    cloudLayout->addLayout(testRow);
-    cloudLayout->addStretch();
-    m_tabWidget->addTab(cloudTab, QString::fromUtf8("\xe4\xba\x91\xe7\xab\xaf\xe5\x90\x8c\xe6\xad\xa5"));
+        cardLayout->addLayout(splitLayout, 1);
 
-    // ================= Tab 6: AI 智能 =================
-    auto *aiTab = new QWidget(this);
-    auto *aiLayout = new QVBoxLayout(aiTab);
-    aiLayout->setContentsMargins(24, 22, 24, 22);
-    aiLayout->setSpacing(10);
+        // ---- 应用别名 ----
+        QVBoxLayout *aliasCardLayout = nullptr;
+        addSectionCard(pageLayout,
+                       QString::fromUtf8("应用名称别名"),
+                       this, &aliasCardLayout, 0);
 
-    m_aiEnabled = new QCheckBox(
-        QString::fromUtf8("\xe5\x90\xaf\xe7\x94\xa8 AI \xe6\x8a\xa5\xe5\x91\x8a"), this);
-    m_aiEnabled->setFont(DesignTokens::appFont(13));
-    aiLayout->addWidget(m_aiEnabled);
-
-    auto *aiEndpointRow = new QHBoxLayout();
-    aiEndpointRow->addWidget(new QLabel(
-        QString::fromUtf8("API \xe5\x9c\xb0\xe5\x9d\x80:"), this));
-    m_aiEndpoint = new QLineEdit(this);
-    m_aiEndpoint->setPlaceholderText(
-        QString::fromUtf8("https://api.deepseek.com"));
-    aiEndpointRow->addWidget(m_aiEndpoint, 1);
-    aiLayout->addLayout(aiEndpointRow);
-
-    auto *aiKeyRow = new QHBoxLayout();
-    aiKeyRow->addWidget(new QLabel(QString::fromUtf8("API Key:"), this));
-    m_aiApiKey = new QLineEdit(this);
-    m_aiApiKey->setEchoMode(QLineEdit::Password);
-    m_aiApiKey->setPlaceholderText(QString::fromUtf8("\xe5\x8f\xaf\xe9\x80\x9a\xe8\xbf\x87\xe7\xae\xa1\xe7\x90\x86\xe5\xb9\xb3\xe5\x8f\xb0\xe8\x8e\xb7\xe5\x8f\x96\xef\xbc\x8c\xe4\xbb\xa5 Bearer \xe6\x96\xb9\xe5\xbc\x8f\xe9\xaa\x8c\xe8\xaf\x81"));
-    aiKeyRow->addWidget(m_aiApiKey, 1);
-    m_aiApiKeyToggle = new QPushButton(
-        QString::fromUtf8("\xe6\x98\xbe\xe7\xa4\xba"), this);
-    m_aiApiKeyToggle->setStyleSheet(secondaryButtonStyle());
-    connect(m_aiApiKeyToggle, &QPushButton::clicked, this, [this]() {
-        const bool show = (m_aiApiKey->echoMode() == QLineEdit::Password);
-        m_aiApiKey->setEchoMode(show ? QLineEdit::Normal : QLineEdit::Password);
-        m_aiApiKeyToggle->setText(
-            show ? QString::fromUtf8("\xe9\x9a\x90\xe8\x97\x8f")
-                 : QString::fromUtf8("\xe6\x98\xbe\xe7\xa4\xba"));
-    });
-    aiKeyRow->addWidget(m_aiApiKeyToggle);
-    aiLayout->addLayout(aiKeyRow);
-
-    auto *aiModelRow = new QHBoxLayout();
-    aiModelRow->addWidget(new QLabel(
-        QString::fromUtf8("\xe6\xa8\xa1\xe5\x9e\x8b\xe5\x90\x8d:"), this));
-    m_aiModel = new QLineEdit(this);
-    m_aiModel->setPlaceholderText("deepseek-chat");
-    aiModelRow->addWidget(m_aiModel, 1);
-    aiLayout->addLayout(aiModelRow);
-
-    auto *aiTestRow = new QHBoxLayout();
-    m_aiTestBtn = new QPushButton(
-        QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe6\xb5\x8b\xe8\xaf\x95"), this);
-    m_aiTestBtn->setStyleSheet(secondaryButtonStyle());
-    connect(m_aiTestBtn, &QPushButton::clicked, this, [this]() {
-        const QString key = m_aiApiKey->text().trimmed();
-        const QString endpoint = m_aiEndpoint->text().trimmed();
-        if (key.isEmpty() || endpoint.isEmpty()) {
-            QMessageBox::warning(this,
-                QString::fromUtf8("\xe9\x85\x8d\xe7\xbd\xae\xe4\xb8\x8d\xe5\xae\x8c\xe6\x95\xb4"),
-                QString::fromUtf8("\xe8\xaf\xb7\xe5\x85\x88\xe5\xa1\xab\xe5\x86\x99 API \xe5\x9c\xb0\xe5\x9d\x80\xe5\x92\x8c API Key"));
-            return;
-        }
-
-        QString base = endpoint;
-        while (base.endsWith(QLatin1Char('/')))
-            base.chop(1);
-        QNetworkRequest req(QUrl(base + "/models"));
-        req.setRawHeader("Authorization", ("Bearer " + key).toUtf8());
-        req.setTransferTimeout(15000);
-
-        auto *nam = new QNetworkAccessManager(this);
-        QNetworkReply *reply = nam->get(req);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, nam]() {
-            reply->deleteLater();
-            nam->deleteLater();
-            if (reply->error() == QNetworkReply::NoError) {
-                const QJsonObject obj =
-                    QJsonDocument::fromJson(reply->readAll()).object();
-                QMessageBox::information(this,
-                    QString::fromUtf8("\xe6\xb5\x8b\xe8\xaf\x95\xe6\x88\x90\xe5\x8a\x9f"),
-                    obj.contains(QStringLiteral("data"))
-                        ? QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe6\x88\x90\xe5\x8a\x9f\xef\xbc\x81"
-                                             "\xe5\xbd\x93\xe5\x89\x8d\xe6\x9c\x8d\xe5\x8a\xa1\xe5\x99\xa8\xe5\x8f\xaf\xe7\x94\xa8\xe6\xa8\xa1\xe5\x9e\x8b\xe6\x95\xb0\xef\xbc\x9a%1")
-                                                 .arg(obj[QStringLiteral("data")].toArray().size())
-                        : QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe6\x88\x90\xe5\x8a\x9f\xef\xbc\x81"));
-            } else {
-                QString err = reply->errorString();
-                const QJsonObject obj =
-                    QJsonDocument::fromJson(reply->readAll()).object();
-                const QJsonObject errObj =
-                    obj[QStringLiteral("error")].toObject();
-                if (!errObj.isEmpty() &&
-                    errObj.contains(QStringLiteral("message")))
-                    err = errObj[QStringLiteral("message")].toString();
-                QMessageBox::warning(this,
-                    QString::fromUtf8("\xe6\xb5\x8b\xe8\xaf\x95\xe5\xa4\xb1\xe8\xb4\xa5"),
-                    QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe5\xa4\xb1\xe8\xb4\xa5\xef\xbc\x9a") + err);
-            }
+        m_aliasTable = new QTableWidget(0, 2, this);
+        m_aliasTable->setHorizontalHeaderLabels({
+            QString::fromUtf8("进程名"),
+            QString::fromUtf8("显示名")
         });
-    });
-    aiTestRow->addWidget(m_aiTestBtn);
-    aiTestRow->addStretch();
-    aiLayout->addLayout(aiTestRow);
+        m_aliasTable->horizontalHeader()->setStretchLastSection(true);
+        m_aliasTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+        m_aliasTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        m_aliasTable->verticalHeader()->setVisible(false);
+        m_aliasTable->setMinimumHeight(130);
+        m_aliasTable->setToolTip(
+            QString::fromUtf8("把进程名显示为更友好的名称；选中一行后可编辑或删除"));
+        aliasCardLayout->addWidget(m_aliasTable);
 
-    aiLayout->addStretch();
-    m_tabWidget->addTab(aiTab, QString::fromUtf8("AI \xe6\x99\xba\xe8\x83\xbd"));
+        auto *aliasBtnRow = new QHBoxLayout();
+        aliasBtnRow->setSpacing(8);
+        auto *addAliasBtn = new QPushButton(QString::fromUtf8("添加别名"), this);
+        addAliasBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        addAliasBtn->setToolTip(QString::fromUtf8("为某个进程名设置自定义显示名称"));
+        connect(addAliasBtn, &QPushButton::clicked,
+                this, &SettingsDialog::onAddAlias);
+        aliasBtnRow->addWidget(addAliasBtn);
 
-    // ================= Tab 6: About =================
-    auto *aboutTab = new QWidget(this);
-    auto *aboutLayout = new QVBoxLayout(aboutTab);
-    aboutLayout->setContentsMargins(24, 22, 24, 22);
-    aboutLayout->setAlignment(Qt::AlignCenter);
+        auto *editAliasBtn = new QPushButton(QString::fromUtf8("编辑"), this);
+        editAliasBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        editAliasBtn->setToolTip(QString::fromUtf8("修改选中别名的显示名称"));
+        connect(editAliasBtn, &QPushButton::clicked,
+                this, &SettingsDialog::onEditAlias);
+        aliasBtnRow->addWidget(editAliasBtn);
 
-    auto *appNameLabel = new QLabel(QString::fromUtf8("Time Master"), aboutTab);
-    appNameLabel->setFont(DesignTokens::appFont(26, QFont::Bold));
-    appNameLabel->setAlignment(Qt::AlignCenter);
-    appNameLabel->setStyleSheet(
-        QString("color: %1; background: transparent;").arg(DesignTokens::kTextStrong().name()));
-    aboutLayout->addWidget(appNameLabel);
+        auto *deleteAliasBtn = new QPushButton(QString::fromUtf8("删除"), this);
+        deleteAliasBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        deleteAliasBtn->setToolTip(QString::fromUtf8("移除选中的别名，恢复默认显示名称"));
+        connect(deleteAliasBtn, &QPushButton::clicked,
+                this, &SettingsDialog::onDeleteAlias);
+        aliasBtnRow->addWidget(deleteAliasBtn);
+        aliasBtnRow->addStretch();
+        aliasCardLayout->addLayout(aliasBtnRow);
 
-    auto *versionLabel = new QLabel(
-        QString::fromUtf8("v") + QApplication::applicationVersion(), aboutTab);
-    versionLabel->setFont(DesignTokens::appFont(14));
-    versionLabel->setAlignment(Qt::AlignCenter);
-    versionLabel->setStyleSheet(
-        QString("color: %1; background: transparent;").arg(DesignTokens::kTextMute().name()));
-    aboutLayout->addWidget(versionLabel);
-    aboutLayout->addSpacing(24);
+        m_stack->addWidget(pageLayout->parentWidget());
+    }
 
-    auto *descLabel = new QLabel(
-        QString::fromUtf8("Windows \xe6\xa1\x8c\xe9\x9d\xa2\xe6\x97\xb6\xe9\x97\xb4\xe8\xbf\xbd\xe8\xb8\xaa\xe5\xb7\xa5\xe5\x85\xb7"),
-        aboutTab);
-    descLabel->setFont(DesignTokens::appFont(12));
-    descLabel->setAlignment(Qt::AlignCenter);
-    descLabel->setStyleSheet(
-        QString("color: %1; background: transparent;").arg(DesignTokens::kTextFaint().name()));
-    aboutLayout->addWidget(descLabel);
-    aboutLayout->addStretch();
-    m_tabWidget->addTab(aboutTab, QString::fromUtf8("\xe5\x85\xb3\xe4\xba\x8e"));
+    // ================= 页面 2：追踪设置 =================
+    {
+        QVBoxLayout *pageLayout = startPage(QString::fromUtf8("追踪设置"));
 
-    // ================= Bottom buttons =================
+        QVBoxLayout *switchCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("追踪开关"),
+                       this, &switchCardLayout, 0);
+        m_trackingEnabled = new QCheckBox(
+            QString::fromUtf8("启用追踪"), this);
+        m_trackingEnabled->setFont(DesignTokens::appFont(13));
+        m_trackingEnabled->setToolTip(
+            QString::fromUtf8("开启后开始记录前台窗口的使用时长；关闭则不产生任何记录"));
+        switchCardLayout->addWidget(m_trackingEnabled);
+
+        QVBoxLayout *paramCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("计时参数"),
+                       this, &paramCardLayout, 1);
+
+        const QString pollTip =
+            QString::fromUtf8("间隔多久检测一次当前前台窗口（秒）。值越小统计越精确，占用的系统开销略高");
+        const QString idleTip =
+            QString::fromUtf8("鼠标键盘连续空闲超过该时长即判定为离开（秒），空闲期间不计入使用时长");
+        const QString minTrackTip =
+            QString::fromUtf8("窗口切换后活跃超过该时长才开始计时（秒）；0 表示不限制，立即计时");
+        const QString minRecordTip =
+            QString::fromUtf8("单次使用时长低于该值的记录不计入统计和导出（秒）；0 表示不限制");
+
+        addFormRow(paramCardLayout, QString::fromUtf8("轮询间隔（秒）："), pollTip,
+                   m_pollInterval = new QSpinBox(this), false, this);
+        m_pollInterval->setRange(1, 10);
+        m_pollInterval->setValue(1);
+        m_pollInterval->setSingleStep(1);
+
+        addFormRow(paramCardLayout, QString::fromUtf8("空闲判定时间（秒）："), idleTip,
+                   m_idleThreshold = new QSpinBox(this), false, this);
+        m_idleThreshold->setRange(10, 600);
+        m_idleThreshold->setValue(60);
+        m_idleThreshold->setSingleStep(10);
+
+        addFormRow(paramCardLayout, QString::fromUtf8("最低计时阈值（秒）："), minTrackTip,
+                   m_minTrackingSeconds = new QSpinBox(this), false, this);
+        m_minTrackingSeconds->setRange(0, 30);
+        m_minTrackingSeconds->setValue(0);
+        m_minTrackingSeconds->setSingleStep(1);
+
+        addFormRow(paramCardLayout, QString::fromUtf8("最低记录阈值（秒）："), minRecordTip,
+                   m_minRecordThreshold = new QSpinBox(this), false, this);
+        m_minRecordThreshold->setRange(0, 300);
+        m_minRecordThreshold->setValue(40);
+        m_minRecordThreshold->setSingleStep(5);
+        m_minRecordThreshold->setSuffix(QString::fromUtf8(" 秒"));
+
+        // 追踪关闭时参数置灰，保持层级清晰。
+        bindToggle(m_trackingEnabled, {m_pollInterval, m_idleThreshold,
+                                       m_minTrackingSeconds, m_minRecordThreshold});
+
+        m_stack->addWidget(pageLayout->parentWidget());
+    }
+
+    // ================= 页面 3：个性化 =================
+    {
+        QVBoxLayout *pageLayout = startPage(QString::fromUtf8("个性化"));
+
+        QVBoxLayout *appearanceCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("外观"),
+                       this, &appearanceCardLayout, 0);
+        m_darkMode = new QCheckBox(
+            QString::fromUtf8("暗色模式"), this);
+        m_darkMode->setFont(DesignTokens::appFont(13));
+        m_darkMode->setToolTip(
+            QString::fromUtf8("切换应用整体配色为暗色或亮色"));
+        appearanceCardLayout->addWidget(m_darkMode);
+
+        QVBoxLayout *startCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("启动与目标"),
+                       this, &startCardLayout, 0);
+        m_autoStart = new QCheckBox(
+            QString::fromUtf8("开机自启"), this);
+        m_autoStart->setFont(DesignTokens::appFont(13));
+        m_autoStart->setToolTip(
+            QString::fromUtf8("登录 Windows 后自动在后台启动并驻留系统托盘"));
+        startCardLayout->addWidget(m_autoStart);
+
+        const QString goalTip =
+            QString::fromUtf8("本地默认的每日目标时长（小时）；云端已设置目标时以云端为准");
+        addFormRow(startCardLayout,
+                   QString::fromUtf8("本地默认目标（小时）："), goalTip,
+                   m_dailyGoal = new QSpinBox(this), false, this);
+        m_dailyGoal->setRange(1, 24);
+        m_dailyGoal->setValue(8);
+
+        pageLayout->addStretch(1);
+        m_stack->addWidget(pageLayout->parentWidget());
+    }
+
+    // ================= 页面 4：提醒 =================
+    {
+        QVBoxLayout *pageLayout = startPage(QString::fromUtf8("提醒"));
+
+        QVBoxLayout *remindCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("定时提醒"),
+                       this, &remindCardLayout, 1);
+
+        m_reminderEnabled = new QCheckBox(
+            QString::fromUtf8("启用定时提醒"), this);
+        m_reminderEnabled->setFont(DesignTokens::appFont(13));
+        m_reminderEnabled->setToolTip(
+            QString::fromUtf8("在下方配置的时间点提醒使用情况"));
+        remindCardLayout->addWidget(m_reminderEnabled);
+
+        auto *addRow = new QHBoxLayout();
+        addRow->setSpacing(8);
+        auto *timeLabel = new QLabel(QString::fromUtf8("时间点:"), this);
+        timeLabel->setFont(DesignTokens::appFont(13));
+        timeLabel->setToolTip(
+            QString::fromUtf8("选择一个时间点并点击「添加」，可配置多个提醒时间"));
+        addRow->addWidget(timeLabel);
+        m_reminderTimeEdit = new QTimeEdit(this);
+        m_reminderTimeEdit->setDisplayFormat(QStringLiteral("HH:mm"));
+        m_reminderTimeEdit->setTime(QTime::currentTime());
+        m_reminderTimeEdit->setToolTip(timeLabel->toolTip());
+        addRow->addWidget(m_reminderTimeEdit);
+        m_reminderAddBtn = new QPushButton(QString::fromUtf8("添加"), this);
+        m_reminderAddBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        m_reminderAddBtn->setToolTip(
+            QString::fromUtf8("把左侧所选时间添加到提醒列表"));
+        connect(m_reminderAddBtn, &QPushButton::clicked, this, [this]() {
+            const QString time = m_reminderTimeEdit->time().toString(QStringLiteral("HH:mm"));
+            for (int i = 0; i < m_reminderTimesList->count(); ++i) {
+                if (m_reminderTimesList->item(i)->text() == time) {
+                    m_reminderTimesList->setCurrentRow(i);
+                    return; // 已存在，只选中不重复添加。
+                }
+            }
+            m_reminderTimesList->addItem(time);
+            m_reminderTimesList->sortItems();
+        });
+        addRow->addWidget(m_reminderAddBtn);
+        m_reminderRemoveBtn = new QPushButton(QString::fromUtf8("删除"), this);
+        m_reminderRemoveBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        m_reminderRemoveBtn->setToolTip(
+            QString::fromUtf8("移除列表中选中的时间点"));
+        connect(m_reminderRemoveBtn, &QPushButton::clicked, this, [this]() {
+            delete m_reminderTimesList->takeItem(m_reminderTimesList->currentRow());
+        });
+        addRow->addWidget(m_reminderRemoveBtn);
+        addRow->addStretch();
+        remindCardLayout->addLayout(addRow);
+
+        m_reminderTimesList = new QListWidget(this);
+        m_reminderTimesList->setMinimumHeight(110);
+        m_reminderTimesList->setToolTip(
+            QString::fromUtf8("提醒时间点列表；选中一项后可点击「删除」移除"));
+        remindCardLayout->addWidget(m_reminderTimesList, 1);
+
+        m_reminderStatus = new QLabel(this);
+        m_reminderStatus->setObjectName(QStringLiteral("statusLabel"));
+        m_reminderStatus->setToolTip(
+            QString::fromUtf8("最近一次提醒触发的时间，用于确认提醒是否正常生效"));
+        remindCardLayout->addWidget(m_reminderStatus);
+
+        bindToggle(m_reminderEnabled,
+                   {m_reminderTimeEdit, m_reminderAddBtn, m_reminderRemoveBtn,
+                    m_reminderTimesList});
+
+        // ---- 每周周报 ----
+        QVBoxLayout *weeklyCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("每周周报"),
+                       this, &weeklyCardLayout, 0);
+
+        m_weeklyReportEnabled = new QCheckBox(
+            QString::fromUtf8("每周自动生成周使用日报"), this);
+        m_weeklyReportEnabled->setFont(DesignTokens::appFont(13));
+        m_weeklyReportEnabled->setToolTip(
+            QString::fromUtf8("每周在下方时刻自动生成上一周的用时日报（HTML，托盘通知后可打开。启用 AI 时含 AI 分析，否则为本地报告）"));
+        weeklyCardLayout->addWidget(m_weeklyReportEnabled);
+
+        auto *weeklyDayRow = new QHBoxLayout();
+        weeklyDayRow->setSpacing(8);
+        auto *dayLabel = new QLabel(QString::fromUtf8("生成日:"), this);
+        dayLabel->setFont(DesignTokens::appFont(13));
+        dayLabel->setToolTip(QString::fromUtf8("每周固定在哪一天生成周报"));
+        weeklyDayRow->addWidget(dayLabel);
+        m_weeklyReportDay = new QComboBox(this);
+        m_weeklyReportDay->addItems({
+            QString::fromUtf8("周一"),
+            QString::fromUtf8("周二"),
+            QString::fromUtf8("周三"),
+            QString::fromUtf8("周四"),
+            QString::fromUtf8("周五"),
+            QString::fromUtf8("周六"),
+            QString::fromUtf8("周日"),
+        });
+        m_weeklyReportDay->setToolTip(dayLabel->toolTip());
+        weeklyDayRow->addWidget(m_weeklyReportDay);
+        auto *timeLabel2 = new QLabel(QString::fromUtf8("时刻:"), this);
+        timeLabel2->setFont(DesignTokens::appFont(13));
+        timeLabel2->setToolTip(QString::fromUtf8("在该时刻自动生成周报"));
+        weeklyDayRow->addWidget(timeLabel2);
+        m_weeklyReportTime = new QTimeEdit(this);
+        m_weeklyReportTime->setDisplayFormat(QStringLiteral("HH:mm"));
+        m_weeklyReportTime->setTime(QTime(9, 0));
+        m_weeklyReportTime->setToolTip(timeLabel2->toolTip());
+        weeklyDayRow->addWidget(m_weeklyReportTime);
+        weeklyDayRow->addStretch();
+        weeklyCardLayout->addLayout(weeklyDayRow);
+
+        bindToggle(m_weeklyReportEnabled, {m_weeklyReportDay, m_weeklyReportTime});
+
+        m_stack->addWidget(pageLayout->parentWidget());
+    }
+
+    // ================= 页面 5：云端同步 =================
+    {
+        QVBoxLayout *pageLayout = startPage(QString::fromUtf8("云端同步"));
+
+        QVBoxLayout *configCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("推送配置"),
+                       this, &configCardLayout, 1);
+
+        m_linewebEnabled = new QCheckBox(
+            QString::fromUtf8("启用推送"), this);
+        m_linewebEnabled->setFont(DesignTokens::appFont(13));
+        m_linewebEnabled->setToolTip(
+            QString::fromUtf8("开启后按设定间隔自动向云端推送当日总时长"));
+        configCardLayout->addWidget(m_linewebEnabled);
+
+        const QString endpointTip =
+            QString::fromUtf8("LineWeb 服务地址，例如 https://your-server.com");
+        addFormRow(configCardLayout, QString::fromUtf8("API 地址:"), endpointTip,
+                   m_linewebEndpoint = new QLineEdit(this), true, this);
+        m_linewebEndpoint->setPlaceholderText(QString::fromUtf8("https://your-server.com"));
+
+        const QString tokenTip =
+            QString::fromUtf8("服务端分配的推送令牌（X-Screen-Time-Token），点击「显示」可查看明文");
+        auto *tokenRow = new QHBoxLayout();
+        tokenRow->setSpacing(12);
+        auto *tokenLabel = new QLabel(QString::fromUtf8("Token:"), this);
+        tokenLabel->setFont(DesignTokens::appFont(13));
+        tokenLabel->setMinimumWidth(160);
+        tokenLabel->setToolTip(tokenTip);
+        tokenRow->addWidget(tokenLabel);
+        m_linewebToken = new QLineEdit(this);
+        m_linewebToken->setEchoMode(QLineEdit::Password);
+        m_linewebToken->setPlaceholderText(QStringLiteral("st_..."));
+        m_linewebToken->setToolTip(tokenTip);
+        tokenRow->addWidget(m_linewebToken, 1);
+        m_linewebTokenToggle = new QPushButton(QString::fromUtf8("显示"), this);
+        m_linewebTokenToggle->setObjectName(QStringLiteral("secondaryBtn"));
+        m_linewebTokenToggle->setToolTip(
+            QString::fromUtf8("点击显示/隐藏 Token 明文"));
+        connect(m_linewebTokenToggle, &QPushButton::clicked, this, [this]() {
+            const bool show = (m_linewebToken->echoMode() == QLineEdit::Password);
+            m_linewebToken->setEchoMode(show ? QLineEdit::Normal : QLineEdit::Password);
+            m_linewebTokenToggle->setText(
+                show ? QString::fromUtf8("隐藏") : QString::fromUtf8("显示"));
+        });
+        tokenRow->addWidget(m_linewebTokenToggle);
+        configCardLayout->addLayout(tokenRow);
+
+        const QString intervalTip =
+            QString::fromUtf8("自动推送的间隔（分钟）");
+        addFormRow(configCardLayout, QString::fromUtf8("推送间隔（分钟）:"), intervalTip,
+                   m_linewebInterval = new QSpinBox(this), false, this);
+        m_linewebInterval->setRange(5, 30);
+        m_linewebInterval->setValue(10);
+
+        // 测试按钮先创建（稍后加入「状态与测试」卡片），用于联动置灰。
+        m_linewebTestBtn = new QPushButton(QString::fromUtf8("连接测试"), this);
+        m_linewebTestBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        m_linewebTestBtn->setToolTip(
+            QString::fromUtf8("用当前配置连接云端并测试推送，成功后同步云端每日目标"));
+
+        bindToggle(m_linewebEnabled,
+                   {m_linewebEndpoint, m_linewebToken, m_linewebTokenToggle,
+                    m_linewebInterval, m_linewebTestBtn});
+
+        // ---- 状态与测试 ----
+        QVBoxLayout *testCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("状态与测试"),
+                       this, &testCardLayout, 0);
+
+        auto *testRow = new QHBoxLayout();
+        testRow->setSpacing(10);
+        connect(m_linewebTestBtn, &QPushButton::clicked, this, [this]() {
+            const QString token = m_linewebToken->text().trimmed();
+            const QString endpoint = m_linewebEndpoint->text().trimmed();
+            if (token.isEmpty() || endpoint.isEmpty()) {
+                QMessageBox::warning(this,
+                    QString::fromUtf8("配置不完整"),
+                    QString::fromUtf8("请先填写 API 地址和 Token"));
+                return;
+            }
+
+            QJsonObject body;
+            body["totalSeconds"] = m_db->getTodayTotal();
+            body["date"] = QDate::currentDate().toString("yyyy-MM-dd");
+
+            QUrl url(normalizeLineWebEndpoint(endpoint) + "/api/health/push");
+            QNetworkRequest req(url);
+            req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+            req.setRawHeader("X-Screen-Time-Token", token.toUtf8());
+
+            auto *nam = new QNetworkAccessManager(this);
+            QNetworkReply *reply = nam->post(req, QJsonDocument(body).toJson());
+            connect(reply, &QNetworkReply::finished, this, [this, reply, nam, endpoint, token]() {
+                reply->deleteLater();
+                nam->deleteLater();
+                if (reply->error() == QNetworkReply::NoError) {
+                    QMessageBox::information(this,
+                        QString::fromUtf8("测试成功"),
+                        QString::fromUtf8("连接测试成功！"));
+                    // 推送验证成功后顺带拉取云端目标写回 daily_goal（云端优先、本地兜底）。
+                    fetchGoalFromCloud(endpoint, token);
+                } else {
+                    QMessageBox::warning(this,
+                        QString::fromUtf8("测试失败"),
+                        QString::fromUtf8("连接失败：") + reply->errorString());
+                }
+            });
+        });
+        testRow->addWidget(m_linewebTestBtn);
+
+        m_linewebStatus = new QLabel(this);
+        m_linewebStatus->setObjectName(QStringLiteral("statusLabel"));
+        m_linewebStatus->setToolTip(
+            QString::fromUtf8("最近一次推送与云端目标拉取的时间"));
+        testRow->addWidget(m_linewebStatus);
+        testRow->addStretch();
+        testCardLayout->addLayout(testRow);
+
+        m_stack->addWidget(pageLayout->parentWidget());
+    }
+
+    // ================= 页面 6：AI 智能 =================
+    {
+        QVBoxLayout *pageLayout = startPage(QString::fromUtf8("AI 智能"));
+
+        QVBoxLayout *configCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("AI 配置"),
+                       this, &configCardLayout, 1);
+
+        m_aiEnabled = new QCheckBox(
+            QString::fromUtf8("启用 AI 报告"), this);
+        m_aiEnabled->setFont(DesignTokens::appFont(13));
+        m_aiEnabled->setToolTip(
+            QString::fromUtf8("开启后主页报告、定时提醒文案与每周周报可使用 AI 生成"));
+        configCardLayout->addWidget(m_aiEnabled);
+
+        const QString aiEndpointTip =
+            QString::fromUtf8("OpenAI 兼容接口地址，例如 https://api.deepseek.com");
+        addFormRow(configCardLayout, QString::fromUtf8("API 地址:"), aiEndpointTip,
+                   m_aiEndpoint = new QLineEdit(this), true, this);
+        m_aiEndpoint->setPlaceholderText(QString::fromUtf8("https://api.deepseek.com"));
+
+        const QString aiKeyTip =
+            QString::fromUtf8("接口访问密钥（Bearer 认证），可通过服务商管理平台获取，点击「显示」可查看明文");
+        auto *aiKeyRow = new QHBoxLayout();
+        aiKeyRow->setSpacing(12);
+        auto *aiKeyLabel = new QLabel(QString::fromUtf8("API Key:"), this);
+        aiKeyLabel->setFont(DesignTokens::appFont(13));
+        aiKeyLabel->setMinimumWidth(160);
+        aiKeyLabel->setToolTip(aiKeyTip);
+        aiKeyRow->addWidget(aiKeyLabel);
+        m_aiApiKey = new QLineEdit(this);
+        m_aiApiKey->setEchoMode(QLineEdit::Password);
+        m_aiApiKey->setPlaceholderText(
+            QString::fromUtf8("可通过管理平台获取，以 Bearer 方式验证"));
+        m_aiApiKey->setToolTip(aiKeyTip);
+        aiKeyRow->addWidget(m_aiApiKey, 1);
+        m_aiApiKeyToggle = new QPushButton(QString::fromUtf8("显示"), this);
+        m_aiApiKeyToggle->setObjectName(QStringLiteral("secondaryBtn"));
+        m_aiApiKeyToggle->setToolTip(
+            QString::fromUtf8("点击显示/隐藏 API Key 明文"));
+        connect(m_aiApiKeyToggle, &QPushButton::clicked, this, [this]() {
+            const bool show = (m_aiApiKey->echoMode() == QLineEdit::Password);
+            m_aiApiKey->setEchoMode(show ? QLineEdit::Normal : QLineEdit::Password);
+            m_aiApiKeyToggle->setText(
+                show ? QString::fromUtf8("隐藏") : QString::fromUtf8("显示"));
+        });
+        aiKeyRow->addWidget(m_aiApiKeyToggle);
+        configCardLayout->addLayout(aiKeyRow);
+
+        const QString modelTip =
+            QString::fromUtf8("使用的模型名，例如 deepseek-chat");
+        addFormRow(configCardLayout, QString::fromUtf8("模型名:"), modelTip,
+                   m_aiModel = new QLineEdit(this), true, this);
+        m_aiModel->setPlaceholderText(QStringLiteral("deepseek-chat"));
+
+        // 测试按钮先创建（稍后加入「连接测试」卡片），用于联动置灰。
+        m_aiTestBtn = new QPushButton(QString::fromUtf8("连接测试"), this);
+        m_aiTestBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        m_aiTestBtn->setToolTip(
+            QString::fromUtf8("用当前配置请求接口的 /models 校验连通性"));
+
+        bindToggle(m_aiEnabled,
+                   {m_aiEndpoint, m_aiApiKey, m_aiApiKeyToggle, m_aiModel,
+                    m_aiTestBtn});
+
+        // ---- 连接测试 ----
+        QVBoxLayout *testCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("连接测试"),
+                       this, &testCardLayout, 0);
+
+        auto *aiTestRow = new QHBoxLayout();
+        aiTestRow->setSpacing(10);
+        connect(m_aiTestBtn, &QPushButton::clicked, this, [this]() {
+            const QString key = m_aiApiKey->text().trimmed();
+            const QString endpoint = m_aiEndpoint->text().trimmed();
+            if (key.isEmpty() || endpoint.isEmpty()) {
+                QMessageBox::warning(this,
+                    QString::fromUtf8("配置不完整"),
+                    QString::fromUtf8("请先填写 API 地址和 API Key"));
+                return;
+            }
+
+            QString base = endpoint;
+            while (base.endsWith(QLatin1Char('/')))
+                base.chop(1);
+            QNetworkRequest req(QUrl(base + "/models"));
+            req.setRawHeader("Authorization", ("Bearer " + key).toUtf8());
+            req.setTransferTimeout(15000);
+
+            auto *nam = new QNetworkAccessManager(this);
+            QNetworkReply *reply = nam->get(req);
+            connect(reply, &QNetworkReply::finished, this, [this, reply, nam]() {
+                reply->deleteLater();
+                nam->deleteLater();
+                if (reply->error() == QNetworkReply::NoError) {
+                    const QJsonObject obj =
+                        QJsonDocument::fromJson(reply->readAll()).object();
+                    QMessageBox::information(this,
+                        QString::fromUtf8("测试成功"),
+                        obj.contains(QStringLiteral("data"))
+                            ? QString::fromUtf8("连接成功！当前服务器可用模型数：%1")
+                                .arg(obj[QStringLiteral("data")].toArray().size())
+                            : QString::fromUtf8("连接成功！"));
+                } else {
+                    QString err = reply->errorString();
+                    const QJsonObject obj =
+                        QJsonDocument::fromJson(reply->readAll()).object();
+                    const QJsonObject errObj =
+                        obj[QStringLiteral("error")].toObject();
+                    if (!errObj.isEmpty() &&
+                        errObj.contains(QStringLiteral("message")))
+                        err = errObj[QStringLiteral("message")].toString();
+                    QMessageBox::warning(this,
+                        QString::fromUtf8("测试失败"),
+                        QString::fromUtf8("连接失败：") + err);
+                }
+            });
+        });
+        aiTestRow->addWidget(m_aiTestBtn);
+        aiTestRow->addStretch();
+        testCardLayout->addLayout(aiTestRow);
+
+        m_stack->addWidget(pageLayout->parentWidget());
+    }
+
+    // ================= 页面 7：关于 =================
+    {
+        QVBoxLayout *pageLayout = startPage(QString::fromUtf8("关于"));
+        pageLayout->addStretch(1);
+
+        auto *iconLabel = new QLabel(this);
+        iconLabel->setPixmap(QIcon(QStringLiteral(":/icon.svg")).pixmap(64, 64));
+        iconLabel->setAlignment(Qt::AlignCenter);
+        iconLabel->setToolTip(QString::fromUtf8("Time Master 应用图标"));
+        pageLayout->addWidget(iconLabel);
+        pageLayout->addSpacing(12);
+
+        auto *appNameLabel = new QLabel(QString::fromUtf8("Time Master"), this);
+        appNameLabel->setObjectName(QStringLiteral("aboutName"));
+        appNameLabel->setFont(DesignTokens::appFont(26, QFont::Bold));
+        appNameLabel->setAlignment(Qt::AlignCenter);
+        pageLayout->addWidget(appNameLabel);
+
+        auto *versionLabel = new QLabel(
+            QString::fromUtf8("v") + QApplication::applicationVersion(), this);
+        versionLabel->setObjectName(QStringLiteral("aboutVersion"));
+        versionLabel->setFont(DesignTokens::appFont(14));
+        versionLabel->setAlignment(Qt::AlignCenter);
+        pageLayout->addWidget(versionLabel);
+        pageLayout->addSpacing(20);
+
+        auto *descLabel = new QLabel(
+            QString::fromUtf8("Windows 桌面时间追踪工具"), this);
+        descLabel->setObjectName(QStringLiteral("aboutDesc"));
+        descLabel->setFont(DesignTokens::appFont(12));
+        descLabel->setAlignment(Qt::AlignCenter);
+        pageLayout->addWidget(descLabel);
+
+        pageLayout->addStretch(1);
+        m_stack->addWidget(pageLayout->parentWidget());
+    }
+
+    contentLayout->addWidget(m_stack, 1);
+
+    // ================= 底部按钮 =================
     auto *btnLayout = new QHBoxLayout();
-    btnLayout->setSpacing(8);
-    btnLayout->addStretch();
+    btnLayout->setSpacing(10);
 
-    auto *cancelBtn = new QPushButton(
-        QString::fromUtf8("\xe5\x8f\x96\xe6\xb6\x88"), this);
-    cancelBtn->setStyleSheet(secondaryButtonStyle());
+    auto *cancelBtn = new QPushButton(QString::fromUtf8("取消"), this);
+    cancelBtn->setObjectName(QStringLiteral("secondaryBtn"));
+    cancelBtn->setToolTip(QString::fromUtf8("放弃本次修改并关闭设置窗口"));
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
+    btnLayout->addStretch();
     btnLayout->addWidget(cancelBtn);
 
-    auto *saveBtn = new QPushButton(
-        QString::fromUtf8("\xe4\xbf\x9d\xe5\xad\x98"), this);
-    saveBtn->setStyleSheet(accentButtonStyle());
+    auto *saveBtn = new QPushButton(QString::fromUtf8("保存"), this);
+    saveBtn->setObjectName(QStringLiteral("accentBtn"));
+    saveBtn->setToolTip(QString::fromUtf8("保存全部设置并立即生效"));
     connect(saveBtn, &QPushButton::clicked, this, [this]() {
         saveSettings();
         emit settingsChanged();
         accept();
     });
     btnLayout->addWidget(saveBtn);
-    mainLayout->addLayout(btnLayout);
+    contentLayout->addLayout(btnLayout);
+
+    rootLayout->addWidget(content, 1);
+
+    // 导航切换：显示对应页面并刷新图标选中色。
+    connect(navGroup, &QButtonGroup::idClicked,
+            this, &SettingsDialog::showPage);
+    m_navButtons.first()->setChecked(true);
+    showPage(0);
 
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, [this](ThemeManager::Theme) {
-        QPalette pal = palette();
-        pal.setColor(QPalette::Window, DesignTokens::kBg());
-        pal.setColor(QPalette::Base, DesignTokens::kSurface());
-        pal.setColor(QPalette::Text, DesignTokens::kTextStrong());
-        pal.setColor(QPalette::WindowText, DesignTokens::kTextStrong());
-        setPalette(pal);
-        m_linewebStatus->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent;")
-                .arg(DesignTokens::kTextMute().name()));
-        m_reminderStatus->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent;")
-                .arg(DesignTokens::kTextMute().name()));
-    });
+            this, [this](ThemeManager::Theme) { applyTheme(); });
 
     // 状态标签每 5 秒重读一次数据库，实时反映推送/拉取/提醒结果。
     m_linewebStatusTimer = new QTimer(this);
@@ -694,6 +964,47 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     m_linewebStatusTimer->start();
 
     loadSettings();
+}
+
+SettingsDialog::~SettingsDialog()
+{
+    // 还原对话框打开前应用级样式表（QToolTip 样式）。
+    if (qApp->styleSheet() != m_prevAppStyleSheet)
+        qApp->setStyleSheet(m_prevAppStyleSheet);
+}
+
+void SettingsDialog::applyTheme()
+{
+    QPalette pal = palette();
+    pal.setColor(QPalette::Window, DesignTokens::kBg());
+    pal.setColor(QPalette::Base, DesignTokens::kSurface());
+    pal.setColor(QPalette::Text, DesignTokens::kTextStrong());
+    pal.setColor(QPalette::WindowText, DesignTokens::kTextStrong());
+    setPalette(pal);
+
+    setStyleSheet(settingsStyle());
+
+    // 刷新侧边栏图标颜色（选中态主题色、未选中态次要文字色）。
+    for (int i = 0; i < m_navButtons.size(); ++i) {
+        if (i < kNavDefs.size()) {
+            m_navButtons[i]->setIcon(
+                SettingsIcons::navIcon(kNavDefs[i].kind, m_navButtons[i]->isChecked()));
+        }
+    }
+}
+
+void SettingsDialog::showPage(int index)
+{
+    if (m_stack)
+        m_stack->setCurrentIndex(index);
+    for (int i = 0; i < m_navButtons.size(); ++i) {
+        const bool selected = (i == index);
+        m_navButtons[i]->setChecked(selected);
+        if (i < kNavDefs.size()) {
+            m_navButtons[i]->setIcon(
+                SettingsIcons::navIcon(kNavDefs[i].kind, selected));
+        }
+    }
 }
 
 void SettingsDialog::loadSettings()
@@ -764,7 +1075,7 @@ void SettingsDialog::updateCloudStatus()
     else if (!lastFetch.isEmpty())
         m_linewebStatus->setText(lastFetch);
     else
-        m_linewebStatus->setText(QString::fromUtf8("\xe5\xb0\x9a\xe6\x9c\xaa\xe5\x90\x8c\xe6\xad\xa5"));
+        m_linewebStatus->setText(QString::fromUtf8("尚未同步"));
 }
 
 void SettingsDialog::updateReminderStatus()
@@ -772,11 +1083,10 @@ void SettingsDialog::updateReminderStatus()
     const QString lastFired = m_db->getSetting("reminder_last_fired", "");
     if (lastFired.isEmpty())
         m_reminderStatus->setText(
-            QString::fromUtf8("\xe2\x9a\x99 \xe5\xb0\x9a\xe6\x9c\xaa\xe8\xa7\xa6\xe5\x8f\x91\xe8\xbf\x87\xe6\x8f\x90\xe9\x86\x92\xef\xbc\x8c"
-                              "\xe8\xaf\xb7\xe7\xa1\xae\xe8\xae\xa4\xe5\xb7\xb2\xe5\x90\xaf\xe7\x94\xa8\xe5\xb9\xb6\xe6\xb7\xbb\xe5\x8a\xa0\xe6\x97\xb6\xe9\x97\xb4\xe7\x82\xb9"));
+            QString::fromUtf8("⚙ 尚未触发过提醒，请确认已启用并添加时间点"));
     else
         m_reminderStatus->setText(
-            QString::fromUtf8("\xe2\x8f\xb3 \xe6\x9c\x80\xe8\xbf\x91\xe8\xa7\xa6\xe5\x8f\x91\xef\xbc\x9a") + lastFired);
+            QString::fromUtf8("⏳ 最近触发：") + lastFired);
 }
 
 void SettingsDialog::fetchGoalFromCloud(const QString &endpoint, const QString &token)
@@ -801,8 +1111,8 @@ void SettingsDialog::fetchGoalFromCloud(const QString &endpoint, const QString &
         m_db->setSetting("daily_goal", QString::number(goal));
         m_dailyGoal->setValue(goal / 3600);
         QMessageBox::information(this,
-            QString::fromUtf8("\xe4\xba\x91\xe7\xab\xaf\xe7\x9b\xae\xe6\xa0\x87\xe5\xb7\xb2\xe5\x90\x8c\xe6\xad\xa5"),
-            QString::fromUtf8("\xe5\xb7\xb2\xe5\x90\x8c\xe6\xad\xa5\xe4\xba\x91\xe7\xab\xaf\xe7\x9b\xae\xe6\xa0\x87\xef\xbc\x9a%1h")
+            QString::fromUtf8("云端目标已同步"),
+            QString::fromUtf8("已同步云端目标：%1h")
                 .arg(goal / 3600));
     });
 }
@@ -942,8 +1252,8 @@ void SettingsDialog::onRemoveIgnored()
     QListWidgetItem *item = m_ignoredAppsList->currentItem();
     if (!item) {
         QMessageBox::warning(this,
-            QString::fromUtf8("\xe6\xb2\xa1\xe6\x9c\x89\xe9\x80\x89\xe6\x8b\xa9"),
-            QString::fromUtf8("\xe8\xaf\xb7\xe5\x85\x88\xe9\x80\x89\xe6\x8b\xa9\xe8\xa6\x81\xe7\xa7\xbb\xe9\x99\xa4\xe7\x9a\x84\xe5\xba\x94\xe7\x94\xa8"));
+            QString::fromUtf8("没有选择"),
+            QString::fromUtf8("请先选择要移除的应用"));
         return;
     }
     m_db->removeIgnoredApp(item->data(Qt::UserRole).toInt());
@@ -955,14 +1265,14 @@ void SettingsDialog::onAddAlias()
 {
     bool ok = false;
     QString processName = QInputDialog::getText(this,
-        QString::fromUtf8("\xe6\xb7\xbb\xe5\x8a\xa0\xe5\x88\xab\xe5\x90\x8d"),
-        QString::fromUtf8("\xe8\xbf\x9b\xe7\xa8\x8b\xe5\x90\x8d (e.g. code.exe):"),
+        QString::fromUtf8("添加别名"),
+        QString::fromUtf8("进程名 (e.g. code.exe):"),
         QLineEdit::Normal, QString(), &ok);
     if (!ok || processName.isEmpty()) return;
 
     QString displayName = QInputDialog::getText(this,
-        QString::fromUtf8("\xe6\xb7\xbb\xe5\x8a\xa0\xe5\x88\xab\xe5\x90\x8d"),
-        QString::fromUtf8("\xe6\x98\xbe\xe7\xa4\xba\xe5\x90\x8d:"),
+        QString::fromUtf8("添加别名"),
+        QString::fromUtf8("显示名:"),
         QLineEdit::Normal, QString(), &ok);
     if (!ok || displayName.isEmpty()) return;
 
@@ -975,8 +1285,8 @@ void SettingsDialog::onEditAlias()
     const int row = m_aliasTable->currentRow();
     if (row < 0) {
         QMessageBox::warning(this,
-            QString::fromUtf8("\xe6\xb2\xa1\xe6\x9c\x89\xe9\x80\x89\xe6\x8b\xa9"),
-            QString::fromUtf8("\xe8\xaf\xb7\xe5\x85\x88\xe9\x80\x89\xe6\x8b\xa9\xe8\xa6\x81\xe7\xbc\x96\xe8\xbe\x91\xe7\x9a\x84\xe5\x88\xab\xe5\x90\x8d"));
+            QString::fromUtf8("没有选择"),
+            QString::fromUtf8("请先选择要编辑的别名"));
         return;
     }
     const QString processName = m_aliasTable->item(row, 0)->text();
@@ -984,8 +1294,8 @@ void SettingsDialog::onEditAlias()
 
     bool ok = false;
     QString newDisplay = QInputDialog::getText(this,
-        QString::fromUtf8("\xe7\xbc\x96\xe8\xbe\x91\xe5\x88\xab\xe5\x90\x8d"),
-        QString::fromUtf8("\xe6\x98\xbe\xe7\xa4\xba\xe5\x90\x8d:"),
+        QString::fromUtf8("编辑别名"),
+        QString::fromUtf8("显示名:"),
         QLineEdit::Normal, currentDisplay, &ok);
     if (!ok || newDisplay.isEmpty()) return;
 
@@ -998,8 +1308,8 @@ void SettingsDialog::onDeleteAlias()
     const int row = m_aliasTable->currentRow();
     if (row < 0) {
         QMessageBox::warning(this,
-            QString::fromUtf8("\xe6\xb2\xa1\xe6\x9c\x89\xe9\x80\x89\xe6\x8b\xa9"),
-            QString::fromUtf8("\xe8\xaf\xb7\xe5\x85\x88\xe9\x80\x89\xe6\x8b\xa9\xe8\xa6\x81\xe5\x88\xa0\xe9\x99\xa4\xe7\x9a\x84\xe5\x88\xab\xe5\x90\x8d"));
+            QString::fromUtf8("没有选择"),
+            QString::fromUtf8("请先选择要删除的别名"));
         return;
     }
     m_db->removeAppAliasByProcessName(m_aliasTable->item(row, 0)->text());

@@ -175,6 +175,120 @@ void test_ai_failure_falls_back_to_local()
     std::cout << "test_ai_failure_falls_back_to_local PASS" << std::endl;
 }
 
+// 防回归：错过配置时刻（如程序启动较晚）后，checkNow 在配置日当天仍应补生成一次。
+void test_check_now_catches_up_after_deadline()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    seedLastWeekSession(db);
+    db.setSetting("weekly_report_enabled", "true");
+    db.setSetting("weekly_report_time", "09:00");
+    setReportDayToToday(db);
+
+    QTemporaryDir outDir;
+    assert(outDir.isValid());
+
+    AiClient ai(&db); // 未启用 AI → 本地小结
+    WeeklyReportManager weekly(&db, &ai);
+    weekly.setOutputDir(outDir.path());
+    weekly.reloadSettings();
+    QSignalSpy readySpy(&weekly, &WeeklyReportManager::weeklyReportReady);
+
+    // 已过配置时刻：仍应补生成。
+    weekly.checkNow(QTime(10, 0));
+    assert(readySpy.count() == 1);
+
+    // 更晚的时刻再次命中：去重键保证不重复生成。
+    readySpy.clear();
+    weekly.checkNow(QTime(23, 30));
+    assert(readySpy.count() == 0);
+    std::cout << "test_check_now_catches_up_after_deadline PASS" << std::endl;
+}
+
+// 手动生成：generateNow 应直接生成并触发 weeklyReportReady，不受开关限制。
+void test_generate_now_manual()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    seedLastWeekSession(db);
+    db.setSetting("weekly_report_enabled", "false"); // 开关关闭也应能手动生成
+
+    QTemporaryDir outDir;
+    assert(outDir.isValid());
+
+    AiClient ai(&db);
+    WeeklyReportManager weekly(&db, &ai);
+    weekly.setOutputDir(outDir.path());
+    weekly.reloadSettings();
+    QSignalSpy readySpy(&weekly, &WeeklyReportManager::weeklyReportReady);
+
+    assert(weekly.generateNow());
+    assert(readySpy.count() == 1);
+    const QString htmlPath = readySpy.first().at(0).toString();
+    assert(QFile::exists(htmlPath));
+    std::cout << "test_generate_now_manual PASS" << std::endl;
+}
+
+// 手动生成：上周无数据时返回 false，不触发 ready。
+void test_generate_now_no_data()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path); // 空数据库：上周无数据
+    AiClient ai(&db);
+    WeeklyReportManager weekly(&db, &ai);
+    weekly.reloadSettings();
+    QSignalSpy readySpy(&weekly, &WeeklyReportManager::weeklyReportReady);
+
+    assert(!weekly.generateNow());
+    assert(readySpy.count() == 0);
+    std::cout << "test_generate_now_no_data PASS" << std::endl;
+}
+
+// 手动生成：同周已生成过后再次 generateNow 返回 true（打开已有文件）且不重复写。
+void test_generate_now_already_generated()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    seedLastWeekSession(db);
+    db.setSetting("weekly_report_enabled", "true");
+    setReportDayToToday(db);
+
+    QTemporaryDir outDir;
+    assert(outDir.isValid());
+
+    AiClient ai(&db);
+    WeeklyReportManager weekly(&db, &ai);
+    weekly.setOutputDir(outDir.path());
+    weekly.reloadSettings();
+    QSignalSpy readySpy(&weekly, &WeeklyReportManager::weeklyReportReady);
+
+    weekly.checkNow(QTime(9, 0)); // 先自动生成一次
+    assert(readySpy.count() == 1);
+    const QString firstPath = readySpy.first().at(0).toString();
+
+    readySpy.clear();
+    assert(weekly.generateNow()); // 已生成过 → 打开已有文件
+    assert(readySpy.count() == 1);
+    assert(readySpy.first().at(0).toString() == firstPath);
+    std::cout << "test_generate_now_already_generated PASS" << std::endl;
+}
+
 // 防回归：start() 必须启动 30 秒轮询定时器（曾与提醒调度器同因漏掉
 // m_timer->start() 而只在启动瞬间检查一次）。
 void test_start_activates_timer()
@@ -206,6 +320,10 @@ int main(int argc, char *argv[])
     test_no_data_no_report();
     test_generates_html_once();
     test_ai_failure_falls_back_to_local();
+    test_check_now_catches_up_after_deadline();
+    test_generate_now_manual();
+    test_generate_now_no_data();
+    test_generate_now_already_generated();
     std::cout << "All weekly report tests passed!" << std::endl;
     return 0;
 }

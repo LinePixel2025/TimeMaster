@@ -135,9 +135,30 @@ void WeeklyReportManager::checkNow(const QTime &now)
     const QDate today = QDate::currentDate();
     if (today.dayOfWeek() != m_day)
         return;
-    if (current.toString(QStringLiteral("HH:mm")) != m_time)
+    // 未到配置时刻不触发；已到或已过（含程序启动晚于时刻）则补生成，
+    // 幂等由 generateWeekReport 的去重键保证，同周只生成一次。
+    const QTime configured = QTime::fromString(m_time, QStringLiteral("HH:mm"));
+    if (configured.isValid() && current < configured)
         return;
     generateWeekReport();
+}
+
+bool WeeklyReportManager::generateNow()
+{
+    if (generateWeekReport())
+        return true;
+
+    // 同周已生成过（去重键命中）→ 打开已有文件。
+    const QDate today = QDate::currentDate();
+    const QDate monday = today.addDays(-((today.dayOfWeek() - 1) % 7) - 7);
+    if (m_lastGenerated == monday.toString(Qt::ISODate)) {
+        const QString path = filePathFor(monday);
+        if (QFile::exists(path)) {
+            emit weeklyReportReady(path);
+            return true;
+        }
+    }
+    return false;
 }
 
 bool WeeklyReportManager::generateWeekReport()

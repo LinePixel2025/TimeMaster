@@ -15,6 +15,7 @@ set(SOURCES
     ui/rank_card.cpp
     ui/compare_card.cpp
     ui/ai_report_card.cpp
+    ui/report_detail_dialog.cpp
     export/exporter.cpp
     export/xlsx_writer.cpp
     utility/autostart_helper.cpp
@@ -33,6 +34,7 @@ set(HEADERS
     ai/ai_client.h
     ui/main_window.h
     ui/settings_dialog.h
+    ui/settings_icons.h
     ui/theme_manager.h
     ui/tray_manager.h
     ui/design_tokens.h
@@ -43,6 +45,7 @@ set(HEADERS
     ui/rank_card.h
     ui/compare_card.h
     ui/ai_report_card.h
+    ui/report_detail_dialog.h
     export/exporter.h
     export/xlsx_writer.h
     utility/autostart_helper.h

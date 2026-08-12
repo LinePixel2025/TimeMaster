@@ -2,13 +2,17 @@
 #include "database/database_manager.h"
 
 #include <QDate>
+#include <QDateTime>
 #include <QDebug>
+#include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMap>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QStandardPaths>
 #include <QUrl>
 #include <QVector>
 #include <QtGlobal>
@@ -138,11 +142,14 @@ QString AiClient::buildPrompt(const QString &period) const
                "生成一份%1屏幕使用报告。\n\n"
                "统计数据：\n%2\n"
                "输出要求：\n"
-               "1. 使用 Markdown 格式，包含「## 概览」「## 应用分析」「## 建议」三个小节；\n"
-               "2. 报告总字数控制在 300-500 字；\n"
-               "3. 基于数据给出 2-3 条具体、可执行的建议（如时间分配、休息提醒、"
+               "1. 第一行输出「【总结】」开头的一句话总结，不超过 8 个字"
+               "（如「【总结】整体健康，晚间偏多」）；\n"
+               "2. 之后使用 Markdown 格式，包含「## 概览」「## 应用分析」「## 建议」"
+               "三个小节；\n"
+               "3. 报告总字数控制在 300-500 字；\n"
+               "4. 基于数据给出 2-3 条具体、可执行的建议（如时间分配、休息提醒、"
                "减少某应用的使用时间等）；\n"
-               "4. 语气客观友好，直接输出报告正文，不要额外解释。")
+               "5. 语气客观友好，直接输出报告正文，不要额外解释。")
         .arg(rangeLabel, stats);
 }
 
@@ -236,7 +243,8 @@ void AiClient::sendChat(const QString &period, const QString &prompt)
     QNetworkRequest req(QUrl(endpoint + QStringLiteral("/chat/completions")));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setRawHeader("Authorization", ("Bearer " + m_apiKey).toUtf8());
-    req.setTransferTimeout(30000);
+    // 300-500 字长报告在 API 高峰时可能超过 30s，给足 90s 避免误判失败。
+    req.setTransferTimeout(90000);
 
     QNetworkReply *reply = m_nam->post(req, QJsonDocument(body).toJson());
     connect(reply, &QNetworkReply::finished, this, [this, reply, period]() {
@@ -266,6 +274,7 @@ void AiClient::sendChat(const QString &period, const QString &prompt)
                 errObj.contains(QStringLiteral("message")))
                 err = errObj[QStringLiteral("message")].toString();
             qWarning() << "[AI] 报告生成失败:" << period << err;
+            appendErrorLog(period, err); // 供排查「一直失败」
             emit reportFailed(period, err);
         }
         reply->deleteLater();
@@ -405,7 +414,8 @@ void AiClient::sendWeekChat(const QString &tag, const QString &prompt)
     QNetworkRequest req(QUrl(endpoint + QStringLiteral("/chat/completions")));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setRawHeader("Authorization", ("Bearer " + m_apiKey).toUtf8());
-    req.setTransferTimeout(30000);
+    // 周报分析同为长文本生成，与每日报告一致放宽超时。
+    req.setTransferTimeout(90000);
 
     QNetworkReply *reply = m_nam->post(req, QJsonDocument(body).toJson());
     connect(reply, &QNetworkReply::finished, this, [this, reply, tag]() {
@@ -481,4 +491,19 @@ QString AiClient::formatDuration(int seconds)
     if (minutes == 0)
         return QStringLiteral("%1小时").arg(hours);
     return QStringLiteral("%1小时%2分钟").arg(hours).arg(minutes);
+}
+
+void AiClient::appendErrorLog(const QString &period, const QString &error)
+{
+    const QString dir = QStandardPaths::writableLocation(
+        QStandardPaths::AppDataLocation);
+    QDir().mkpath(dir);
+    QFile file(dir + QStringLiteral("/ai_error.log"));
+    if (!file.open(QIODevice::Append | QIODevice::WriteOnly))
+        return;
+    file.write(QStringLiteral("[%1] [%2] %3\n")
+                   .arg(QDateTime::currentDateTime().toString(
+                            QStringLiteral("yyyy-MM-dd HH:mm:ss")),
+                        period, error)
+                   .toUtf8());
 }

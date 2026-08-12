@@ -2,6 +2,7 @@
 #include "database/database_manager.h"
 #include "ai/ai_client.h"
 #include "ui/settings_dialog.h"
+#include "ui/settings_icons.h"
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
 #include "ui/hero_card.h"
@@ -104,9 +105,11 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     });
     headerLayout->addWidget(m_themeBtn);
 
-    m_settingsBtn = new QPushButton(QString::fromUtf8("\xe2\x9a\x99"), central);
+    m_settingsBtn = new QPushButton(central);
     m_settingsBtn->setFixedSize(36, 36);
-    m_settingsBtn->setToolTip(QString::fromUtf8("\xe8\xae\xbe\xe7\xbd\xae"));
+    m_settingsBtn->setIcon(SettingsIcons::icon(SettingsIcons::Gear, 18));
+    m_settingsBtn->setIconSize(QSize(18, 18));
+    m_settingsBtn->setToolTip(QString::fromUtf8("设置"));
     connect(m_settingsBtn, &QPushButton::clicked, this, &MainWindow::onSettings);
     headerLayout->addWidget(m_settingsBtn);
 
@@ -152,10 +155,13 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
 
     layout->addLayout(grid, 1);
 
-    connect(m_aiCard, &AiReportCard::generateRequested,
-            this, &MainWindow::aiReportRequested);
+    connect(m_aiCard, &AiReportCard::generateRequested, this, [this]() {
+        emit aiReportRequested(AiPeriod::daily());
+    });
     connect(m_aiCard, &AiReportCard::weeklyReportOpenRequested,
             this, &MainWindow::weeklyReportOpenRequested);
+    connect(m_aiCard, &AiReportCard::weeklyReportGenerateRequested,
+            this, &MainWindow::weeklyReportGenerateRequested);
     // 设置保存后重读 AI 配置与缓存（与 settingsChanged 的 main 端接线配合）。
     connect(this, &MainWindow::settingsChanged, this, [this]() {
         m_aiCard->reloadState();
@@ -220,6 +226,8 @@ void MainWindow::applyTheme()
              DesignTokens::kAccent().name());
     m_themeBtn->setStyleSheet(iconStyle);
     m_settingsBtn->setStyleSheet(iconStyle);
+    m_settingsBtn->setIcon(SettingsIcons::icon(
+        SettingsIcons::Gear, 18, DesignTokens::kTextMute()));
 
     const QString secondaryStyle = QString(
         "QPushButton { background: %1; color: %2; border: 1px solid %3;"
@@ -261,14 +269,14 @@ void MainWindow::refreshData()
     m_compareCard->setData(todayTotal, yesterdayTotal);
 }
 
-void MainWindow::onAiReportReady(const QString &period, const QString &text)
+void MainWindow::onAiReportReady(const QString &, const QString &text)
 {
-    m_aiCard->setReport(period, text);
+    m_aiCard->setReport(text);
 }
 
-void MainWindow::onAiReportFailed(const QString &period, const QString &error)
+void MainWindow::onAiReportFailed(const QString &, const QString &error)
 {
-    m_aiCard->showError(period, error);
+    m_aiCard->showError(error);
 }
 
 void MainWindow::onWeeklyReportReady(const QString &path)

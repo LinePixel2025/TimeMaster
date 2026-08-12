@@ -32,7 +32,9 @@ public:
     explicit TrendChartArea(QWidget *parent = nullptr)
         : QWidget(parent)
     {
-        setMinimumHeight(150);
+        // 允许图表区收缩：最小窗口（980x780）下卡片高度受限，过大的 minimum
+        // 会让图表底边溢出卡片边框（日标签被遮挡）。绘制由 chartH<60 兜底。
+        setMinimumHeight(96);
         connect(ThemeManager::instance(), &ThemeManager::themeChanged,
                 this, [this](ThemeManager::Theme) { update(); });
     }

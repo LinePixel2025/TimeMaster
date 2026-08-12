@@ -74,6 +74,8 @@ private:
     void saveCache(const QString &period, const QString &text);
     bool hasDataForPeriod(const QString &period) const;
     static QString formatDuration(int seconds);
+    /// 追加 AI 请求失败日志到 AppData 目录的 ai_error.log，便于排查反复失败。
+    void appendErrorLog(const QString &period, const QString &error);
 
     DatabaseManager *m_db;
     QNetworkAccessManager *m_nam = nullptr;

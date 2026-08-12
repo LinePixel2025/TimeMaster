@@ -36,6 +36,8 @@ signals:
     void aiReportRequested(const QString &period);
     /// 用户在 AI 报告卡片点击「上周周报」，携带 HTML 绝对路径。
     void weeklyReportOpenRequested(const QString &path);
+    /// 用户在 AI 报告卡片点击「立即生成上周周报」，请求手动生成。
+    void weeklyReportGenerateRequested();
 
 protected:
     void showEvent(QShowEvent *event) override;

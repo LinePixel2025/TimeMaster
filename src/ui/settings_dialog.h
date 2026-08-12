@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QDialog>
-#include <QTabWidget>
+#include <QStackedWidget>
 #include <QListWidget>
 #include <QTableWidget>
 #include <QCheckBox>
@@ -20,6 +20,7 @@ class SettingsDialog : public QDialog
     Q_OBJECT
 public:
     explicit SettingsDialog(DatabaseManager *db, QWidget *parent = nullptr);
+    ~SettingsDialog() override;
 
 signals:
     void settingsChanged();
@@ -34,6 +35,8 @@ private slots:
     void filterIgnoredApps(const QString &text);
 
 private:
+    void applyTheme();
+    void showPage(int index);
     void loadSettings();
     void saveSettings();
     void updateCloudStatus();
@@ -45,7 +48,9 @@ private:
 
     DatabaseManager *m_db;
 
-    QTabWidget *m_tabWidget = nullptr;
+    QStackedWidget *m_stack = nullptr;
+    QList<QPushButton *> m_navButtons;
+    QString m_prevAppStyleSheet;
     QListWidget *m_knownAppsList = nullptr;
     QListWidget *m_ignoredAppsList = nullptr;
     QTableWidget *m_aliasTable = nullptr;
