@@ -35,7 +35,23 @@ inline QColor kChartGradientBottom() { return isDarkTheme() ? QColor("#15977B") 
 inline QColor kChartAreaTop()        { return isDarkTheme() ? QColor(77,214,176,45) : QColor(53,185,154,55); }
 inline QColor kChartAreaBottom()     { return isDarkTheme() ? QColor(77,214,176,0) : QColor(53,185,154,0); }
 inline QColor kTodayGlow()           { return isDarkTheme() ? QColor(77,214,176,45) : QColor(8,127,107,35); }
-inline QColor kHeatEmpty()           { return isDarkTheme() ? QColor("#2E3A37") : QColor("#E4ECE9"); }
+/// 热力图色阶：level 0（空）→ 4（最强），明暗两套各 5 档离散色，参考 GitHub 贡献图。
+inline QColor heatLevel(int level)
+{
+    level = qBound(0, level, 4);
+    if (isDarkTheme()) {
+        static const QColor levels[5] = {
+            QColor("#2E3A37"), QColor("#1B4A3E"), QColor("#0F6B56"),
+            QColor("#15977B"), QColor("#4DD6B0")
+        };
+        return levels[level];
+    }
+    static const QColor levels[5] = {
+        QColor("#E4ECE9"), QColor("#CDE9E0"), QColor("#7FD4BE"),
+        QColor("#35B99A"), QColor("#087F6B")
+    };
+    return levels[level];
+}
 inline QColor kTodayDotBg()          { return kSurface(); }
 inline QColor kProgressBg()          { return isDarkTheme() ? QColor("#3A4542") : QColor("#E2EAE7"); }
 inline QColor kCompareTodayBg()      { return isDarkTheme() ? QColor("#193B33") : QColor("#E8F5F1"); }

@@ -1,5 +1,5 @@
 #define AppName "Time Master"
-#define AppVersion "5.1.0"
+#define AppVersion "5.2.0"
 #define AppPublisher "TimeMaster"
 #define AppURL "https://github.com/LinePixel2025/TimeMaster"
 #define AppExeName "TimeMaster.exe"
