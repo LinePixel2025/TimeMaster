@@ -340,6 +340,34 @@ QVector<QVariantMap> DatabaseManager::getWeekSummary()
     return results;
 }
 
+QVector<QVariantMap> DatabaseManager::getMonthSummary()
+{
+    int threshold = getSetting("min_record_threshold", "40").toInt();
+    QMutexLocker lock(&m_mutex);
+    QDate today = QDate::currentDate();
+    QDate monthStart(today.year(), today.month(), 1);
+
+    QSqlQuery q(m_db);
+    q.prepare("SELECT date(start_time) as d, SUM(duration_seconds) as total_seconds "
+              "FROM sessions WHERE date(start_time) >= ? AND date(start_time) <= ? "
+              "AND duration_seconds >= ? "
+              "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
+              "WHERE sessions.process_key = ia.process_name) "
+              "GROUP BY date(start_time) ORDER BY d ASC");
+    q.addBindValue(monthStart.toString(Qt::ISODate));
+    q.addBindValue(today.toString(Qt::ISODate));
+    q.addBindValue(threshold);
+    q.exec();
+    QVector<QVariantMap> results;
+    while (q.next()) {
+        QVariantMap row;
+        row["d"] = q.value("d");
+        row["total_seconds"] = q.value("total_seconds");
+        results.append(row);
+    }
+    return results;
+}
+
 QVector<QVariantMap> DatabaseManager::getAppRank(const QDate &targetDate)
 {
     int threshold = getSetting("min_record_threshold", "40").toInt();

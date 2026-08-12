@@ -35,6 +35,7 @@ inline QColor kChartGradientBottom() { return isDarkTheme() ? QColor("#15977B") 
 inline QColor kChartAreaTop()        { return isDarkTheme() ? QColor(77,214,176,45) : QColor(53,185,154,55); }
 inline QColor kChartAreaBottom()     { return isDarkTheme() ? QColor(77,214,176,0) : QColor(53,185,154,0); }
 inline QColor kTodayGlow()           { return isDarkTheme() ? QColor(77,214,176,45) : QColor(8,127,107,35); }
+inline QColor kHeatEmpty()           { return isDarkTheme() ? QColor("#2E3A37") : QColor("#E4ECE9"); }
 inline QColor kTodayDotBg()          { return kSurface(); }
 inline QColor kProgressBg()          { return isDarkTheme() ? QColor("#3A4542") : QColor("#E2EAE7"); }
 inline QColor kCompareTodayBg()      { return isDarkTheme() ? QColor("#193B33") : QColor("#E8F5F1"); }

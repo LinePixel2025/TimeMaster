@@ -61,6 +61,7 @@ private:
     QSpinBox *m_minRecordThreshold = nullptr;
     QCheckBox *m_autoStart = nullptr;
     QCheckBox *m_darkMode = nullptr;
+    QComboBox *m_trendFormat = nullptr;
     QSpinBox *m_dailyGoal = nullptr;
     QLineEdit *m_knownSearch = nullptr;
     QLineEdit *m_ignoredSearch = nullptr;

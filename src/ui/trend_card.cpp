@@ -25,6 +25,17 @@ QDate currentMonday()
     return today.addDays(-today.dayOfWeek() + 1);
 }
 
+/// 在两个颜色之间线性插值，t 归一到 [0,1]。
+static QColor lerpColor(const QColor &a, const QColor &b, double t)
+{
+    t = qBound(0.0, t, 1.0);
+    return QColor(
+        static_cast<int>(a.red() + (b.red() - a.red()) * t),
+        static_cast<int>(a.green() + (b.green() - a.green()) * t),
+        static_cast<int>(a.blue() + (b.blue() - a.blue()) * t),
+        static_cast<int>(a.alpha() + (b.alpha() - a.alpha()) * t));
+}
+
 /// Chart surface that fills its widget and owns the data.
 class TrendChartArea : public QWidget
 {
@@ -41,24 +52,36 @@ public:
 
     void setData(const QVector<QVariantMap> &weekData)
     {
-        QDate monday = currentMonday();
-        m_data.clear();
-        m_maxVal = 1;
-
+        const QDate monday = currentMonday();
+        m_weekData.clear();
         for (int i = 0; i < 7; ++i)
-            m_data[monday.addDays(i).toString(Qt::ISODate)] = 0;
+            m_weekData[monday.addDays(i).toString(Qt::ISODate)] = 0;
 
         for (const auto &item : weekData) {
             const QString d = item[QStringLiteral("d")].toString();
-            if (m_data.contains(d))
-                m_data[d] = item[QStringLiteral("total_seconds")].toInt();
+            if (m_weekData.contains(d))
+                m_weekData[d] = item[QStringLiteral("total_seconds")].toInt();
         }
 
-        for (auto it = m_data.begin(); it != m_data.end(); ++it)
-            m_maxVal = qMax(m_maxVal, it.value());
+        if (m_period == QLatin1String("week"))
+            rebuildActive();
+    }
 
-        if (m_maxVal == 0) m_maxVal = 1;
-        update();
+    void setMonthData(const QVector<QVariantMap> &monthData)
+    {
+        const QDate today = QDate::currentDate();
+        m_monthData.clear();
+        for (int d = 1; d <= today.daysInMonth(); ++d)
+            m_monthData[QDate(today.year(), today.month(), d).toString(Qt::ISODate)] = 0;
+
+        for (const auto &item : monthData) {
+            const QString d = item[QStringLiteral("d")].toString();
+            if (m_monthData.contains(d))
+                m_monthData[d] = item[QStringLiteral("total_seconds")].toInt();
+        }
+
+        if (m_period == QLatin1String("month"))
+            rebuildActive();
     }
 
     void setType(const QString &type)
@@ -67,12 +90,29 @@ public:
         update();
     }
 
+    void setFormat(const QString &format)
+    {
+        m_format = format;
+        update();
+    }
+
+    void setPeriod(const QString &period)
+    {
+        m_period = period;
+        rebuildActive();
+    }
+
 protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setRenderHint(QPainter::TextAntialiasing);
+
+        if (m_format == QLatin1String("heatmap")) {
+            paintHeatmap(painter);
+            return;
+        }
 
         const double pw = width();
         const double ph = height();
@@ -205,9 +245,110 @@ protected:
     }
 
 private:
+    void rebuildActive()
+    {
+        m_data = (m_period == QLatin1String("month")) ? m_monthData : m_weekData;
+        m_maxVal = 1;
+        for (auto it = m_data.begin(); it != m_data.end(); ++it)
+            m_maxVal = qMax(m_maxVal, it.value());
+        if (m_maxVal == 0) m_maxVal = 1;
+        update();
+    }
+
+    /// 热力图：周模式为单行 7 格，月模式为当月日历网格（周一开头，空位留白）。
+    void paintHeatmap(QPainter &painter)
+    {
+        const double pw = width();
+        const double ph = height();
+        const double leftInset = 16;
+        const double rightInset = 16;
+        const double top = 20;   // 表头高度
+        const double gap = 3.0;
+
+        const double gridW = pw - leftInset - rightInset;
+        const double colW = gridW / 7.0;
+
+        // 表头：周一~周日
+        painter.setFont(DesignTokens::appFont(10, QFont::Medium));
+        painter.setPen(DesignTokens::kTextMute());
+        for (int i = 0; i < 7; ++i) {
+            painter.drawText(QRectF(leftInset + i * colW, 0, colW, top),
+                             Qt::AlignCenter, kDayCn[i]);
+        }
+
+        // 组装网格单元（无效日期表示留白占位）
+        QVector<QDate> cells;
+        if (m_period == QLatin1String("month")) {
+            const QDate today = QDate::currentDate();
+            const QDate start(today.year(), today.month(), 1);
+            const int leading = start.dayOfWeek() - 1; // 1=周一 → 0
+            for (int i = 0; i < leading; ++i) cells.append(QDate());
+            for (int d = 1; d <= today.daysInMonth(); ++d)
+                cells.append(QDate(today.year(), today.month(), d));
+        } else {
+            const QDate monday = currentMonday();
+            for (int i = 0; i < 7; ++i) cells.append(monday.addDays(i));
+        }
+
+        const int rows = (cells.size() + 6) / 7;
+        const double availH = ph - top;
+        double cellH = (availH - (rows - 1) * gap) / rows;
+        cellH = qMin(cellH, colW * 0.8);
+        if (cellH < 8) return;
+
+        const double gridH = rows * cellH + (rows - 1) * gap;
+        const double y0 = top + qMax(0.0, (availH - gridH) / 2.0);
+
+        const QString todayKey = QDate::currentDate().toString(Qt::ISODate);
+
+        for (int idx = 0; idx < cells.size(); ++idx) {
+            const QDate d = cells[idx];
+            if (!d.isValid()) continue;
+
+            const int col = idx % 7;
+            const int row = idx / 7;
+            const QString key = d.toString(Qt::ISODate);
+            const int val = m_data.value(key, 0);
+            const bool isToday = (key == todayKey);
+
+            const double x = leftInset + col * colW;
+            const double y = y0 + row * (cellH + gap);
+            const QRectF cell(x, y, colW - gap, cellH);
+
+            QColor fill;
+            if (val > 0) {
+                const double t = static_cast<double>(val) / m_maxVal;
+                fill = lerpColor(DesignTokens::kAccentLight(),
+                                 DesignTokens::kAccent(), t);
+            } else {
+                fill = DesignTokens::kHeatEmpty();
+            }
+
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(fill);
+            painter.drawRoundedRect(cell, 4, 4);
+
+            if (isToday) {
+                painter.setBrush(Qt::NoBrush);
+                painter.setPen(QPen(DesignTokens::kAccent(), 1.5));
+                painter.drawRoundedRect(cell, 4, 4);
+            }
+
+            const bool lightFill = fill.lightness() > 150;
+            painter.setPen(lightFill ? DesignTokens::kTextStrong() : QColor("#FFFFFF"));
+            painter.setFont(DesignTokens::appFont(
+                9, isToday ? QFont::Bold : QFont::Normal));
+            painter.drawText(cell, Qt::AlignCenter, QString::number(d.day()));
+        }
+    }
+
+    QMap<QString, int> m_weekData;
+    QMap<QString, int> m_monthData;
     QMap<QString, int> m_data;
     int m_maxVal = 1;
     QString m_type = QStringLiteral("bar");
+    QString m_format = QStringLiteral("normal");
+    QString m_period = QStringLiteral("week");
 };
 
 TrendCard::TrendCard(QWidget *parent)
@@ -219,12 +360,16 @@ TrendCard::TrendCard(QWidget *parent)
 
     m_barBtn = new QPushButton(QString::fromUtf8("\xe6\x9f\xb1\xe7\x8a\xb6"), this);
     m_lineBtn = new QPushButton(QString::fromUtf8("\xe6\x8a\x98\xe7\xba\xbf"), this);
-    for (QPushButton *btn : {m_barBtn, m_lineBtn}) {
+    m_weekBtn = new QPushButton(QString::fromUtf8("\xe5\x91\xa8"), this);
+    m_monthBtn = new QPushButton(QString::fromUtf8("\xe6\x9c\x88"), this);
+    for (QPushButton *btn : {m_barBtn, m_lineBtn, m_weekBtn, m_monthBtn}) {
         btn->setCursor(Qt::PointingHandCursor);
         btn->setCheckable(true);
         btn->setFixedHeight(26);
         btn->setStyleSheet(toggleStyle(btn));
     }
+    m_weekBtn->setVisible(false);
+    m_monthBtn->setVisible(false);
 
     m_group = new QButtonGroup(this);
     m_group->addButton(m_barBtn, 0);
@@ -240,19 +385,39 @@ TrendCard::TrendCard(QWidget *parent)
         emit chartTypeChanged(type);
     });
 
+    m_heatGroup = new QButtonGroup(this);
+    m_heatGroup->addButton(m_weekBtn, 0);
+    m_heatGroup->addButton(m_monthBtn, 1);
+    m_heatGroup->setExclusive(true);
+
+    connect(m_heatGroup, QOverload<int>::of(&QButtonGroup::idClicked),
+            this, [this](int id) {
+        const QString period = (id == 1) ? QStringLiteral("month") : QStringLiteral("week");
+        m_weekBtn->setStyleSheet(toggleStyle(m_weekBtn));
+        m_monthBtn->setStyleSheet(toggleStyle(m_monthBtn));
+        m_chartArea->setPeriod(period);
+        updateTitle();
+        emit heatmapPeriodChanged(period);
+    });
+
     toolbar->addWidget(m_barBtn);
     toolbar->addWidget(m_lineBtn);
+    toolbar->addWidget(m_weekBtn);
+    toolbar->addWidget(m_monthBtn);
     contentLayout()->insertLayout(1, toolbar);
 
     m_chartArea = new TrendChartArea(this);
     contentLayout()->addWidget(m_chartArea, 1);
 
     setChartType(QStringLiteral("bar"));
+    setDisplayFormat(QStringLiteral("normal"));
 
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, [this](ThemeManager::Theme) {
         m_barBtn->setStyleSheet(toggleStyle(m_barBtn));
         m_lineBtn->setStyleSheet(toggleStyle(m_lineBtn));
+        m_weekBtn->setStyleSheet(toggleStyle(m_weekBtn));
+        m_monthBtn->setStyleSheet(toggleStyle(m_monthBtn));
     });
 }
 
@@ -269,6 +434,49 @@ void TrendCard::setChartType(const QString &type)
     m_barBtn->setStyleSheet(toggleStyle(m_barBtn));
     m_lineBtn->setStyleSheet(toggleStyle(m_lineBtn));
     m_chartArea->setType(type);
+}
+
+QString TrendCard::displayFormat() const
+{
+    return m_weekBtn->isVisible() ? QStringLiteral("heatmap") : QStringLiteral("normal");
+}
+
+void TrendCard::setDisplayFormat(const QString &format)
+{
+    const bool heatmap = (format == QStringLiteral("heatmap"));
+    m_barBtn->setVisible(!heatmap);
+    m_lineBtn->setVisible(!heatmap);
+    m_weekBtn->setVisible(heatmap);
+    m_monthBtn->setVisible(heatmap);
+    m_chartArea->setFormat(format);
+    updateTitle();
+}
+
+QString TrendCard::heatmapPeriod() const
+{
+    return m_monthBtn->isChecked() ? QStringLiteral("month") : QStringLiteral("week");
+}
+
+void TrendCard::setHeatmapPeriod(const QString &period)
+{
+    const bool month = (period == QStringLiteral("month"));
+    m_monthBtn->setChecked(month);
+    m_weekBtn->setChecked(!month);
+    m_weekBtn->setStyleSheet(toggleStyle(m_weekBtn));
+    m_monthBtn->setStyleSheet(toggleStyle(m_monthBtn));
+    m_chartArea->setPeriod(period);
+    updateTitle();
+}
+
+void TrendCard::updateTitle()
+{
+    if (displayFormat() == QStringLiteral("heatmap")) {
+        setTitle(heatmapPeriod() == QStringLiteral("month")
+            ? QString::fromUtf8("\xe6\x9c\xac\xe6\x9c\x88\xe7\x83\xad\xe5\x8a\x9b\xe5\x9b\xbe")
+            : QString::fromUtf8("\xe6\x9c\xac\xe5\x91\xa8\xe7\x83\xad\xe5\x8a\x9b\xe5\x9b\xbe"));
+    } else {
+        setTitle(QString::fromUtf8("\xe6\x9c\xac\xe5\x91\xa8\xe8\xb6\x8b\xe5\x8a\xbf"));
+    }
 }
 
 QString TrendCard::toggleStyle(QPushButton *btn) const
@@ -291,4 +499,9 @@ QString TrendCard::toggleStyle(QPushButton *btn) const
 void TrendCard::setData(const QVector<QVariantMap> &weekData)
 {
     m_chartArea->setData(weekData);
+}
+
+void TrendCard::setMonthData(const QVector<QVariantMap> &monthData)
+{
+    m_chartArea->setMonthData(monthData);
 }

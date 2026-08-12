@@ -172,6 +172,12 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
         m_db->setSetting("chart_type", type);
     });
 
+    connect(m_trendCard, &TrendCard::heatmapPeriodChanged, this,
+            [this](const QString &period) {
+        m_db->setSetting("trend_heatmap_period", period);
+        refreshData();
+    });
+
     m_refreshTimer = new QTimer(this);
     m_refreshTimer->setInterval(10000);
     connect(m_refreshTimer, &QTimer::timeout, this, &MainWindow::refreshData);
@@ -195,6 +201,10 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     });
 
     applyTheme();
+
+    // 读回柱状/折线视图偏好（此前只写不读，重启会回落到柱状）。
+    m_trendCard->setChartType(m_db->getSetting("chart_type", "bar"));
+
     refreshData();
 }
 
@@ -264,7 +274,16 @@ void MainWindow::refreshData()
     const int dailyGoal = m_db->getSetting("daily_goal", "28800").toInt();
 
     m_heroCard->setData(todayTotal, yesterdayTotal, dailyGoal);
+
+    const QString format = m_db->getSetting("trend_display_format", "normal");
+    m_trendCard->setDisplayFormat(format);
     m_trendCard->setData(m_db->getWeekSummary());
+    if (format == QStringLiteral("heatmap")) {
+        m_trendCard->setMonthData(m_db->getMonthSummary());
+        m_trendCard->setHeatmapPeriod(
+            m_db->getSetting("trend_heatmap_period", "week"));
+    }
+
     m_rankCard->refresh(m_db->getAppRank());
     m_compareCard->setData(todayTotal, yesterdayTotal);
 }

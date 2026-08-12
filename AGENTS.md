@@ -1,6 +1,6 @@
 # AGENTS.md - Time Master
 
-Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 5.0.2。
+Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 5.1.0。
 
 ## 语言与环境
 
@@ -53,7 +53,7 @@ ctest --test-dir build-tests --output-on-failure
 
 - 主程序构建产物：`build\src\TimeMaster.exe`。
 - 当前仓库没有 `package_installer.ps1`；不要在文档或脚本中假设该文件存在。
-- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-5.0.2.exe`。
+- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-5.1.0.exe`。
 - 发布前手动准备 `dist\TimeMaster`：复制主程序，执行 `windeployqt --no-translations --no-compiler-runtime --release`，再放入 MinGW 的 `libgcc_s_seh-1.dll`、`libstdc++-6.dll` 和 `libwinpthread-1.dll`。
 - 安装目标默认为 `C:\Program Files\Time Master`；数据库保存在 `%LOCALAPPDATA%\TimeMaster\data.db`，不应写入安装目录。
 - 生成安装包需要 Inno Setup 6，默认编译器路径通常为 `C:\Users\22798\AppData\Local\Programs\Inno Setup 6\ISCC.exe`。
@@ -99,7 +99,7 @@ docs/                       LineWeb 健康 API 文档（health-api.md）与 supe
 - `ReminderScheduler` 与 `WeeklyReportManager` 的 `start()` 必须调用 `m_timer->start()` 启动 30 秒轮询（曾漏掉导致只在启动瞬间检查一次）；`isRunning()` 为防回归断言，测试中有覆盖。
 - 每周周报：`WeeklyReportManager` 每周固定周几 + 时刻（`weekly_report_day`/`weekly_report_time`）自动生成上一完整周的 HTML 日报，输出到 `Documents/TimeMaster/周报-yyyy-MM-dd.html`（测试用 `setOutputDir` 注入）。统计部分由本地数据组装（总览、每日时长、应用 Top5、环比），AI 已配置且该周有数据时经 `AiClient::generateWeekReport`（`buildPromptForRange`，不写缓存）异步回填「AI 分析」区，失败回退 `buildLocalSummary`。去重键为上周一日期（`weekly_report_last_generated`），同周只生成一次。主页「上周周报」按钮经 `weeklyReportOpenRequested` 由 main 用 `QDesktopServices::openUrl` 打开。
 - `ThemeManager` 是主题单例，主题值为 `light`/`dark`，通过 `themeChanged` 通知卡片刷新，并更新应用调色板和 Windows 标题栏。颜色集中在 `ui/design_tokens.h`；新增 UI 优先使用设计 token。
-- 设置界面管理以下设置：`tracking_enabled`、`poll_interval`、`idle_threshold`、`min_tracking_seconds`、`min_record_threshold`、`auto_start`、`theme`、`daily_goal`、`lineweb_enabled`、`lineweb_endpoint`、`lineweb_token`、`lineweb_interval`、`lineweb_last_push`、`lineweb_last_fetch`、`lineweb_pending_push`、`ai_enabled`、`ai_api_endpoint`、`ai_api_key`、`ai_model`、`ai_report_daily_text`、`ai_report_daily_date`、`ai_report_weekly_text`、`ai_report_weekly_date`、`reminder_enabled`、`reminder_times`、`reminder_last_fired`、`weekly_report_enabled`、`weekly_report_day`、`weekly_report_time`、`weekly_report_last_generated`、`weekly_report_path`。新增设置沿用 `settings` 表的 key/value 形式并提供默认值。
+- 设置界面管理以下设置：`tracking_enabled`、`poll_interval`、`idle_threshold`、`min_tracking_seconds`、`min_record_threshold`、`auto_start`、`theme`、`daily_goal`、`lineweb_enabled`、`lineweb_endpoint`、`lineweb_token`、`lineweb_interval`、`lineweb_last_push`、`lineweb_last_fetch`、`lineweb_pending_push`、`ai_enabled`、`ai_api_endpoint`、`ai_api_key`、`ai_model`、`ai_report_daily_text`、`ai_report_daily_date`、`ai_report_weekly_text`、`ai_report_weekly_date`、`reminder_enabled`、`reminder_times`、`reminder_last_fired`、`weekly_report_enabled`、`weekly_report_day`、`weekly_report_time`、`weekly_report_last_generated`、`weekly_report_path`、`trend_display_format`、`trend_heatmap_period`。新增设置沿用 `settings` 表的 key/value 形式并提供默认值。
 - 数据库构造时自动创建/迁移 `sessions`、`settings`、`ignored_apps`、`app_aliases` 表，迁移使用 `CREATE ... IF NOT EXISTS`，没有版本号迁移框架。
 - 统计查询会应用最短记录阈值 `min_record_threshold` 和忽略应用过滤；修改查询时要保持这两个行为一致。
 - LineWeb 推送请求发送到 `<endpoint>/api/health/push`，JSON 字段为 `totalSeconds`、`date`，认证头为 `X-Screen-Time-Token`。5.0 起 `LineWebPusher` 支持云端同步：主页「云端同步」按钮（`MainWindow::cloudSyncRequested` → `LineWebPusher::syncNow`）立即补推并拉取 `GET <endpoint>/api/health/daily-goal/data` 的云端每日目标（响应字段 `goal`，写回 `daily_goal` 设置），拉取时间记入 `lineweb_last_fetch`；失败/未配置时弹 `QMessageBox` 提示，不影响其他功能。云端协议细节以 `docs/health-api.md` 为准。设置变更后必须让 `LineWebPusher`、`WindowTracker` 和 `AiClient` 重新加载配置。

@@ -439,7 +439,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
 
         QVBoxLayout *paramCardLayout = nullptr;
         addSectionCard(pageLayout, QString::fromUtf8("计时参数"),
-                       this, &paramCardLayout, 1);
+                       this, &paramCardLayout, 0);
 
         const QString pollTip =
             QString::fromUtf8("间隔多久检测一次当前前台窗口（秒）。值越小统计越精确，占用的系统开销略高");
@@ -479,6 +479,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         bindToggle(m_trackingEnabled, {m_pollInterval, m_idleThreshold,
                                        m_minTrackingSeconds, m_minRecordThreshold});
 
+        pageLayout->addStretch(1);
         m_stack->addWidget(pageLayout->parentWidget());
     }
 
@@ -495,6 +496,16 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         m_darkMode->setToolTip(
             QString::fromUtf8("切换应用整体配色为暗色或亮色"));
         appearanceCardLayout->addWidget(m_darkMode);
+
+        const QString trendTip =
+            QString::fromUtf8("主页「本周趋势」的展示形式；热力图可切换周/月");
+        addFormRow(appearanceCardLayout,
+                   QString::fromUtf8("趋势展示形式："), trendTip,
+                   m_trendFormat = new QComboBox(this), false, this);
+        m_trendFormat->addItems({
+            QString::fromUtf8("标准图表（柱状/折线）"),
+            QString::fromUtf8("热力图"),
+        });
 
         QVBoxLayout *startCardLayout = nullptr;
         addSectionCard(pageLayout, QString::fromUtf8("启动与目标"),
@@ -641,7 +652,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
 
         QVBoxLayout *configCardLayout = nullptr;
         addSectionCard(pageLayout, QString::fromUtf8("推送配置"),
-                       this, &configCardLayout, 1);
+                       this, &configCardLayout, 0);
 
         m_linewebEnabled = new QCheckBox(
             QString::fromUtf8("启用推送"), this);
@@ -754,6 +765,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         testRow->addStretch();
         testCardLayout->addLayout(testRow);
 
+        pageLayout->addStretch(1);
         m_stack->addWidget(pageLayout->parentWidget());
     }
 
@@ -763,7 +775,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
 
         QVBoxLayout *configCardLayout = nullptr;
         addSectionCard(pageLayout, QString::fromUtf8("AI 配置"),
-                       this, &configCardLayout, 1);
+                       this, &configCardLayout, 0);
 
         m_aiEnabled = new QCheckBox(
             QString::fromUtf8("启用 AI 报告"), this);
@@ -879,6 +891,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         aiTestRow->addStretch();
         testCardLayout->addLayout(aiTestRow);
 
+        pageLayout->addStretch(1);
         m_stack->addWidget(pageLayout->parentWidget());
     }
 
@@ -1019,6 +1032,8 @@ void SettingsDialog::loadSettings()
         m_db->getSetting("min_record_threshold", "40").toInt());
     m_autoStart->setChecked(m_db->getSetting("auto_start", "false") == "true");
     m_darkMode->setChecked(ThemeManager::instance()->isDark());
+    m_trendFormat->setCurrentIndex(
+        m_db->getSetting("trend_display_format", "normal") == "heatmap" ? 1 : 0);
 
     m_linewebEnabled->setChecked(
         m_db->getSetting("lineweb_enabled", "false") == "true");
@@ -1133,6 +1148,9 @@ void SettingsDialog::saveSettings()
     if (m_darkMode->isChecked() != ThemeManager::instance()->isDark())
         ThemeManager::instance()->setTheme(
             m_darkMode->isChecked() ? ThemeManager::Dark : ThemeManager::Light);
+
+    m_db->setSetting("trend_display_format",
+                     m_trendFormat->currentIndex() == 1 ? "heatmap" : "normal");
 
     m_db->setSetting("lineweb_enabled",
                      m_linewebEnabled->isChecked() ? "true" : "false");

@@ -32,6 +32,7 @@ public:
     int getTodayTotal();
     int getYesterdayTotal();
     QVector<QVariantMap> getWeekSummary();
+    QVector<QVariantMap> getMonthSummary();
     QVector<QVariantMap> getAppRank(const QDate &targetDate = QDate::currentDate());
     QVector<QVariantMap> getAllSessions(const QString &startDate = QString(),
                                         const QString &endDate = QString());
