@@ -1,6 +1,6 @@
 # AGENTS.md - Time Master
 
-Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 4.1.1。
+Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 5.0.1。
 
 ## 语言与环境
 
@@ -40,19 +40,20 @@ ctest --test-dir build-tests --output-on-failure
 .\build-tests\tests\test_database.exe
 .\build-tests\tests\test_exporter.exe
 .\build-tests\tests\test_lineweb_pusher.exe
+.\build-tests\tests\test_cloud_sync.exe
 .\build-tests\tests\test_ai_client.exe
 .\build-tests\tests\test_reminder_scheduler.exe
 .\build-tests\tests\test_weekly_report.exe
 .\build-tests\tests\test_window_tracker.exe
 ```
 
-测试目标是独立可执行文件，使用裸 `assert()` 和 Qt Test 的 `QSignalSpy`，没有 GoogleTest/Catch2。测试的 `main()` 必须创建 `QCoreApplication`，否则 Qt SQL 插件可能在启动时崩溃。`test_window_tracker` 用 `FakeStore` 驱动 `TrackingEngine`，不访问真实数据库。涉及网络的 `test_lineweb_pusher` 会访问本机无效端口和测试地址，不要把它改成真实服务依赖；`test_ai_client`、`test_reminder_scheduler`、`test_weekly_report` 只验证未配置/空数据的短路逻辑与无效端口的失败回退，不依赖真实 AI 服务。`test_weekly_report` 通过 `setOutputDir` 注入临时目录，不写用户文档目录。
+测试目标是独立可执行文件，使用裸 `assert()` 和 Qt Test 的 `QSignalSpy`，没有 GoogleTest/Catch2。测试的 `main()` 必须创建 `QCoreApplication`，否则 Qt SQL 插件可能在启动时崩溃。`test_window_tracker` 用 `FakeStore` 驱动 `TrackingEngine`，不访问真实数据库。涉及网络的 `test_lineweb_pusher` 会访问本机无效端口和测试地址，不要把它改成真实服务依赖；`test_cloud_sync` 在本地起 `QTcpServer`（`FakeHealthServer`）模拟健康 API，驱动 `LineWebPusher` 的推送/云端目标拉取，同样不依赖真实服务。`test_ai_client`、`test_reminder_scheduler`、`test_weekly_report` 只验证未配置/空数据的短路逻辑与无效端口的失败回退，不依赖真实 AI 服务。`test_weekly_report` 通过 `setOutputDir` 注入临时目录，不写用户文档目录。
 
 ## 发布与安装包
 
 - 主程序构建产物：`build\src\TimeMaster.exe`。
 - 当前仓库没有 `package_installer.ps1`；不要在文档或脚本中假设该文件存在。
-- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-4.1.1.exe`。
+- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-5.0.1.exe`。
 - 发布前手动准备 `dist\TimeMaster`：复制主程序，执行 `windeployqt --no-translations --no-compiler-runtime --release`，再放入 MinGW 的 `libgcc_s_seh-1.dll`、`libstdc++-6.dll` 和 `libwinpthread-1.dll`。
 - 安装目标默认为 `C:\Program Files\Time Master`；数据库保存在 `%LOCALAPPDATA%\TimeMaster\data.db`，不应写入安装目录。
 - 生成安装包需要 Inno Setup 6，默认编译器路径通常为 `C:\Users\22798\AppData\Local\Programs\Inno Setup 6\ISCC.exe`。
@@ -81,8 +82,8 @@ src/
   utility/                  Windows 自启动注册表辅助逻辑；ProcessIdentity 进程键归一化
 third_party/miniz/          内置 miniz ZIP 实现，以 miniz_all.cpp 编译
 resources/                  应用图标和 Qt resources.qrc
-tests/                      test_database、test_exporter、test_lineweb_pusher、test_ai_client、test_reminder_scheduler、test_weekly_report、test_window_tracker
-docs/                       设计规格、实现计划和 LineWeb 接入文档
+tests/                      test_database、test_exporter、test_lineweb_pusher、test_cloud_sync、test_ai_client、test_reminder_scheduler、test_weekly_report、test_window_tracker
+docs/                       LineWeb 健康 API 文档（health-api.md）与 superpowers/ 下的设计规格
 .superpowers/sdd/           任务简报、审查差异和报告
 ```
 
@@ -98,10 +99,10 @@ docs/                       设计规格、实现计划和 LineWeb 接入文档
 - `ReminderScheduler` 与 `WeeklyReportManager` 的 `start()` 必须调用 `m_timer->start()` 启动 30 秒轮询（曾漏掉导致只在启动瞬间检查一次）；`isRunning()` 为防回归断言，测试中有覆盖。
 - 每周周报：`WeeklyReportManager` 每周固定周几 + 时刻（`weekly_report_day`/`weekly_report_time`）自动生成上一完整周的 HTML 日报，输出到 `Documents/TimeMaster/周报-yyyy-MM-dd.html`（测试用 `setOutputDir` 注入）。统计部分由本地数据组装（总览、每日时长、应用 Top5、环比），AI 已配置且该周有数据时经 `AiClient::generateWeekReport`（`buildPromptForRange`，不写缓存）异步回填「AI 分析」区，失败回退 `buildLocalSummary`。去重键为上周一日期（`weekly_report_last_generated`），同周只生成一次。主页「上周周报」按钮经 `weeklyReportOpenRequested` 由 main 用 `QDesktopServices::openUrl` 打开。
 - `ThemeManager` 是主题单例，主题值为 `light`/`dark`，通过 `themeChanged` 通知卡片刷新，并更新应用调色板和 Windows 标题栏。颜色集中在 `ui/design_tokens.h`；新增 UI 优先使用设计 token。
-- 设置界面管理以下设置：`tracking_enabled`、`poll_interval`、`idle_threshold`、`min_tracking_seconds`、`min_record_threshold`、`auto_start`、`theme`、`daily_goal`、`lineweb_enabled`、`lineweb_endpoint`、`lineweb_token`、`lineweb_interval`、`lineweb_last_push`、`ai_enabled`、`ai_api_endpoint`、`ai_api_key`、`ai_model`、`ai_report_daily_text`、`ai_report_daily_date`、`ai_report_weekly_text`、`ai_report_weekly_date`、`reminder_enabled`、`reminder_times`、`reminder_last_fired`、`weekly_report_enabled`、`weekly_report_day`、`weekly_report_time`、`weekly_report_last_generated`、`weekly_report_path`。新增设置沿用 `settings` 表的 key/value 形式并提供默认值。
+- 设置界面管理以下设置：`tracking_enabled`、`poll_interval`、`idle_threshold`、`min_tracking_seconds`、`min_record_threshold`、`auto_start`、`theme`、`daily_goal`、`lineweb_enabled`、`lineweb_endpoint`、`lineweb_token`、`lineweb_interval`、`lineweb_last_push`、`lineweb_last_fetch`、`lineweb_pending_push`、`ai_enabled`、`ai_api_endpoint`、`ai_api_key`、`ai_model`、`ai_report_daily_text`、`ai_report_daily_date`、`ai_report_weekly_text`、`ai_report_weekly_date`、`reminder_enabled`、`reminder_times`、`reminder_last_fired`、`weekly_report_enabled`、`weekly_report_day`、`weekly_report_time`、`weekly_report_last_generated`、`weekly_report_path`。新增设置沿用 `settings` 表的 key/value 形式并提供默认值。
 - 数据库构造时自动创建/迁移 `sessions`、`settings`、`ignored_apps`、`app_aliases` 表，迁移使用 `CREATE ... IF NOT EXISTS`，没有版本号迁移框架。
 - 统计查询会应用最短记录阈值 `min_record_threshold` 和忽略应用过滤；修改查询时要保持这两个行为一致。
-- LineWeb 推送请求发送到 `<endpoint>/api/health/push`，JSON 字段为 `totalSeconds`、`date`，认证头为 `X-Screen-Time-Token`。设置变更后必须让 `LineWebPusher`、`WindowTracker` 和 `AiClient` 重新加载配置。
+- LineWeb 推送请求发送到 `<endpoint>/api/health/push`，JSON 字段为 `totalSeconds`、`date`，认证头为 `X-Screen-Time-Token`。5.0 起 `LineWebPusher` 支持云端同步：主页「云端同步」按钮（`MainWindow::cloudSyncRequested` → `LineWebPusher::syncNow`）立即补推并拉取 `GET <endpoint>/api/health/daily-goal/data` 的云端每日目标（响应字段 `goal`，写回 `daily_goal` 设置），拉取时间记入 `lineweb_last_fetch`；失败/未配置时弹 `QMessageBox` 提示，不影响其他功能。云端协议细节以 `docs/health-api.md` 为准。设置变更后必须让 `LineWebPusher`、`WindowTracker` 和 `AiClient` 重新加载配置。
 
 ## 数据库线程安全
 
@@ -150,7 +151,7 @@ int DatabaseManager::getTodayTotal()
 
 ## SDD 与 Git
 
-- 处理较大功能前先查看 `.superpowers/sdd/` 和 `docs/superpowers/specs/` 中相关规格；规格可能描述历史实现，若与当前代码冲突，以当前代码和用户任务为准。
+- 处理较大功能前先查看 `.superpowers/sdd/` 和 `docs/superpowers/` 中相关规格；规格可能描述历史实现，若与当前代码冲突，以当前代码和用户任务为准。
 - 不要回滚或覆盖用户已有的未提交修改。开始编辑前检查 `git status`，完成后再次检查只包含任务相关变更。
 - 提交使用约定式提交，例如 `feat:`、`fix:`、`refactor:`、`chore:`。除非用户要求，不要自动创建提交、分支或修改发布产物。
 - 项目目前没有 lint、格式化、静态类型检查或 CI/CD 流水线；验证以构建、CTest、独立测试和必要的手动 UI 检查为主。
