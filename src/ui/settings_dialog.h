@@ -5,10 +5,12 @@
 #include <QListWidget>
 #include <QTableWidget>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QSpinBox>
 #include <QPushButton>
 #include <QLineEdit>
 #include <QLabel>
+#include <QTimeEdit>
 #include <QTimer>
 
 class DatabaseManager;
@@ -35,6 +37,7 @@ private:
     void loadSettings();
     void saveSettings();
     void updateCloudStatus();
+    void updateReminderStatus();
     void fetchGoalFromCloud(const QString &endpoint, const QString &token);
     void refreshKnownAppsList();
     void refreshIgnoredList();
@@ -65,4 +68,22 @@ private:
     QPushButton *m_linewebTestBtn = nullptr;
     QLabel *m_linewebStatus = nullptr;
     QTimer *m_linewebStatusTimer = nullptr;
+
+    QCheckBox *m_aiEnabled = nullptr;
+    QLineEdit *m_aiEndpoint = nullptr;
+    QLineEdit *m_aiApiKey = nullptr;
+    QPushButton *m_aiApiKeyToggle = nullptr;
+    QLineEdit *m_aiModel = nullptr;
+    QPushButton *m_aiTestBtn = nullptr;
+
+    QCheckBox *m_reminderEnabled = nullptr;
+    QListWidget *m_reminderTimesList = nullptr;
+    QTimeEdit *m_reminderTimeEdit = nullptr;
+    QPushButton *m_reminderAddBtn = nullptr;
+    QPushButton *m_reminderRemoveBtn = nullptr;
+    QLabel *m_reminderStatus = nullptr;
+
+    QCheckBox *m_weeklyReportEnabled = nullptr;
+    QComboBox *m_weeklyReportDay = nullptr;
+    QTimeEdit *m_weeklyReportTime = nullptr;
 };

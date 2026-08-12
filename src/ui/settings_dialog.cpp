@@ -16,6 +16,7 @@
 #include <QHeaderView>
 #include <QShortcut>
 #include <QDate>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
@@ -310,7 +311,101 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     personalLayout->addStretch();
     m_tabWidget->addTab(personalTab, QString::fromUtf8("\xe4\xb8\xaa\xe6\x80\xa7\xe5\x8c\x96"));
 
-    // ================= Tab 4: Cloud Sync =================
+    // ================= Tab 4: 提醒 =================
+    auto *remindTab = new QWidget(this);
+    auto *remindLayout = new QVBoxLayout(remindTab);
+    remindLayout->setContentsMargins(24, 22, 24, 22);
+    remindLayout->setSpacing(10);
+
+    m_reminderEnabled = new QCheckBox(
+        QString::fromUtf8("\xe5\x90\xaf\xe7\x94\xa8\xe5\xae\x9a\xe6\x97\xb6\xe6\x8f\x90\xe9\x86\x92"), this);
+    m_reminderEnabled->setFont(DesignTokens::appFont(13));
+    m_reminderEnabled->setToolTip(
+        QString::fromUtf8("\xe5\x9c\xa8\xe4\xb8\x8b\xe9\x9d\xa2\xe9\x85\x8d\xe7\xbd\xae\xe7\x9a\x84\xe6\x97\xb6\xe9\x97\xb4\xe7\x82\xb9\xe6\x8f\x90\xe9\x86\x92\xe4\xbd\xbf\xe7\x94\xa8\xe6\x83\x85\xe5\x86\xb5"));
+    remindLayout->addWidget(m_reminderEnabled);
+
+    auto *addRow = new QHBoxLayout();
+    addRow->addWidget(new QLabel(
+        QString::fromUtf8("\xe6\x97\xb6\xe9\x97\xb4\xe7\x82\xb9:"), this));
+    m_reminderTimeEdit = new QTimeEdit(this);
+    m_reminderTimeEdit->setDisplayFormat(QStringLiteral("HH:mm"));
+    m_reminderTimeEdit->setTime(QTime::currentTime());
+    addRow->addWidget(m_reminderTimeEdit);
+    m_reminderAddBtn = new QPushButton(
+        QString::fromUtf8("\xe6\xb7\xbb\xe5\x8a\xa0"), this);
+    m_reminderAddBtn->setStyleSheet(secondaryButtonStyle());
+    connect(m_reminderAddBtn, &QPushButton::clicked, this, [this]() {
+        const QString time = m_reminderTimeEdit->time().toString(QStringLiteral("HH:mm"));
+        for (int i = 0; i < m_reminderTimesList->count(); ++i) {
+            if (m_reminderTimesList->item(i)->text() == time) {
+                m_reminderTimesList->setCurrentRow(i);
+                return; // 已存在，只选中不重复添加。
+            }
+        }
+        m_reminderTimesList->addItem(time);
+        m_reminderTimesList->sortItems();
+    });
+    addRow->addWidget(m_reminderAddBtn);
+    m_reminderRemoveBtn = new QPushButton(
+        QString::fromUtf8("\xe5\x88\xa0\xe9\x99\xa4"), this);
+    m_reminderRemoveBtn->setStyleSheet(secondaryButtonStyle());
+    connect(m_reminderRemoveBtn, &QPushButton::clicked, this, [this]() {
+        delete m_reminderTimesList->takeItem(m_reminderTimesList->currentRow());
+    });
+    addRow->addWidget(m_reminderRemoveBtn);
+    addRow->addStretch();
+    remindLayout->addLayout(addRow);
+
+    m_reminderTimesList = new QListWidget(this);
+    m_reminderTimesList->setMinimumHeight(120);
+    remindLayout->addWidget(m_reminderTimesList);
+
+    // ---- 每周周报分组 ----
+    auto *weeklyLine = new QFrame(this);
+    weeklyLine->setFrameShape(QFrame::HLine);
+    weeklyLine->setStyleSheet(QString("color: %1;").arg(DesignTokens::kBorder().name()));
+    remindLayout->addWidget(weeklyLine);
+
+    m_weeklyReportEnabled = new QCheckBox(
+        QString::fromUtf8("\xe6\xaf\x8f\xe5\x91\xa8\xe8\x87\xaa\xe5\x8a\xa8\xe7\x94\x9f\xe6\x88\x90\xe5\x91\xa8\xe4\xbd\xbf\xe7\x94\xa8\xe6\x97\xa5\xe6\x8a\xa5"), this);
+    m_weeklyReportEnabled->setFont(DesignTokens::appFont(13));
+    m_weeklyReportEnabled->setToolTip(
+        QString::fromUtf8("\xe6\xaf\x8f\xe5\x91\xa8\xe5\x9c\xa8\xe4\xb8\x8b\xe9\x9d\xa2\xe7\x9a\x84\xe6\x97\xb6\xe5\x88\xbb\xe8\x87\xaa\xe5\x8a\xa8\xe7\x94\x9f\xe6\x88\x90\xe4\xb8\x8a\xe4\xb8\x80\xe5\x91\xa8\xe7\x9a\x84\xe7\x94\xa8\xe4\xbe\x8b\xe6\x97\xa5\xe6\x8a\xa5\xef\xbc\x88HTML\xef\xbc\x8c\xe5\xa1\x98\xe7\x9b\x98\xe9\x80\x9a\xe7\x9f\xa5\xe5\x90\x8e\xe5\x8f\xaf\xe4\xbb\x8e\xe4\xb8\xbb\xe9\xa1\xb5\xe6\x89\x93\xe5\xbc\x80\xe3\x80\x82\xe5\x90\xaf\xe7\x94\xa8 AI \xe6\x97\xb6\xe5\x90\xab AI \xe5\x88\x86\xe6\x9e\x90\xef\xbc\x8c\xe5\x90\xa6\xe5\x88\x99\xe4\xb8\xba\xe6\x9c\xac\xe5\x9c\xb0\xe6\x8a\xa5\xe5\x91\x8a\xe3\x80\x82"));
+    remindLayout->addWidget(m_weeklyReportEnabled);
+
+    auto *weeklyDayRow = new QHBoxLayout();
+    weeklyDayRow->addWidget(new QLabel(
+        QString::fromUtf8("\xe7\x94\x9f\xe6\x88\x90\xe6\x97\xa5:"), this));
+    m_weeklyReportDay = new QComboBox(this);
+    m_weeklyReportDay->addItems({
+        QString::fromUtf8("\xe5\x91\xa8\xe4\xb8\x80"),
+        QString::fromUtf8("\xe5\x91\xa8\xe4\xba\x8c"),
+        QString::fromUtf8("\xe5\x91\xa8\xe4\xb8\x89"),
+        QString::fromUtf8("\xe5\x91\xa8\xe5\x9b\x9b"),
+        QString::fromUtf8("\xe5\x91\xa8\xe4\xba\x94"),
+        QString::fromUtf8("\xe5\x91\xa8\xe5\x85\xad"),
+        QString::fromUtf8("\xe5\x91\xa8\xe6\x97\xa5"),
+    });
+    weeklyDayRow->addWidget(m_weeklyReportDay);
+    weeklyDayRow->addWidget(new QLabel(
+        QString::fromUtf8("\xe6\x97\xb6\xe5\x88\xbb:"), this));
+    m_weeklyReportTime = new QTimeEdit(this);
+    m_weeklyReportTime->setDisplayFormat(QStringLiteral("HH:mm"));
+    m_weeklyReportTime->setTime(QTime(9, 0));
+    weeklyDayRow->addWidget(m_weeklyReportTime);
+    weeklyDayRow->addStretch();
+    remindLayout->addLayout(weeklyDayRow);
+
+    m_reminderStatus = new QLabel(this);
+    m_reminderStatus->setStyleSheet(
+        QString("color: %1; font-size: 12px; background: transparent;")
+            .arg(DesignTokens::kTextMute().name()));
+    remindLayout->addWidget(m_reminderStatus);
+
+    remindLayout->addStretch();
+    m_tabWidget->addTab(remindTab, QString::fromUtf8("\xe6\x8f\x90\xe9\x86\x92"));
+
+    // ================= Tab 5: Cloud Sync =================
     auto *cloudTab = new QWidget(this);
     auto *cloudLayout = new QVBoxLayout(cloudTab);
     cloudLayout->setContentsMargins(24, 22, 24, 22);
@@ -413,7 +508,112 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     cloudLayout->addStretch();
     m_tabWidget->addTab(cloudTab, QString::fromUtf8("\xe4\xba\x91\xe7\xab\xaf\xe5\x90\x8c\xe6\xad\xa5"));
 
-    // ================= Tab 5: About =================
+    // ================= Tab 6: AI 智能 =================
+    auto *aiTab = new QWidget(this);
+    auto *aiLayout = new QVBoxLayout(aiTab);
+    aiLayout->setContentsMargins(24, 22, 24, 22);
+    aiLayout->setSpacing(10);
+
+    m_aiEnabled = new QCheckBox(
+        QString::fromUtf8("\xe5\x90\xaf\xe7\x94\xa8 AI \xe6\x8a\xa5\xe5\x91\x8a"), this);
+    m_aiEnabled->setFont(DesignTokens::appFont(13));
+    aiLayout->addWidget(m_aiEnabled);
+
+    auto *aiEndpointRow = new QHBoxLayout();
+    aiEndpointRow->addWidget(new QLabel(
+        QString::fromUtf8("API \xe5\x9c\xb0\xe5\x9d\x80:"), this));
+    m_aiEndpoint = new QLineEdit(this);
+    m_aiEndpoint->setPlaceholderText(
+        QString::fromUtf8("https://api.deepseek.com"));
+    aiEndpointRow->addWidget(m_aiEndpoint, 1);
+    aiLayout->addLayout(aiEndpointRow);
+
+    auto *aiKeyRow = new QHBoxLayout();
+    aiKeyRow->addWidget(new QLabel(QString::fromUtf8("API Key:"), this));
+    m_aiApiKey = new QLineEdit(this);
+    m_aiApiKey->setEchoMode(QLineEdit::Password);
+    m_aiApiKey->setPlaceholderText(QString::fromUtf8("\xe5\x8f\xaf\xe9\x80\x9a\xe8\xbf\x87\xe7\xae\xa1\xe7\x90\x86\xe5\xb9\xb3\xe5\x8f\xb0\xe8\x8e\xb7\xe5\x8f\x96\xef\xbc\x8c\xe4\xbb\xa5 Bearer \xe6\x96\xb9\xe5\xbc\x8f\xe9\xaa\x8c\xe8\xaf\x81"));
+    aiKeyRow->addWidget(m_aiApiKey, 1);
+    m_aiApiKeyToggle = new QPushButton(
+        QString::fromUtf8("\xe6\x98\xbe\xe7\xa4\xba"), this);
+    m_aiApiKeyToggle->setStyleSheet(secondaryButtonStyle());
+    connect(m_aiApiKeyToggle, &QPushButton::clicked, this, [this]() {
+        const bool show = (m_aiApiKey->echoMode() == QLineEdit::Password);
+        m_aiApiKey->setEchoMode(show ? QLineEdit::Normal : QLineEdit::Password);
+        m_aiApiKeyToggle->setText(
+            show ? QString::fromUtf8("\xe9\x9a\x90\xe8\x97\x8f")
+                 : QString::fromUtf8("\xe6\x98\xbe\xe7\xa4\xba"));
+    });
+    aiKeyRow->addWidget(m_aiApiKeyToggle);
+    aiLayout->addLayout(aiKeyRow);
+
+    auto *aiModelRow = new QHBoxLayout();
+    aiModelRow->addWidget(new QLabel(
+        QString::fromUtf8("\xe6\xa8\xa1\xe5\x9e\x8b\xe5\x90\x8d:"), this));
+    m_aiModel = new QLineEdit(this);
+    m_aiModel->setPlaceholderText("deepseek-chat");
+    aiModelRow->addWidget(m_aiModel, 1);
+    aiLayout->addLayout(aiModelRow);
+
+    auto *aiTestRow = new QHBoxLayout();
+    m_aiTestBtn = new QPushButton(
+        QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe6\xb5\x8b\xe8\xaf\x95"), this);
+    m_aiTestBtn->setStyleSheet(secondaryButtonStyle());
+    connect(m_aiTestBtn, &QPushButton::clicked, this, [this]() {
+        const QString key = m_aiApiKey->text().trimmed();
+        const QString endpoint = m_aiEndpoint->text().trimmed();
+        if (key.isEmpty() || endpoint.isEmpty()) {
+            QMessageBox::warning(this,
+                QString::fromUtf8("\xe9\x85\x8d\xe7\xbd\xae\xe4\xb8\x8d\xe5\xae\x8c\xe6\x95\xb4"),
+                QString::fromUtf8("\xe8\xaf\xb7\xe5\x85\x88\xe5\xa1\xab\xe5\x86\x99 API \xe5\x9c\xb0\xe5\x9d\x80\xe5\x92\x8c API Key"));
+            return;
+        }
+
+        QString base = endpoint;
+        while (base.endsWith(QLatin1Char('/')))
+            base.chop(1);
+        QNetworkRequest req(QUrl(base + "/models"));
+        req.setRawHeader("Authorization", ("Bearer " + key).toUtf8());
+        req.setTransferTimeout(15000);
+
+        auto *nam = new QNetworkAccessManager(this);
+        QNetworkReply *reply = nam->get(req);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, nam]() {
+            reply->deleteLater();
+            nam->deleteLater();
+            if (reply->error() == QNetworkReply::NoError) {
+                const QJsonObject obj =
+                    QJsonDocument::fromJson(reply->readAll()).object();
+                QMessageBox::information(this,
+                    QString::fromUtf8("\xe6\xb5\x8b\xe8\xaf\x95\xe6\x88\x90\xe5\x8a\x9f"),
+                    obj.contains(QStringLiteral("data"))
+                        ? QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe6\x88\x90\xe5\x8a\x9f\xef\xbc\x81"
+                                             "\xe5\xbd\x93\xe5\x89\x8d\xe6\x9c\x8d\xe5\x8a\xa1\xe5\x99\xa8\xe5\x8f\xaf\xe7\x94\xa8\xe6\xa8\xa1\xe5\x9e\x8b\xe6\x95\xb0\xef\xbc\x9a%1")
+                                                 .arg(obj[QStringLiteral("data")].toArray().size())
+                        : QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe6\x88\x90\xe5\x8a\x9f\xef\xbc\x81"));
+            } else {
+                QString err = reply->errorString();
+                const QJsonObject obj =
+                    QJsonDocument::fromJson(reply->readAll()).object();
+                const QJsonObject errObj =
+                    obj[QStringLiteral("error")].toObject();
+                if (!errObj.isEmpty() &&
+                    errObj.contains(QStringLiteral("message")))
+                    err = errObj[QStringLiteral("message")].toString();
+                QMessageBox::warning(this,
+                    QString::fromUtf8("\xe6\xb5\x8b\xe8\xaf\x95\xe5\xa4\xb1\xe8\xb4\xa5"),
+                    QString::fromUtf8("\xe8\xbf\x9e\xe6\x8e\xa5\xe5\xa4\xb1\xe8\xb4\xa5\xef\xbc\x9a") + err);
+            }
+        });
+    });
+    aiTestRow->addWidget(m_aiTestBtn);
+    aiTestRow->addStretch();
+    aiLayout->addLayout(aiTestRow);
+
+    aiLayout->addStretch();
+    m_tabWidget->addTab(aiTab, QString::fromUtf8("AI \xe6\x99\xba\xe8\x83\xbd"));
+
+    // ================= Tab 6: About =================
     auto *aboutTab = new QWidget(this);
     auto *aboutLayout = new QVBoxLayout(aboutTab);
     aboutLayout->setContentsMargins(24, 22, 24, 22);
@@ -479,13 +679,18 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         m_linewebStatus->setStyleSheet(
             QString("color: %1; font-size: 12px; background: transparent;")
                 .arg(DesignTokens::kTextMute().name()));
+        m_reminderStatus->setStyleSheet(
+            QString("color: %1; font-size: 12px; background: transparent;")
+                .arg(DesignTokens::kTextMute().name()));
     });
 
-    // 状态标签每 5 秒重读一次数据库，实时反映推送/拉取结果。
+    // 状态标签每 5 秒重读一次数据库，实时反映推送/拉取/提醒结果。
     m_linewebStatusTimer = new QTimer(this);
     m_linewebStatusTimer->setInterval(5000);
-    connect(m_linewebStatusTimer, &QTimer::timeout,
-            this, &SettingsDialog::updateCloudStatus);
+    connect(m_linewebStatusTimer, &QTimer::timeout, this, [this]() {
+        updateCloudStatus();
+        updateReminderStatus();
+    });
     m_linewebStatusTimer->start();
 
     loadSettings();
@@ -511,6 +716,34 @@ void SettingsDialog::loadSettings()
     m_linewebInterval->setValue(
         m_db->getSetting("lineweb_interval", "10").toInt());
 
+    m_aiEnabled->setChecked(m_db->getSetting("ai_enabled", "false") == "true");
+    m_aiEndpoint->setText(m_db->getSetting("ai_api_endpoint",
+        QStringLiteral("https://api.deepseek.com")));
+    m_aiApiKey->setText(m_db->getSetting("ai_api_key", ""));
+    m_aiModel->setText(m_db->getSetting("ai_model", "deepseek-chat"));
+
+    m_reminderEnabled->setChecked(
+        m_db->getSetting("reminder_enabled", "false") == "true");
+    m_reminderTimesList->clear();
+    const QStringList times =
+        m_db->getSetting("reminder_times", "").split(QLatin1Char(','));
+    for (const QString &time : times) {
+        const QString t = time.trimmed();
+        if (!t.isEmpty())
+            m_reminderTimesList->addItem(t);
+    }
+    m_reminderTimesList->sortItems();
+
+    m_weeklyReportEnabled->setChecked(
+        m_db->getSetting("weekly_report_enabled", "false") == "true");
+    m_weeklyReportDay->setCurrentIndex(
+        qBound(1, m_db->getSetting("weekly_report_day", "1").toInt(), 7) - 1);
+    const QTime weeklyTime =
+        QTime::fromString(m_db->getSetting("weekly_report_time", "09:00"),
+                          QStringLiteral("HH:mm"));
+    if (weeklyTime.isValid())
+        m_weeklyReportTime->setTime(weeklyTime);
+
     updateCloudStatus();
 
     m_dailyGoal->setValue(m_db->getSetting("daily_goal", "28800").toInt() / 3600);
@@ -532,6 +765,18 @@ void SettingsDialog::updateCloudStatus()
         m_linewebStatus->setText(lastFetch);
     else
         m_linewebStatus->setText(QString::fromUtf8("\xe5\xb0\x9a\xe6\x9c\xaa\xe5\x90\x8c\xe6\xad\xa5"));
+}
+
+void SettingsDialog::updateReminderStatus()
+{
+    const QString lastFired = m_db->getSetting("reminder_last_fired", "");
+    if (lastFired.isEmpty())
+        m_reminderStatus->setText(
+            QString::fromUtf8("\xe2\x9a\x99 \xe5\xb0\x9a\xe6\x9c\xaa\xe8\xa7\xa6\xe5\x8f\x91\xe8\xbf\x87\xe6\x8f\x90\xe9\x86\x92\xef\xbc\x8c"
+                              "\xe8\xaf\xb7\xe7\xa1\xae\xe8\xae\xa4\xe5\xb7\xb2\xe5\x90\xaf\xe7\x94\xa8\xe5\xb9\xb6\xe6\xb7\xbb\xe5\x8a\xa0\xe6\x97\xb6\xe9\x97\xb4\xe7\x82\xb9"));
+    else
+        m_reminderStatus->setText(
+            QString::fromUtf8("\xe2\x8f\xb3 \xe6\x9c\x80\xe8\xbf\x91\xe8\xa7\xa6\xe5\x8f\x91\xef\xbc\x9a") + lastFired);
 }
 
 void SettingsDialog::fetchGoalFromCloud(const QString &endpoint, const QString &token)
@@ -585,6 +830,25 @@ void SettingsDialog::saveSettings()
     m_db->setSetting("lineweb_token", m_linewebToken->text().trimmed());
     m_db->setSetting("lineweb_interval",
                      QString::number(m_linewebInterval->value()));
+
+    m_db->setSetting("ai_enabled", m_aiEnabled->isChecked() ? "true" : "false");
+    m_db->setSetting("ai_api_endpoint", m_aiEndpoint->text().trimmed());
+    m_db->setSetting("ai_api_key", m_aiApiKey->text().trimmed());
+    m_db->setSetting("ai_model", m_aiModel->text().trimmed());
+
+    QStringList times;
+    for (int i = 0; i < m_reminderTimesList->count(); ++i)
+        times << m_reminderTimesList->item(i)->text();
+    m_db->setSetting("reminder_enabled",
+                     m_reminderEnabled->isChecked() ? "true" : "false");
+    m_db->setSetting("reminder_times", times.join(QLatin1Char(',')));
+
+    m_db->setSetting("weekly_report_enabled",
+                     m_weeklyReportEnabled->isChecked() ? "true" : "false");
+    m_db->setSetting("weekly_report_day",
+                     QString::number(m_weeklyReportDay->currentIndex() + 1));
+    m_db->setSetting("weekly_report_time",
+                     m_weeklyReportTime->time().toString(QStringLiteral("HH:mm")));
 
     m_db->setSetting("daily_goal", QString::number(m_dailyGoal->value() * 3600));
 }

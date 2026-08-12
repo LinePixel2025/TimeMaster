@@ -2,12 +2,17 @@
 #include <QFont>
 #include <QTimer>
 #include <QMessageBox>
+#include <QDesktopServices>
+#include <QUrl>
 #include "database/database_manager.h"
 #include "tracker/window_tracker.h"
 #include "ui/main_window.h"
 #include "ui/tray_manager.h"
 #include "utility/autostart_helper.h"
 #include "push/lineweb_pusher.h"
+#include "ai/ai_client.h"
+#include "reminder/reminder_scheduler.h"
+#include "reminder/weekly_report_manager.h"
 #include "ui/theme_manager.h"
 
 int main(int argc, char *argv[])
@@ -34,7 +39,14 @@ int main(int argc, char *argv[])
 
     LineWebPusher pusher(&db);
 
-    MainWindow window(&db);
+    AiClient ai(&db);
+    ai.reloadSettings();
+
+    ReminderScheduler scheduler(&db, &ai);
+
+    WeeklyReportManager weekly(&db, &ai);
+
+    MainWindow window(&db, &ai);
 
     WindowTracker tracker(&db);
     tracker.start();
@@ -63,6 +75,8 @@ int main(int argc, char *argv[])
     QObject::connect(&tray, &TrayManager::quitApp, [&]() {
         pusher.stop();
         pusher.pushNow();
+        scheduler.stop();
+        weekly.stop();
         tracker.stop();
         tracker.wait(10000);
         db.close();
@@ -98,6 +112,41 @@ int main(int argc, char *argv[])
             QString::fromUtf8("\xe6\x8e\xa8\xe9\x80\x81\xe5\xa4\xb1\xe8\xb4\xa5\xef\xbc\x9a%1").arg(err));
     });
 
+    // 主页 AI 报告卡片：点击生成 → 调用 AI；结果回填卡片。
+    // generateReport 返回 false 时（如该周期数据清零）立即回填失败，避免卡片
+    // 停留在生成中状态。
+    QObject::connect(&window, &MainWindow::aiReportRequested, &window,
+                     [&](const QString &period) {
+        if (!ai.generateReport(period))
+            window.onAiReportFailed(
+                period,
+                QString::fromUtf8("\xe8\xaf\xa5\xe5\x91\xa8\xe6\x9c\x9f\xe5\xb0\x9a\xe6\x97\xa0\xe4\xbd\xbf\xe7\x94\xa8\xe6\x95\xb0\xe6\x8d\xae"));
+    });
+    QObject::connect(&ai, &AiClient::reportReady,
+                     &window, &MainWindow::onAiReportReady);
+    QObject::connect(&ai, &AiClient::reportFailed,
+                     &window, &MainWindow::onAiReportFailed);
+
+    // 定时提醒：到点经托盘气泡弹出（内容由调度器本地模板或 AI 回退生成）。
+    QObject::connect(&scheduler, &ReminderScheduler::reminderDue,
+                     [&tray](const QString &title, const QString &message) {
+        tray.showNotification(title, message);
+    });
+
+    // 每周周报：生成成功后托盘通知并回填主页按钮。
+    QObject::connect(&weekly, &WeeklyReportManager::weeklyReportReady,
+                     [&tray, &window](const QString &path) {
+        window.onWeeklyReportReady(path);
+        tray.showNotification(
+            QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe5\x91\xa8\xe6\x8a\xa5\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"),
+            QString::fromUtf8("\xe5\xb7\xb2\xe4\xbf\x9d\xe5\xad\x98\xef\xbc\x9a%1").arg(path));
+    });
+    // 主页「上周周报」按钮：在系统浏览器打开 HTML。
+    QObject::connect(&window, &MainWindow::weeklyReportOpenRequested,
+                     [](const QString &path) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    });
+
     tray.show();
     window.refreshData();
 
@@ -107,7 +156,15 @@ int main(int argc, char *argv[])
         tracker.reloadSettings();
     });
 
+    QObject::connect(&window, &MainWindow::settingsChanged, &ai, &AiClient::reloadSettings);
+
+    QObject::connect(&window, &MainWindow::settingsChanged, &scheduler, &ReminderScheduler::reloadSettings);
+
+    QObject::connect(&window, &MainWindow::settingsChanged, &weekly, &WeeklyReportManager::reloadSettings);
+
     pusher.start();
+    scheduler.start();
+    weekly.start();
 
     return app.exec();
 }

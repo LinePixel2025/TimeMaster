@@ -1,5 +1,6 @@
 #include "ui/main_window.h"
 #include "database/database_manager.h"
+#include "ai/ai_client.h"
 #include "ui/settings_dialog.h"
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
@@ -7,6 +8,7 @@
 #include "ui/trend_card.h"
 #include "ui/rank_card.h"
 #include "ui/compare_card.h"
+#include "ui/ai_report_card.h"
 #include "export/exporter.h"
 
 #include <QCloseEvent>
@@ -40,18 +42,18 @@ static void applyDwmTitleBar(HWND hwnd, bool dark)
     DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, &color, sizeof(color));
 }
 
-MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
+MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     : QMainWindow(parent), m_db(db)
 {
     setWindowTitle("Time Master");
-    // Four dashboard cards need this stable floor to keep text and charts
-    // readable while the user resizes the window.
-    setMinimumSize(980, 680);
+    // Four dashboard cards plus the AI report card need this stable floor to
+    // keep text and charts readable while the user resizes the window.
+    setMinimumSize(980, 780);
 
     // Qt 返回逻辑像素，直接按可用工作区计算默认尺寸。
     const QRect avail = QGuiApplication::primaryScreen()->availableGeometry();
     const QSize defSize(qMin(1120, qRound(avail.width() * 0.86)),
-                        qMin(740, qRound(avail.height() * 0.86)));
+                        qMin(880, qRound(avail.height() * 0.88)));
     resize(defSize);
 
     QColor bg = DesignTokens::kBg();
@@ -144,7 +146,20 @@ MainWindow::MainWindow(DatabaseManager *db, QWidget *parent)
     grid->setRowStretch(0, 5);
     grid->setRowStretch(1, 5);
 
+    m_aiCard = new AiReportCard(ai, central);
+    grid->addWidget(m_aiCard, 2, 0, 1, 2); // 第 3 行跨两列
+    grid->setRowStretch(2, 4);
+
     layout->addLayout(grid, 1);
+
+    connect(m_aiCard, &AiReportCard::generateRequested,
+            this, &MainWindow::aiReportRequested);
+    connect(m_aiCard, &AiReportCard::weeklyReportOpenRequested,
+            this, &MainWindow::weeklyReportOpenRequested);
+    // 设置保存后重读 AI 配置与缓存（与 settingsChanged 的 main 端接线配合）。
+    connect(this, &MainWindow::settingsChanged, this, [this]() {
+        m_aiCard->reloadState();
+    });
 
     connect(m_trendCard, &TrendCard::chartTypeChanged, this,
             [this](const QString &type) {
@@ -244,6 +259,21 @@ void MainWindow::refreshData()
     m_trendCard->setData(m_db->getWeekSummary());
     m_rankCard->refresh(m_db->getAppRank());
     m_compareCard->setData(todayTotal, yesterdayTotal);
+}
+
+void MainWindow::onAiReportReady(const QString &period, const QString &text)
+{
+    m_aiCard->setReport(period, text);
+}
+
+void MainWindow::onAiReportFailed(const QString &period, const QString &error)
+{
+    m_aiCard->showError(period, error);
+}
+
+void MainWindow::onWeeklyReportReady(const QString &path)
+{
+    m_aiCard->setWeeklyReportPath(path);
 }
 
 void MainWindow::onExport()

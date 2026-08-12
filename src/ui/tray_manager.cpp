@@ -66,7 +66,8 @@ void TrayManager::setTooltip(const QString &text)
 
 void TrayManager::showNotification(const QString &title, const QString &message)
 {
-    m_tray->showMessage(title, message, QIcon(), 3000);
+    // 使用正式信息图标（而非空图标），部分 Windows 版本对空图标气泡显示不可靠。
+    m_tray->showMessage(title, message, QSystemTrayIcon::Information, 3000);
 }
 
 void TrayManager::onActivated(QSystemTrayIcon::ActivationReason reason)

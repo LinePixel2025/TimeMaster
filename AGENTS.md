@@ -40,10 +40,13 @@ ctest --test-dir build-tests --output-on-failure
 .\build-tests\tests\test_database.exe
 .\build-tests\tests\test_exporter.exe
 .\build-tests\tests\test_lineweb_pusher.exe
+.\build-tests\tests\test_ai_client.exe
+.\build-tests\tests\test_reminder_scheduler.exe
+.\build-tests\tests\test_weekly_report.exe
 .\build-tests\tests\test_window_tracker.exe
 ```
 
-测试目标是独立可执行文件，使用裸 `assert()` 和 Qt Test 的 `QSignalSpy`，没有 GoogleTest/Catch2。测试的 `main()` 必须创建 `QCoreApplication`，否则 Qt SQL 插件可能在启动时崩溃。`test_window_tracker` 用 `FakeStore` 驱动 `TrackingEngine`，不访问真实数据库。涉及网络的 `test_lineweb_pusher` 会访问本机无效端口和测试地址，不要把它改成真实服务依赖。
+测试目标是独立可执行文件，使用裸 `assert()` 和 Qt Test 的 `QSignalSpy`，没有 GoogleTest/Catch2。测试的 `main()` 必须创建 `QCoreApplication`，否则 Qt SQL 插件可能在启动时崩溃。`test_window_tracker` 用 `FakeStore` 驱动 `TrackingEngine`，不访问真实数据库。涉及网络的 `test_lineweb_pusher` 会访问本机无效端口和测试地址，不要把它改成真实服务依赖；`test_ai_client`、`test_reminder_scheduler`、`test_weekly_report` 只验证未配置/空数据的短路逻辑与无效端口的失败回退，不依赖真实 AI 服务。`test_weekly_report` 通过 `setOutputDir` 注入临时目录，不写用户文档目录。
 
 ## 发布与安装包
 
@@ -65,14 +68,20 @@ src/
                             TrackingEngine：会话状态机（Pending/Active/Idle），负责午夜切分、周期写库
                             TrackingStore：会话持久化接口，DatabaseManager 实现它
   icon/                     AppIconProvider：通过 Windows Shell 提取并缓存应用图标
-  ui/                       MainWindow、主题管理器、托盘管理器和四个仪表盘卡片
-                            HeroCard、TrendCard、RankCard、CompareCard、SettingsDialog
+  ui/                       MainWindow、主题管理器、托盘管理器和仪表盘卡片
+                            HeroCard、TrendCard、RankCard、CompareCard、AiReportCard、SettingsDialog
+  ai/                       AiClient：OpenAI 兼容 Chat Completions 客户端，负责聚合统计、
+                            构建中文 prompt、调用 AI 并缓存报告到 settings 表
+  reminder/                 ReminderScheduler：按配置时间点定时触发托盘提醒，AI 短文案
+                            优先、本地统计模板回退
+                            WeeklyReportManager：每周固定时刻自动生成上一完整周 HTML 日报，
+                            本地统计 + AI 分析（AI 未配置/失败回退本地小结）
   export/                   CSV 导出器和基于内置 miniz 的手写 XLSX 写入器
   push/                     LineWebPusher：定时/退出前向 LineWeb 推送当日总时长
   utility/                  Windows 自启动注册表辅助逻辑；ProcessIdentity 进程键归一化
 third_party/miniz/          内置 miniz ZIP 实现，以 miniz_all.cpp 编译
 resources/                  应用图标和 Qt resources.qrc
-tests/                      test_database、test_exporter、test_lineweb_pusher、test_window_tracker
+tests/                      test_database、test_exporter、test_lineweb_pusher、test_ai_client、test_reminder_scheduler、test_weekly_report、test_window_tracker
 docs/                       设计规格、实现计划和 LineWeb 接入文档
 .superpowers/sdd/           任务简报、审查差异和报告
 ```
@@ -84,11 +93,15 @@ docs/                       设计规格、实现计划和 LineWeb 接入文档
 - 程序启动后默认隐藏到系统托盘；通过托盘菜单显示主窗口或退出。验证主窗口时需要临时调用 `window.show()`，验证结束后恢复。
 - `WindowTracker` 轮询当前前台窗口，支持进程别名、忽略应用、追踪开关、轮询间隔、空闲阈值和最短追踪时长。轮询间隔使用数据库设置的 `poll_interval`，不能恢复成硬编码常量。4.0 起追踪逻辑抽为 `TrackingEngine` 状态机（Pending/Active/Idle），通过 `TrackingStore` 接口持久化，`WindowTracker` 只负责采集和线程管理。活跃会话按 `persistIntervalMs`（默认 30 秒）周期落库而非每秒写库，崩溃最多丢一个周期；时长以单调时钟为权威，墙钟偏差超过 5 秒时按"开始锚点 + 单调增量"推算（`sanitizeWallTime`），跨午夜会话自动切分且有段数上限（`kMaxMidnightSplits`）。
 - `MainWindow` 每 10 秒刷新数据，当前仪表盘固定包含 `HeroCard`、`TrendCard`、`RankCard` 和 `CompareCard`。不要重新引入已删除的 `StatsWidget`、`AppRankWidget`、`DashboardCard` 或旧的动态网格编辑器，除非任务明确要求。
+- AI 智能模块：`AiClient` 通过 OpenAI 兼容 `POST {endpoint}/chat/completions` 生成报告（`Authorization: Bearer <key>`，解析 `choices[0].message.content`），支持 daily/weekly 两个周期。报告文本与锚点日期缓存于 `ai_report_{daily,weekly}_{text,date}` 设置，跨天/跨周后由 `AiReportCard` 判定过期。主页卡片点击「生成报告」→ `MainWindow::aiReportRequested` → `AiClient::generateReport`，结果经 `reportReady/reportFailed` 回填；`refreshData` 不触发 AI 请求。
+- 定时提醒：`ReminderScheduler` 用 30 秒 QTimer 轮询，`reminder_times` 为逗号分隔的 "HH:mm" 列表；到点以「日期|HH:mm」去重（同分钟一次、跨天自然失效），每次命中写 `reminder_last_fired` 触发记录（设置界面「上次触发」据此展示）。今日无数据时不发真实提醒，但弹一条说明"今日暂无使用记录"，避免配置了却不响。内容优先 `AiClient::generateReminderMessage`（`max_tokens: 200`，经 `reminderReady/reminderFailed` 按 tag 回填，不写缓存），AI 未配置或失败时回退 `buildLocalMessage` 本地统计模板（含今日时长、距目标差、主力应用）。托盘气泡由 `TrayManager::showNotification` 发出（底层 `Shell_NotifyIcon` 经典气泡；勿扰模式、系统通知被关闭等会导致不显示，非代码问题）。
+- `ReminderScheduler` 与 `WeeklyReportManager` 的 `start()` 必须调用 `m_timer->start()` 启动 30 秒轮询（曾漏掉导致只在启动瞬间检查一次）；`isRunning()` 为防回归断言，测试中有覆盖。
+- 每周周报：`WeeklyReportManager` 每周固定周几 + 时刻（`weekly_report_day`/`weekly_report_time`）自动生成上一完整周的 HTML 日报，输出到 `Documents/TimeMaster/周报-yyyy-MM-dd.html`（测试用 `setOutputDir` 注入）。统计部分由本地数据组装（总览、每日时长、应用 Top5、环比），AI 已配置且该周有数据时经 `AiClient::generateWeekReport`（`buildPromptForRange`，不写缓存）异步回填「AI 分析」区，失败回退 `buildLocalSummary`。去重键为上周一日期（`weekly_report_last_generated`），同周只生成一次。主页「上周周报」按钮经 `weeklyReportOpenRequested` 由 main 用 `QDesktopServices::openUrl` 打开。
 - `ThemeManager` 是主题单例，主题值为 `light`/`dark`，通过 `themeChanged` 通知卡片刷新，并更新应用调色板和 Windows 标题栏。颜色集中在 `ui/design_tokens.h`；新增 UI 优先使用设计 token。
-- 设置界面管理以下设置：`tracking_enabled`、`poll_interval`、`idle_threshold`、`min_tracking_seconds`、`min_record_threshold`、`auto_start`、`theme`、`daily_goal`、`lineweb_enabled`、`lineweb_endpoint`、`lineweb_token`、`lineweb_interval`、`lineweb_last_push`。新增设置沿用 `settings` 表的 key/value 形式并提供默认值。
+- 设置界面管理以下设置：`tracking_enabled`、`poll_interval`、`idle_threshold`、`min_tracking_seconds`、`min_record_threshold`、`auto_start`、`theme`、`daily_goal`、`lineweb_enabled`、`lineweb_endpoint`、`lineweb_token`、`lineweb_interval`、`lineweb_last_push`、`ai_enabled`、`ai_api_endpoint`、`ai_api_key`、`ai_model`、`ai_report_daily_text`、`ai_report_daily_date`、`ai_report_weekly_text`、`ai_report_weekly_date`、`reminder_enabled`、`reminder_times`、`reminder_last_fired`、`weekly_report_enabled`、`weekly_report_day`、`weekly_report_time`、`weekly_report_last_generated`、`weekly_report_path`。新增设置沿用 `settings` 表的 key/value 形式并提供默认值。
 - 数据库构造时自动创建/迁移 `sessions`、`settings`、`ignored_apps`、`app_aliases` 表，迁移使用 `CREATE ... IF NOT EXISTS`，没有版本号迁移框架。
 - 统计查询会应用最短记录阈值 `min_record_threshold` 和忽略应用过滤；修改查询时要保持这两个行为一致。
-- LineWeb 推送请求发送到 `<endpoint>/api/health/push`，JSON 字段为 `totalSeconds`、`date`，认证头为 `X-Screen-Time-Token`。设置变更后必须让 `LineWebPusher` 和 `WindowTracker` 重新加载配置。
+- LineWeb 推送请求发送到 `<endpoint>/api/health/push`，JSON 字段为 `totalSeconds`、`date`，认证头为 `X-Screen-Time-Token`。设置变更后必须让 `LineWebPusher`、`WindowTracker` 和 `AiClient` 重新加载配置。
 
 ## 数据库线程安全
 

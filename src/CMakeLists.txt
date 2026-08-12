@@ -4,6 +4,7 @@ set(SOURCES
     tracker/window_tracker.cpp
     tracker/tracking_engine.cpp
     icon/app_icon_provider.cpp
+    ai/ai_client.cpp
     ui/main_window.cpp
     ui/settings_dialog.cpp
     ui/theme_manager.cpp
@@ -13,10 +14,13 @@ set(SOURCES
     ui/trend_card.cpp
     ui/rank_card.cpp
     ui/compare_card.cpp
+    ui/ai_report_card.cpp
     export/exporter.cpp
     export/xlsx_writer.cpp
     utility/autostart_helper.cpp
     push/lineweb_pusher.cpp
+    reminder/reminder_scheduler.cpp
+    reminder/weekly_report_manager.cpp
     ${CMAKE_SOURCE_DIR}/third_party/miniz/miniz_all.cpp
 )
 
@@ -26,6 +30,7 @@ set(HEADERS
     tracker/tracking_engine.h
     tracker/tracking_store.h
     icon/app_icon_provider.h
+    ai/ai_client.h
     ui/main_window.h
     ui/settings_dialog.h
     ui/theme_manager.h
@@ -37,11 +42,14 @@ set(HEADERS
     ui/trend_card.h
     ui/rank_card.h
     ui/compare_card.h
+    ui/ai_report_card.h
     export/exporter.h
     export/xlsx_writer.h
     utility/autostart_helper.h
     utility/process_identity.h
     push/lineweb_pusher.h
+    reminder/reminder_scheduler.h
+    reminder/weekly_report_manager.h
 )
 
 qt6_add_resources(RESOURCES ${CMAKE_SOURCE_DIR}/resources/resources.qrc)
