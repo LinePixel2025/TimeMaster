@@ -98,11 +98,22 @@ protected:
                                 baseMetrics.horizontalAdvance(yesterdayText));
         if (widest > maxTextWidth)
             valueFontSize = qMax(22, qRound(38.0 * maxTextWidth / widest));
+        // 高度兜底：卡片被压缩或高 DPI 时 38pt 数字行高超出可用高度，
+        // 会溢出组件边框被裁切；按行高再收缩一次，保证大数字完整可见。
+        const qreal valueRectH = valueH - labelH + 2;
+        if (valueRectH >= 8) {
+            const int heightBudget = qMax(1, qRound(valueRectH) - 2);
+            const QFontMetrics scaledMetrics(
+                DesignTokens::appFont(valueFontSize, QFont::Bold));
+            if (scaledMetrics.height() > heightBudget)
+                valueFontSize = qMax(16, qRound(static_cast<qreal>(valueFontSize)
+                                                * heightBudget / scaledMetrics.height()));
+        }
         p.setFont(DesignTokens::appFont(valueFontSize, QFont::Bold));
         p.setPen(DesignTokens::kTextStrong());
-        p.drawText(QRectF(0, valueY + labelH - 2, centerX - 14, valueH - labelH + 2),
+        p.drawText(QRectF(0, valueY + labelH - 2, centerX - 14, valueRectH),
                    Qt::AlignCenter, todayText);
-        p.drawText(QRectF(centerX + 14, valueY + labelH - 2, centerX - 14, valueH - labelH + 2),
+        p.drawText(QRectF(centerX + 14, valueY + labelH - 2, centerX - 14, valueRectH),
                    Qt::AlignCenter, yesterdayText);
     }
 
