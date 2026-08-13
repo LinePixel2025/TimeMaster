@@ -74,7 +74,7 @@ public:
 
         m_phraseLabel = new QLabel(this);
         m_phraseLabel->setAlignment(Qt::AlignCenter);
-        m_phraseLabel->setFont(DesignTokens::appFont(28, QFont::DemiBold));
+        m_phraseLabel->setFont(DesignTokens::appFont(25, QFont::DemiBold));
         m_phraseLabel->setStyleSheet(QStringLiteral("color: white; background: transparent;"));
         layout->addWidget(m_phraseLabel, 1);
 
@@ -139,6 +139,9 @@ AiReportCard::AiReportCard(AiClient *ai, QWidget *parent)
     : CardFrame(QStringLiteral("AI 使用报告"), parent)
     , m_ai(ai)
 {
+    // 小窗口下收紧卡片上下留白，为总结大字与按钮留出空间。
+    contentLayout()->setContentsMargins(20, 14, 20, 16);
+    contentLayout()->setSpacing(8);
     // 整卡为圆角渐变（paintEvent 自绘），标题与提示均为白色系。
     titleLabel()->setStyleSheet(QStringLiteral("color: white; background: transparent;"));
 

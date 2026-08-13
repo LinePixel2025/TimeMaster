@@ -49,12 +49,12 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     setWindowTitle("Time Master");
     // Four dashboard cards plus the AI report card need this stable floor to
     // keep text and charts readable while the user resizes the window.
-    setMinimumSize(980, 780);
+    setMinimumSize(900, 700);
 
     // Qt 返回逻辑像素，直接按可用工作区计算默认尺寸。
     const QRect avail = QGuiApplication::primaryScreen()->availableGeometry();
-    const QSize defSize(qMin(1120, qRound(avail.width() * 0.86)),
-                        qMin(880, qRound(avail.height() * 0.88)));
+    const QSize defSize(qMin(960, qRound(avail.width() * 0.80)),
+                        qMin(740, qRound(avail.height() * 0.82)));
     resize(defSize);
 
     QColor bg = DesignTokens::kBg();
@@ -73,7 +73,7 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     setCentralWidget(central);
 
     auto *layout = new QVBoxLayout(central);
-    layout->setContentsMargins(28, 22, 28, 28);
+    layout->setContentsMargins(24, 16, 24, 22);
     layout->setSpacing(18);
 
     auto *headerLayout = new QHBoxLayout();
@@ -132,7 +132,7 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     layout->addLayout(headerLayout);
 
     auto *grid = new QGridLayout();
-    grid->setSpacing(16);
+    grid->setSpacing(12);
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setColumnStretch(0, 1);
     grid->setColumnStretch(1, 1);

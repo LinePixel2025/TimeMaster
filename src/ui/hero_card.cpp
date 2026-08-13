@@ -115,7 +115,7 @@ HeroCard::HeroCard(QWidget *parent)
     leftCol->addStretch();
 
     m_ring = new GoalRing(this);
-    m_ring->setFixedSize(110, 110);
+    m_ring->setFixedSize(96, 96);
 
     contentRow->addLayout(leftCol, 1);
     contentRow->addWidget(m_ring, 0, Qt::AlignVCenter);

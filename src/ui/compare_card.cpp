@@ -27,7 +27,7 @@ public:
     explicit CompareArea(QWidget *parent = nullptr)
         : QWidget(parent)
     {
-        setMinimumHeight(120);
+        setMinimumHeight(108);
         connect(ThemeManager::instance(), &ThemeManager::themeChanged,
                 this, [this](ThemeManager::Theme) { update(); });
     }
