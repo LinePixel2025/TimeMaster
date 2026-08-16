@@ -119,9 +119,11 @@ int main(int argc, char *argv[])
     // generateReport 返回 false 时（如该周期数据清零）立即回填失败，避免卡片
     // 停留在生成中状态。dailyManualPending 标记手动请求，AI 完成后自动打开日报。
     bool dailyManualPending = false;
+    QString dailyAiUsageText; // 本次手动生成的 token 消耗，随完成气泡展示后失效
     QObject::connect(&window, &MainWindow::aiReportRequested, &window,
                      [&](const QString &period) {
         dailyManualPending = true;
+        dailyAiUsageText.clear();
         if (!ai.generateReport(period)) {
             dailyManualPending = false;
             window.onAiReportFailed(
@@ -135,23 +137,37 @@ int main(int argc, char *argv[])
                      &window, &MainWindow::onAiReportFailed);
     // AI 分析回填日报：手动请求（⟳）完成后网页自动更新并在浏览器打开。
     QObject::connect(&ai, &AiClient::reportReady,
-                     [&](const QString &period, const QString &text) {
-        if (period == AiPeriod::daily())
+                     [&](const QString &period, const QString &text,
+                         int promptTokens, int completionTokens,
+                         int totalTokens) {
+        if (period == AiPeriod::daily()) {
             daily.applyReportText(text);
+            dailyAiUsageText = AiClient::formatUsageText(
+                promptTokens, completionTokens, totalTokens);
+        }
     });
     QObject::connect(&ai, &AiClient::reportFailed,
                      [&](const QString &period, const QString &) {
-        if (period == AiPeriod::daily())
+        if (period == AiPeriod::daily()) {
             dailyManualPending = false; // 失败不自动打开，卡片显示错误
+            dailyAiUsageText.clear();
+        }
     });
     QObject::connect(&daily, &DailyReportManager::dailyReportReady,
-                     [&tray, &dailyManualPending](const QString &path) {
+                     [&tray, &dailyManualPending, &dailyAiUsageText](
+                         const QString &path) {
         if (dailyManualPending) {
             dailyManualPending = false;
             QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+            // 接口未返回 usage 时 formatUsageText 为空串，气泡保持原文案。
+            QString msg = QString::fromUtf8(
+                "\xe5\xb7\xb2\xe5\x9c\xa8\xe6\xb5\x8f\xe8\xa7\x88\xe5\x99\xa8"
+                "\xe4\xb8\xad\xe6\x89\x93\xe5\xbc\x80\xe3\x80\x82");
+            msg += dailyAiUsageText;
+            dailyAiUsageText.clear();
             tray.showNotification(
                 QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x8a\xa5\xe5\x91\x8a\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"),
-                QString::fromUtf8("\xe5\xb7\xb2\xe5\x9c\xa8\xe6\xb5\x8f\xe8\xa7\x88\xe5\x99\xa8\xe4\xb8\xad\xe6\x89\x93\xe5\xbc\x80\xe3\x80\x82"));
+                msg);
         }
     });
     // 主页「↗」：现场生成最新统计的今日报告网页并在浏览器打开
@@ -172,19 +188,21 @@ int main(int argc, char *argv[])
     // 自动定时生成仅托盘通知（避免无预期地弹出浏览器）。
     bool manualWeeklyPending = false;
     QObject::connect(&weekly, &WeeklyReportManager::weeklyReportReady,
-                     [&tray, &window, &manualWeeklyPending](const QString &path) {
+                     [&tray, &window, &manualWeeklyPending](
+                         const QString &path, const QString &aiUsage) {
         window.onWeeklyReportReady(path);
+        // aiUsage 为本次 AI 分析的 token 消耗（本地小结回退时为空）。
+        QString msg;
         if (manualWeeklyPending) {
             manualWeeklyPending = false;
             QDesktopServices::openUrl(QUrl::fromLocalFile(path));
-            tray.showNotification(
-                QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe5\x91\xa8\xe6\x8a\xa5\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"),
-                QString::fromUtf8("\xe5\xb7\xb2\xe5\x9c\xa8\xe6\xb5\x8f\xe8\xa7\x88\xe5\x99\xa8\xe4\xb8\xad\xe6\x89\x93\xe5\xbc\x80\xe3\x80\x82"));
+            msg = QString::fromUtf8("\xe5\xb7\xb2\xe5\x9c\xa8\xe6\xb5\x8f\xe8\xa7\x88\xe5\x99\xa8\xe4\xb8\xad\xe6\x89\x93\xe5\xbc\x80\xe3\x80\x82");
         } else {
-            tray.showNotification(
-                QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe5\x91\xa8\xe6\x8a\xa5\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"),
-                QString::fromUtf8("\xe5\xb7\xb2\xe4\xbf\x9d\xe5\xad\x98\xef\xbc\x9a%1").arg(path));
+            msg = QString::fromUtf8("\xe5\xb7\xb2\xe4\xbf\x9d\xe5\xad\x98\xef\xbc\x9a%1").arg(path);
         }
+        tray.showNotification(
+            QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe5\x91\xa8\xe6\x8a\xa5\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"),
+            msg + aiUsage);
     });
     // 主页「上周周报」按钮：在系统浏览器打开 HTML。
     QObject::connect(&window, &MainWindow::weeklyReportOpenRequested,

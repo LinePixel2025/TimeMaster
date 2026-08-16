@@ -72,8 +72,10 @@ public:
     void setOutputDir(const QString &dir);
 
 signals:
-    /// 周报已生成（path 为 HTML 绝对路径）。
-    void weeklyReportReady(const QString &path);
+    /// 周报已生成（path 为 HTML 绝对路径）。aiUsage 为本次 AI 分析的
+    /// token 消耗描述（AiClient::formatUsageText 产物），未走 AI、AI 失败
+    /// 回退本地小结或接口未返回 usage 时为空串。
+    void weeklyReportReady(const QString &path, const QString &aiUsage);
 
 private:
     bool generateWeekReport();
@@ -96,6 +98,7 @@ private:
     QString m_time = QStringLiteral("09:00");
     QString m_lastGenerated; // 已生成周报对应的「上周一」yyyy-MM-dd
     QDate m_pendingMonday;   // 在途 AI 请求对应的周一（结果回填时用于写文件）
+    QString m_pendingAiUsage; // 在途 AI 请求的 token 消耗描述（随 weeklyReportReady 带出）
 };
 
 #endif // WEEKLY_REPORT_MANAGER_H

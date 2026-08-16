@@ -33,12 +33,16 @@ WeeklyReportManager::WeeklyReportManager(DatabaseManager *db, AiClient *ai,
 
     // AI 分析文案回填：tag 匹配在途请求才写文件（并发/过期请求丢弃）。
     connect(m_ai, &AiClient::weekReportReady, this,
-            [this](const QString &tag, const QString &text) {
+            [this](const QString &tag, const QString &text, int promptTokens,
+                   int completionTokens, int totalTokens) {
         if (!m_pendingMonday.isValid() ||
             tag != m_pendingMonday.toString(Qt::ISODate))
             return;
         const QDate monday = m_pendingMonday;
         m_pendingMonday = QDate();
+        m_pendingAiUsage = AiClient::formatUsageText(promptTokens,
+                                                     completionTokens,
+                                                     totalTokens);
         finishReport(monday, ReportHtml::markdownToHtml(text));
     });
     connect(m_ai, &AiClient::weekReportFailed, this,
@@ -48,6 +52,7 @@ WeeklyReportManager::WeeklyReportManager(DatabaseManager *db, AiClient *ai,
             return;
         const QDate monday = m_pendingMonday;
         m_pendingMonday = QDate();
+        m_pendingAiUsage.clear(); // AI 失败回退本地小结，无 token 消耗可展示。
         // AI 失败 → 回退本地小结，周报不落空。
         finishReport(monday, ReportHtml::markdownToHtml(
                                   buildLocalSummary(monday, monday.addDays(6))));
@@ -113,13 +118,13 @@ bool WeeklyReportManager::generateNow()
     if (generateWeekReport())
         return true;
 
-    // 同周已生成过（去重键命中）→ 打开已有文件。
+    // 同周已生成过（去重键命中）→ 打开已有文件（未发起新的 AI 请求，无用量）。
     const QDate today = QDate::currentDate();
     const QDate monday = today.addDays(-((today.dayOfWeek() - 1) % 7) - 7);
     if (m_lastGenerated == monday.toString(Qt::ISODate)) {
         const QString path = filePathFor(monday);
         if (QFile::exists(path)) {
-            emit weeklyReportReady(path);
+            emit weeklyReportReady(path, QString());
             return true;
         }
         // 去重键命中但文件已不在（被删除/移动）：清除去重键重新生成。
@@ -296,7 +301,8 @@ void WeeklyReportManager::finishReport(const QDate &monday,
     m_db->setSetting("weekly_report_path", path);
     // 同步内存去重键，避免同周定时器后续命中时重复生成。
     m_lastGenerated = monday.toString(Qt::ISODate);
-    emit weeklyReportReady(path);
+    emit weeklyReportReady(path, m_pendingAiUsage);
+    m_pendingAiUsage.clear();
 }
 
 QString WeeklyReportManager::buildHtml(const QString &aiHtml,

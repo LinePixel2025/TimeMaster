@@ -49,17 +49,25 @@ public:
     /// 未启用、未配置或该周无数据时返回 false（不发起任何请求）。
     bool generateWeekReport(const QDate &monday, const QString &tag);
 
+    /// 把 token 用量格式化为「本次 AI 消耗 tokens：输入 X · 输出 Y · 合计 Z」；
+    /// 接口未返回 usage（totalTokens < 0）时返回空串，调用方据此跳过展示。
+    static QString formatUsageText(int promptTokens, int completionTokens,
+                                   int totalTokens);
+
 signals:
-    /// 报告生成成功（文本已写入缓存）。
-    void reportReady(const QString &period, const QString &text);
+    /// 报告生成成功（文本已写入缓存）。token 用量为本次请求的消耗统计，
+    /// -1 表示接口未返回 usage。
+    void reportReady(const QString &period, const QString &text,
+                     int promptTokens, int completionTokens, int totalTokens);
     /// 报告生成失败（error 为可展示的错误描述）。
     void reportFailed(const QString &period, const QString &error);
     /// 提醒短文案生成成功（不写缓存）。
     void reminderReady(const QString &tag, const QString &text);
     /// 提醒短文案生成失败（调用方应回退本地模板）。
     void reminderFailed(const QString &tag, const QString &error);
-    /// 指定周周报分析文案生成成功（不写缓存）。
-    void weekReportReady(const QString &tag, const QString &text);
+    /// 指定周周报分析文案生成成功（不写缓存）；token 用量含义同 reportReady。
+    void weekReportReady(const QString &tag, const QString &text,
+                         int promptTokens, int completionTokens, int totalTokens);
     /// 指定周周报分析文案生成失败（调用方回退本地小结）。
     void weekReportFailed(const QString &tag, const QString &error);
 

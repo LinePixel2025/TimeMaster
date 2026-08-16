@@ -141,6 +141,23 @@ void test_cache_read()
     std::cout << "test_cache_read PASS" << std::endl;
 }
 
+void test_format_usage_text()
+{
+    // 分组符随系统 locale 变化（逗号/点号），用 QLocale 生成期望值避免误报。
+    const QString grouped12345 = QLocale().toString(12345);
+    const QString grouped1282 = QLocale().toString(1282);
+    // 接口未返回 usage（totalTokens < 0）→ 空串，调用方跳过展示。
+    assert(AiClient::formatUsageText(-1, -1, -1).isEmpty());
+    // 只有总量时输出简短形式。
+    assert(AiClient::formatUsageText(-1, -1, 12345).contains(grouped12345));
+    // 完整用量包含输入/输出/合计三段。
+    const QString full = AiClient::formatUsageText(850, 432, 1282);
+    assert(full.contains(QStringLiteral("850")));
+    assert(full.contains(QStringLiteral("432")));
+    assert(full.contains(grouped1282));
+    std::cout << "test_format_usage_text PASS" << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -149,6 +166,7 @@ int main(int argc, char *argv[])
     test_no_data_no_request();
     test_invalid_endpoint_fails();
     test_cache_read();
+    test_format_usage_text();
     std::cout << "All AI client tests passed!" << std::endl;
     return 0;
 }

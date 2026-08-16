@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QMap>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -286,6 +287,9 @@ void AiClient::sendChat(const QString &period, const QString &prompt)
     QNetworkReply *reply = m_nam->post(req, QJsonDocument(body).toJson());
     connect(reply, &QNetworkReply::finished, this, [this, reply, period]() {
         QString text;
+        int promptTokens = -1;
+        int completionTokens = -1;
+        int totalTokens = -1;
         if (reply->error() == QNetworkReply::NoError) {
             const QJsonObject obj =
                 QJsonDocument::fromJson(reply->readAll()).object();
@@ -305,11 +309,20 @@ void AiClient::sendChat(const QString &period, const QString &prompt)
                                         "内容可能不完整"));
                 }
             }
+            // OpenAI 兼容接口的用量统计；部分网关不返回 usage，保持 -1 交由调用方跳过展示。
+            const QJsonObject usage = obj[QStringLiteral("usage")].toObject();
+            if (usage.contains(QStringLiteral("total_tokens"))) {
+                promptTokens = usage[QStringLiteral("prompt_tokens")].toInt();
+                completionTokens =
+                    usage[QStringLiteral("completion_tokens")].toInt();
+                totalTokens = usage[QStringLiteral("total_tokens")].toInt();
+            }
         }
 
         if (!text.isEmpty()) {
             saveCache(period, text);
-            emit reportReady(period, text);
+            emit reportReady(period, text, promptTokens, completionTokens,
+                             totalTokens);
         } else {
             QString err = reply->errorString();
             const QJsonObject obj =
@@ -468,6 +481,9 @@ void AiClient::sendWeekChat(const QString &tag, const QString &prompt)
     QNetworkReply *reply = m_nam->post(req, QJsonDocument(body).toJson());
     connect(reply, &QNetworkReply::finished, this, [this, reply, tag]() {
         QString text;
+        int promptTokens = -1;
+        int completionTokens = -1;
+        int totalTokens = -1;
         if (reply->error() == QNetworkReply::NoError) {
             const QJsonObject obj =
                 QJsonDocument::fromJson(reply->readAll()).object();
@@ -487,10 +503,18 @@ void AiClient::sendWeekChat(const QString &tag, const QString &prompt)
                                         "（finish_reason=length），内容可能不完整"));
                 }
             }
+            const QJsonObject usage = obj[QStringLiteral("usage")].toObject();
+            if (usage.contains(QStringLiteral("total_tokens"))) {
+                promptTokens = usage[QStringLiteral("prompt_tokens")].toInt();
+                completionTokens =
+                    usage[QStringLiteral("completion_tokens")].toInt();
+                totalTokens = usage[QStringLiteral("total_tokens")].toInt();
+            }
         }
 
         if (!text.isEmpty()) {
-            emit weekReportReady(tag, text);
+            emit weekReportReady(tag, text, promptTokens, completionTokens,
+                                 totalTokens);
         } else {
             QString err = reply->errorString();
             const QJsonObject obj =
@@ -548,6 +572,21 @@ QString AiClient::formatDuration(int seconds)
     if (minutes == 0)
         return QStringLiteral("%1小时").arg(hours);
     return QStringLiteral("%1小时%2分钟").arg(hours).arg(minutes);
+}
+
+QString AiClient::formatUsageText(int promptTokens, int completionTokens,
+                                  int totalTokens)
+{
+    if (totalTokens < 0)
+        return QString();
+    const QLocale locale; // 千分位分组，token 数经常上万
+    if (promptTokens >= 0 && completionTokens >= 0)
+        return QStringLiteral("本次 AI 消耗 tokens：输入 %1 · 输出 %2 · 合计 %3")
+            .arg(locale.toString(promptTokens),
+                 locale.toString(completionTokens),
+                 locale.toString(totalTokens));
+    return QStringLiteral("本次 AI 消耗 tokens：合计 %1")
+        .arg(locale.toString(totalTokens));
 }
 
 void AiClient::appendErrorLog(const QString &period, const QString &error)
