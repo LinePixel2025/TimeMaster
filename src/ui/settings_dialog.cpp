@@ -599,6 +599,41 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
                    {m_reminderTimeEdit, m_reminderAddBtn, m_reminderRemoveBtn,
                     m_reminderTimesList});
 
+        // ---- 间隔提醒 ----
+        QVBoxLayout *intervalCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("间隔提醒"),
+                       this, &intervalCardLayout, 0);
+
+        m_intervalReminderEnabled = new QCheckBox(
+            QString::fromUtf8("启用间隔提醒"), this);
+        m_intervalReminderEnabled->setFont(DesignTokens::appFont(13));
+        m_intervalReminderEnabled->setToolTip(
+            QString::fromUtf8("自启用时刻起，每隔设定的间隔提醒一次使用情况；修改间隔后重新计时"));
+        intervalCardLayout->addWidget(m_intervalReminderEnabled);
+
+        auto *intervalRow = new QHBoxLayout();
+        intervalRow->setSpacing(8);
+        auto *intervalLabel = new QLabel(QString::fromUtf8("提醒间隔:"), this);
+        intervalLabel->setFont(DesignTokens::appFont(13));
+        intervalLabel->setToolTip(
+            QString::fromUtf8("两次间隔提醒之间的分钟数"));
+        intervalRow->addWidget(intervalLabel);
+        m_intervalReminderMinutes = new QSpinBox(this);
+        m_intervalReminderMinutes->setRange(5, 240);
+        m_intervalReminderMinutes->setValue(45);
+        m_intervalReminderMinutes->setSuffix(QString::fromUtf8(" 分钟"));
+        m_intervalReminderMinutes->setToolTip(intervalLabel->toolTip());
+        intervalRow->addWidget(m_intervalReminderMinutes);
+        intervalRow->addStretch();
+        intervalCardLayout->addLayout(intervalRow);
+
+        auto *intervalHint = new QLabel(
+            QString::fromUtf8("启用后从当下开始计时，程序重启或修改间隔会重新计时"), this);
+        intervalHint->setObjectName(QStringLiteral("statusLabel"));
+        intervalCardLayout->addWidget(intervalHint);
+
+        bindToggle(m_intervalReminderEnabled, {m_intervalReminderMinutes});
+
         // ---- 每周周报 ----
         QVBoxLayout *weeklyCardLayout = nullptr;
         addSectionCard(pageLayout, QString::fromUtf8("每周周报"),
@@ -1060,6 +1095,11 @@ void SettingsDialog::loadSettings()
     }
     m_reminderTimesList->sortItems();
 
+    m_intervalReminderEnabled->setChecked(
+        m_db->getSetting("reminder_interval_enabled", "false") == "true");
+    m_intervalReminderMinutes->setValue(
+        qBound(5, m_db->getSetting("reminder_interval_minutes", "45").toInt(), 240));
+
     m_weeklyReportEnabled->setChecked(
         m_db->getSetting("weekly_report_enabled", "false") == "true");
     m_weeklyReportDay->setCurrentIndex(
@@ -1170,6 +1210,10 @@ void SettingsDialog::saveSettings()
     m_db->setSetting("reminder_enabled",
                      m_reminderEnabled->isChecked() ? "true" : "false");
     m_db->setSetting("reminder_times", times.join(QLatin1Char(',')));
+    m_db->setSetting("reminder_interval_enabled",
+                     m_intervalReminderEnabled->isChecked() ? "true" : "false");
+    m_db->setSetting("reminder_interval_minutes",
+                     QString::number(m_intervalReminderMinutes->value()));
 
     m_db->setSetting("weekly_report_enabled",
                      m_weeklyReportEnabled->isChecked() ? "true" : "false");

@@ -89,6 +89,9 @@ private:
     QPushButton *m_reminderRemoveBtn = nullptr;
     QLabel *m_reminderStatus = nullptr;
 
+    QCheckBox *m_intervalReminderEnabled = nullptr;
+    QSpinBox *m_intervalReminderMinutes = nullptr;
+
     QCheckBox *m_weeklyReportEnabled = nullptr;
     QComboBox *m_weeklyReportDay = nullptr;
     QTimeEdit *m_weeklyReportTime = nullptr;
