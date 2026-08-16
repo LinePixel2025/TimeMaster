@@ -274,6 +274,21 @@ void AiReportCard::showError(const QString &error)
 void AiReportCard::showWeeklyMenu()
 {
     QMenu menu(this);
+    // QMenu 在 Windows 原生样式下不跟随应用 palette（暗色主题出现黑底黑字），
+    // 显式样式表优先级最高，明暗主题均按设计 token 取色。
+    const bool dark = DesignTokens::isDarkTheme();
+    menu.setStyleSheet(QString(
+        "QMenu { background: %1; color: %2; border: 1px solid %3;"
+        " border-radius: 8px; padding: 6px 2px; }"
+        "QMenu::item { padding: 7px 26px 7px 16px; border-radius: 6px; }"
+        "QMenu::item:selected { background: %4; color: %5; }"
+        "QMenu::item:disabled { color: %6; }"
+        "QMenu::separator { height: 1px; background: %3; margin: 5px 8px; }")
+        .arg(DesignTokens::kSurface().name(), DesignTokens::kText().name(),
+             DesignTokens::kBorder().name(),
+             DesignTokens::kAccentLight().name(),
+             DesignTokens::kAccent().name(),
+             DesignTokens::kTextFaint().name()));
     QAction *openAct = menu.addAction(QStringLiteral("打开上周周报"));
     menu.addSeparator();
     QAction *genAct = menu.addAction(QStringLiteral("立即生成上周周报"));
