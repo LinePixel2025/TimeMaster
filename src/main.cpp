@@ -13,6 +13,7 @@
 #include "ai/ai_client.h"
 #include "reminder/reminder_scheduler.h"
 #include "reminder/weekly_report_manager.h"
+#include "report/daily_report_manager.h"
 #include "ui/theme_manager.h"
 
 int main(int argc, char *argv[])
@@ -45,6 +46,8 @@ int main(int argc, char *argv[])
     ReminderScheduler scheduler(&db, &ai);
 
     WeeklyReportManager weekly(&db, &ai);
+
+    DailyReportManager daily(&db, &ai);
 
     MainWindow window(&db, &ai);
 
@@ -112,20 +115,52 @@ int main(int argc, char *argv[])
             QString::fromUtf8("\xe6\x8e\xa8\xe9\x80\x81\xe5\xa4\xb1\xe8\xb4\xa5\xef\xbc\x9a%1").arg(err));
     });
 
-    // 主页 AI 报告卡片：点击生成 → 调用 AI；结果回填卡片。
+    // 主页 AI 报告卡片：点击生成 → 调用 AI；结果回填卡片与日报网页。
     // generateReport 返回 false 时（如该周期数据清零）立即回填失败，避免卡片
-    // 停留在生成中状态。
+    // 停留在生成中状态。dailyManualPending 标记手动请求，AI 完成后自动打开日报。
+    bool dailyManualPending = false;
     QObject::connect(&window, &MainWindow::aiReportRequested, &window,
                      [&](const QString &period) {
-        if (!ai.generateReport(period))
+        dailyManualPending = true;
+        if (!ai.generateReport(period)) {
+            dailyManualPending = false;
             window.onAiReportFailed(
                 period,
                 QString::fromUtf8("\xe8\xaf\xa5\xe5\x91\xa8\xe6\x9c\x9f\xe5\xb0\x9a\xe6\x97\xa0\xe4\xbd\xbf\xe7\x94\xa8\xe6\x95\xb0\xe6\x8d\xae"));
+        }
     });
     QObject::connect(&ai, &AiClient::reportReady,
                      &window, &MainWindow::onAiReportReady);
     QObject::connect(&ai, &AiClient::reportFailed,
                      &window, &MainWindow::onAiReportFailed);
+    // AI 分析回填日报：手动请求（⟳）完成后网页自动更新并在浏览器打开。
+    QObject::connect(&ai, &AiClient::reportReady,
+                     [&](const QString &period, const QString &text) {
+        if (period == AiPeriod::daily())
+            daily.applyReportText(text);
+    });
+    QObject::connect(&ai, &AiClient::reportFailed,
+                     [&](const QString &period, const QString &) {
+        if (period == AiPeriod::daily())
+            dailyManualPending = false; // 失败不自动打开，卡片显示错误
+    });
+    QObject::connect(&daily, &DailyReportManager::dailyReportReady,
+                     [&tray, &dailyManualPending](const QString &path) {
+        if (dailyManualPending) {
+            dailyManualPending = false;
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+            tray.showNotification(
+                QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x8a\xa5\xe5\x91\x8a\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"),
+                QString::fromUtf8("\xe5\xb7\xb2\xe5\x9c\xa8\xe6\xb5\x8f\xe8\xa7\x88\xe5\x99\xa8\xe4\xb8\xad\xe6\x89\x93\xe5\xbc\x80\xe3\x80\x82"));
+        }
+    });
+    // 主页「↗」：现场生成最新统计的今日报告网页并在浏览器打开
+    //（AI 未配置/无缓存时统计板块仍然完整）。
+    QObject::connect(&window, &MainWindow::dailyReportOpenRequested, [&]() {
+        const QString path = daily.refreshToday();
+        if (!path.isEmpty())
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    });
 
     // 定时提醒：到点经托盘气泡弹出（内容由调度器本地模板或 AI 回退生成）。
     QObject::connect(&scheduler, &ReminderScheduler::reminderDue,

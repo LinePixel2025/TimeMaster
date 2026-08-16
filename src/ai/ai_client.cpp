@@ -269,7 +269,9 @@ void AiClient::sendChat(const QString &period, const QString &prompt)
     QJsonObject body;
     body[QStringLiteral("model")] = m_model;
     body[QStringLiteral("messages")] = messages;
-    body[QStringLiteral("max_tokens")] = 1024;
+    // 预算需覆盖思考型模型的推理消耗（推理与正文常共用 max_tokens），
+    // 实际输出长度仍由 prompt 的字数要求约束，非思考模型不会因此变长。
+    body[QStringLiteral("max_tokens")] = 8192;
 
     QString endpoint = m_endpoint.trimmed();
     while (endpoint.endsWith(QLatin1Char('/')))
@@ -290,9 +292,18 @@ void AiClient::sendChat(const QString &period, const QString &prompt)
             const QJsonArray choices =
                 obj[QStringLiteral("choices")].toArray();
             if (!choices.isEmpty()) {
+                const QJsonObject choice = choices.first().toObject();
                 const QJsonObject msg =
-                    choices.first().toObject()[QStringLiteral("message")].toObject();
+                    choice[QStringLiteral("message")].toObject();
                 text = msg[QStringLiteral("content")].toString();
+                if (choice[QStringLiteral("finish_reason")].toString()
+                        == QStringLiteral("length")) {
+                    qWarning() << "[AI] 报告被 max_tokens 截断:" << period;
+                    appendErrorLog(
+                        period,
+                        QStringLiteral("响应因 max_tokens 被截断（finish_reason=length），"
+                                        "内容可能不完整"));
+                }
             }
         }
 
@@ -362,7 +373,8 @@ void AiClient::sendReminderChat(const QString &tag, const QString &prompt)
     QJsonObject body;
     body[QStringLiteral("model")] = m_model;
     body[QStringLiteral("messages")] = messages;
-    body[QStringLiteral("max_tokens")] = 200;
+    // 思考型模型的推理也消耗 max_tokens，200 会被推理吃光导致正文为空/截断。
+    body[QStringLiteral("max_tokens")] = 2048;
 
     QString endpoint = m_endpoint.trimmed();
     while (endpoint.endsWith(QLatin1Char('/')))
@@ -440,7 +452,8 @@ void AiClient::sendWeekChat(const QString &tag, const QString &prompt)
     QJsonObject body;
     body[QStringLiteral("model")] = m_model;
     body[QStringLiteral("messages")] = messages;
-    body[QStringLiteral("max_tokens")] = 1024;
+    // 与每日报告一致：预算覆盖思考型模型的推理消耗，防止正文被截断。
+    body[QStringLiteral("max_tokens")] = 8192;
 
     QString endpoint = m_endpoint.trimmed();
     while (endpoint.endsWith(QLatin1Char('/')))
@@ -461,9 +474,18 @@ void AiClient::sendWeekChat(const QString &tag, const QString &prompt)
             const QJsonArray choices =
                 obj[QStringLiteral("choices")].toArray();
             if (!choices.isEmpty()) {
+                const QJsonObject choice = choices.first().toObject();
                 const QJsonObject msg =
-                    choices.first().toObject()[QStringLiteral("message")].toObject();
+                    choice[QStringLiteral("message")].toObject();
                 text = msg[QStringLiteral("content")].toString();
+                if (choice[QStringLiteral("finish_reason")].toString()
+                        == QStringLiteral("length")) {
+                    qWarning() << "[AI] 周报分析被 max_tokens 截断:" << tag;
+                    appendErrorLog(
+                        tag,
+                        QStringLiteral("周报分析因 max_tokens 被截断"
+                                        "（finish_reason=length），内容可能不完整"));
+                }
             }
         }
 

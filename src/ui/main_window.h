@@ -40,6 +40,8 @@ signals:
     void weeklyReportGenerateRequested();
     /// 用户在 AI 报告卡片点击「重新生成」，请求强制重新生成上周周报。
     void weeklyReportRegenerateRequested();
+    /// 用户在 AI 报告卡片点击「↗」，请求生成并在浏览器打开今日报告网页。
+    void dailyReportOpenRequested();
 
 protected:
     void showEvent(QShowEvent *event) override;

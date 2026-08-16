@@ -158,6 +158,8 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     connect(m_aiCard, &AiReportCard::generateRequested, this, [this]() {
         emit aiReportRequested(AiPeriod::daily());
     });
+    connect(m_aiCard, &AiReportCard::dailyReportOpenRequested,
+            this, &MainWindow::dailyReportOpenRequested);
     connect(m_aiCard, &AiReportCard::weeklyReportOpenRequested,
             this, &MainWindow::weeklyReportOpenRequested);
     connect(m_aiCard, &AiReportCard::weeklyReportGenerateRequested,

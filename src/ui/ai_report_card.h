@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ui/card_frame.h"
-#include "ui/report_detail_dialog.h"
 
 #include <QString>
 
@@ -13,8 +12,9 @@ class SummaryCard;
 
 /// 主页 AI 使用报告卡片：整个组件即为一张 Apple 风格圆角渐变卡
 ///（自绘渐变底 + 顶部光晕 + 圆角边框，无内外嵌套卡片），内含标题、
-/// 状态提示与 SummaryCard（日期 + 8 字总结大字 + 展开图标）。
-/// 完整报告与生成/周报操作集中在弹窗中。
+/// 状态提示与 SummaryCard（日期 + 8 字总结大字 + 操作按钮）。
+/// 「↗」在浏览器打开今日报告网页（与周报一致），「⟳」生成/刷新 AI 分析，
+/// 「▤」弹出上周周报菜单；AI 未配置时统计网页仍然完整可用。
 class AiReportCard : public CardFrame
 {
     Q_OBJECT
@@ -35,8 +35,10 @@ public slots:
     void showError(const QString &error);
 
 signals:
-    /// 用户点击「生成报告」（弹窗内）。
+    /// 用户点击「生成报告」（⟳ 刷新按钮）。
     void generateRequested();
+    /// 用户点击「↗」：请求在浏览器打开今日报告网页。
+    void dailyReportOpenRequested();
     /// 用户点击「上周周报」，携带 HTML 绝对路径（不存在时不发出）。
     void weeklyReportOpenRequested(const QString &path);
     /// 用户点击「立即生成上周周报」。
@@ -50,7 +52,7 @@ protected:
     void leaveEvent(QEvent *event) override;
 
 private:
-    void openDetailDialog();
+    void showWeeklyMenu();
     void refreshContent();
     void updateSummaryCard();
     /// 提取「【总结】」/「总结：」后的 8 字短语；超长按字符截断。

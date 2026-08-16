@@ -36,6 +36,7 @@ struct WeekStats {
 /// 统计部分由本地数据组装，AI 已配置且该周有数据时异步请求分析文案回填
 /// 「AI 分析」区，AI 未配置或失败时回退本地小结，保证周报始终可生成。
 /// 去重键为「上周一日期」，同周只生成一次并持久化，重启后不重复。
+/// HTML 片段由 ReportHtmlBuilder 共享渲染层构建（与日报一致）。
 class WeeklyReportManager : public QObject
 {
     Q_OBJECT
@@ -83,13 +84,7 @@ private:
     WeekStats collectWeekStats(const QDate &monday) const;
     QString buildHtml(const QString &aiAnalysis, const QDate &monday,
                       const QDate &sunday) const;
-    QString buildLineChartSvg(const WeekStats &stats, const QDate &monday) const;
-    QString buildHeatmapHtml(const WeekStats &stats) const;
-    QString buildPeriodBarsHtml(const WeekStats &stats) const;
-    QString buildAppRankHtml(const WeekStats &stats) const;
-    QString buildInsightsHtml(const WeekStats &stats) const;
     QString buildLocalSummary(const QDate &monday, const QDate &sunday) const;
-    QString markdownToHtml(const QString &markdown) const;
     QString filePathFor(const QDate &monday) const;
 
     DatabaseManager *m_db;

@@ -9,6 +9,7 @@
 #include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
@@ -89,7 +90,7 @@ public:
         bottomRow->addWidget(m_captionLabel);
         bottomRow->addStretch();
 
-        // 刷新报告：重新生成今日报告（位于展开图标左侧）。
+        // 刷新报告：重新生成今日 AI 分析（位于展开图标左侧）。
         const QString roundBtnStyle = QString(
             "QPushButton { border: none; border-radius: 17px;"
             " background: rgba(255,255,255,45); color: white; font-size: 16px; }"
@@ -97,16 +98,26 @@ public:
         m_refreshBtn = new QPushButton(QStringLiteral("⟳"), this);
         m_refreshBtn->setCursor(Qt::PointingHandCursor);
         m_refreshBtn->setFixedSize(34, 34);
-        m_refreshBtn->setToolTip(QStringLiteral("刷新报告"));
+        m_refreshBtn->setToolTip(QStringLiteral("生成 / 刷新 AI 分析"));
         m_refreshBtn->setStyleSheet(roundBtnStyle);
         connect(m_refreshBtn, &QPushButton::clicked,
                 this, &SummaryCard::refreshRequested);
         bottomRow->addWidget(m_refreshBtn, 0, Qt::AlignBottom);
 
+        // 上周周报：弹出操作菜单（打开 / 生成 / 重新生成）。
+        m_weeklyBtn = new QPushButton(QStringLiteral("▤"), this);
+        m_weeklyBtn->setCursor(Qt::PointingHandCursor);
+        m_weeklyBtn->setFixedSize(34, 34);
+        m_weeklyBtn->setToolTip(QStringLiteral("上周周报"));
+        m_weeklyBtn->setStyleSheet(roundBtnStyle);
+        connect(m_weeklyBtn, &QPushButton::clicked,
+                this, &SummaryCard::weeklyClicked);
+        bottomRow->addWidget(m_weeklyBtn, 0, Qt::AlignBottom);
+
         m_detailBtn = new QPushButton(QStringLiteral("↗"), this);
         m_detailBtn->setCursor(Qt::PointingHandCursor);
         m_detailBtn->setFixedSize(34, 34);
-        m_detailBtn->setToolTip(QStringLiteral("查看完整报告"));
+        m_detailBtn->setToolTip(QStringLiteral("查看完整报告（浏览器打开）"));
         m_detailBtn->setStyleSheet(roundBtnStyle);
         connect(m_detailBtn, &QPushButton::clicked,
                 this, &SummaryCard::detailClicked);
@@ -117,21 +128,27 @@ public:
     void setDateText(const QString &text) { m_dateLabel->setText(text); }
     void setPhrase(const QString &phrase) { m_phraseLabel->setText(phrase); }
     void setCaption(const QString &caption) { m_captionLabel->setText(caption); }
-    void setDetailVisible(bool visible)
+    /// 各操作按钮按状态独立控制可见性：
+    /// detail（↗ 查看网页）与 weekly（▤ 周报）在 AI 未配置时仍有价值，
+    /// refresh（⟳ AI 生成）仅在 AI 可用时显示。
+    void setButtonsVisible(bool refresh, bool detail, bool weekly)
     {
-        m_refreshBtn->setVisible(visible);
-        m_detailBtn->setVisible(visible);
+        m_refreshBtn->setVisible(refresh);
+        m_detailBtn->setVisible(detail);
+        m_weeklyBtn->setVisible(weekly);
     }
 
 signals:
     void detailClicked();
     void refreshRequested();
+    void weeklyClicked();
 
 private:
     QLabel *m_dateLabel = nullptr;
     QLabel *m_phraseLabel = nullptr;
     QLabel *m_captionLabel = nullptr;
     QPushButton *m_refreshBtn = nullptr;
+    QPushButton *m_weeklyBtn = nullptr;
     QPushButton *m_detailBtn = nullptr;
 };
 
@@ -153,13 +170,17 @@ AiReportCard::AiReportCard(AiClient *ai, QWidget *parent)
     contentLayout()->addWidget(m_hintLabel);
 
     m_summaryCard = new SummaryCard(this);
+    // ↗：在浏览器打开今日报告网页（统计 + AI 分析）。
     connect(m_summaryCard, &SummaryCard::detailClicked,
-            this, &AiReportCard::openDetailDialog);
-    // 刷新：重新生成今日报告（与弹窗内「生成报告」同一链路）。
+            this, &AiReportCard::dailyReportOpenRequested);
+    // 刷新：重新生成今日 AI 分析，完成后日报网页自动更新。
     connect(m_summaryCard, &SummaryCard::refreshRequested, this, [this]() {
         setLoading(true);
         emit generateRequested();
     });
+    // 上周周报菜单：打开 / 立即生成 / 重新生成（复用周报信号链）。
+    connect(m_summaryCard, &SummaryCard::weeklyClicked,
+            this, &AiReportCard::showWeeklyMenu);
     contentLayout()->addWidget(m_summaryCard, 1);
 
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
@@ -250,24 +271,26 @@ void AiReportCard::showError(const QString &error)
     refreshContent();
 }
 
-void AiReportCard::openDetailDialog()
+void AiReportCard::showWeeklyMenu()
 {
-    // 无报告时也允许打开：弹窗内可「生成报告」（生成入口集中在弹窗）。
-    // 生成失败时把错误文案传入弹窗，正文区优先展示具体原因。
-    ReportDetailDialog dialog(QStringLiteral("每日报告 · ") + todayText(),
-                              m_reportText, m_weeklyReportPath, m_error, this);
-    // 弹窗内的报告操作转发到既有信号链（main 端接线不变）。
-    connect(&dialog, &ReportDetailDialog::generateRequested, this, [this]() {
-        setLoading(true);        // 弹窗关闭后卡片显示生成中
-        emit generateRequested(); // 触发 main 端真实生成请求
+    QMenu menu(this);
+    QAction *openAct = menu.addAction(QStringLiteral("打开上周周报"));
+    menu.addSeparator();
+    QAction *genAct = menu.addAction(QStringLiteral("立即生成上周周报"));
+    QAction *reAct = menu.addAction(QStringLiteral("重新生成（覆盖当前周报）"));
+    openAct->setEnabled(!m_weeklyReportPath.isEmpty());
+    if (!m_weeklyReportPath.isEmpty())
+        openAct->setToolTip(QStringLiteral("打开 %1").arg(m_weeklyReportPath));
+    connect(openAct, &QAction::triggered, this, [this]() {
+        emit weeklyReportOpenRequested(m_weeklyReportPath);
     });
-    connect(&dialog, &ReportDetailDialog::weeklyReportOpenRequested, this,
-            &AiReportCard::weeklyReportOpenRequested);
-    connect(&dialog, &ReportDetailDialog::weeklyReportGenerateRequested, this,
-            &AiReportCard::weeklyReportGenerateRequested);
-    connect(&dialog, &ReportDetailDialog::weeklyReportRegenerateRequested, this,
-            &AiReportCard::weeklyReportRegenerateRequested);
-    dialog.exec();
+    connect(genAct, &QAction::triggered, this, [this]() {
+        emit weeklyReportGenerateRequested();
+    });
+    connect(reAct, &QAction::triggered, this, [this]() {
+        emit weeklyReportRegenerateRequested();
+    });
+    menu.exec(m_summaryCard->mapToGlobal(m_summaryCard->rect().bottomRight()));
 }
 
 void AiReportCard::refreshContent()
@@ -281,7 +304,7 @@ void AiReportCard::refreshContent()
         m_hintLabel->setText(QStringLiteral("正在生成报告…"));
         m_summaryCard->setPhrase(QStringLiteral("正在生成报告…"));
         m_summaryCard->setCaption(QStringLiteral("AI 正在分析今日使用数据"));
-        m_summaryCard->setDetailVisible(false);
+        m_summaryCard->setButtonsVisible(false, true, true);
         return;
     }
 
@@ -289,12 +312,10 @@ void AiReportCard::refreshContent()
         m_hintLabel->setText(QStringLiteral("生成失败，可以重试"));
         m_hintLabel->setStyleSheet(
             QString("color: white; background: transparent; font-weight: 600;"));
-        // 完整错误展示在弹窗内（大字区只保留简短重试引导），
-        // 同时追加写入错误日志，便于排查「一直失败」。
         m_summaryCard->setPhrase(QStringLiteral("生成失败，可以重试"));
         m_summaryCard->setCaption(
-            QStringLiteral("点击右下角 ↗ 查看原因并重试"));
-        m_summaryCard->setDetailVisible(true);
+            QStringLiteral("点击 ⟳ 重试；↗ 可查看统计报告"));
+        m_summaryCard->setButtonsVisible(true, true, true);
         return;
     }
     m_hintLabel->setStyleSheet(whiteText(220));
@@ -304,8 +325,9 @@ void AiReportCard::refreshContent()
         m_hintLabel->setText(QStringLiteral("⚙ AI 智能尚未配置"));
         m_summaryCard->setPhrase(QStringLiteral("AI 智能尚未配置"));
         m_summaryCard->setCaption(
-            QStringLiteral("在「设置 → AI 智能」中启用并填写 API 信息"));
-        m_summaryCard->setDetailVisible(false);
+            QStringLiteral("↗ 查看今日统计报告 · 设置中可启用 AI"));
+        // AI 未配置：隐藏 ⟳（无 AI 可生成），保留 ↗ 统计网页与 ▤ 周报。
+        m_summaryCard->setButtonsVisible(false, true, true);
         return;
     }
 
@@ -314,19 +336,19 @@ void AiReportCard::refreshContent()
         const bool fresh = (cachedDate == QDate::currentDate().toString(Qt::ISODate));
         m_hintLabel->setText(
             fresh ? QStringLiteral("✔ 报告已更新（%1）").arg(todayText())
-                  : QStringLiteral("⏳ 报告缓存于 %1，点击右下角 ↗ 查看并更新")
+                  : QStringLiteral("⏳ 报告缓存于 %1，点击 ⟳ 更新")
                         .arg(cachedDate));
         m_summaryCard->setCaption(QStringLiteral("AI 今日总结"));
-        m_summaryCard->setDetailVisible(true);
+        m_summaryCard->setButtonsVisible(true, true, true);
         updateSummaryCard();
         return;
     }
 
-    // 无缓存：AI 已配置但今日未生成 → 引导从弹窗生成。
-    m_hintLabel->setText(QStringLiteral("点击右下角 ↗ 查看并生成今日报告"));
+    // 无缓存：AI 已配置但今日未生成 → 引导生成。
+    m_hintLabel->setText(QStringLiteral("点击 ↗ 在浏览器查看今日统计报告"));
     m_summaryCard->setPhrase(QStringLiteral("还没有今日报告"));
-    m_summaryCard->setCaption(QStringLiteral("点击 ↗ 生成每日分析报告"));
-    m_summaryCard->setDetailVisible(true);
+    m_summaryCard->setCaption(QStringLiteral("点击 ⟳ 生成每日分析报告"));
+    m_summaryCard->setButtonsVisible(true, true, true);
 }
 
 void AiReportCard::updateSummaryCard()

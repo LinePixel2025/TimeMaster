@@ -80,6 +80,7 @@ if(BUILD_TESTING)
         test_weekly_report.cpp
         ${CMAKE_SOURCE_DIR}/src/database/database_manager.cpp
         ${CMAKE_SOURCE_DIR}/src/ai/ai_client.cpp
+        ${CMAKE_SOURCE_DIR}/src/report/report_html_builder.cpp
         ${CMAKE_SOURCE_DIR}/src/reminder/weekly_report_manager.cpp
     )
     target_include_directories(test_weekly_report PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -88,6 +89,20 @@ if(BUILD_TESTING)
         $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
     add_test(NAME test_weekly_report COMMAND test_weekly_report)
+
+    add_executable(test_daily_report
+        test_daily_report.cpp
+        ${CMAKE_SOURCE_DIR}/src/database/database_manager.cpp
+        ${CMAKE_SOURCE_DIR}/src/ai/ai_client.cpp
+        ${CMAKE_SOURCE_DIR}/src/report/report_html_builder.cpp
+        ${CMAKE_SOURCE_DIR}/src/report/daily_report_manager.cpp
+    )
+    target_include_directories(test_daily_report PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_daily_report PRIVATE Qt6::Core Qt6::Sql Qt6::Network Qt6::Test)
+    target_compile_options(test_daily_report PRIVATE
+        $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
+    add_test(NAME test_daily_report COMMAND test_daily_report)
 
     add_executable(test_window_tracker
         test_window_tracker.cpp
