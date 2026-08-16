@@ -125,8 +125,15 @@ void test_generates_html_once()
     assert(file.open(QIODevice::ReadOnly));
     const QByteArray content = file.readAll();
     assert(content.contains("Time Master"));
-    assert(content.contains("AI")); // 「AI 分析」区块
+    assert(content.contains("AI")); // 「AI 智能分析」区块
     assert(content.contains("上周总时长"));
+    // 可视化板块：折线图 SVG、热力图容器与种子会话（上周一 10:00）的热力格子。
+    assert(content.contains("<svg"));
+    assert(content.contains("heatmap"));
+    assert(content.contains("10:00"));
+    // AI 分析区容器与中文文案：防 QLatin1String 误用导致的乱码回归。
+    assert(content.contains("class=\"ai\""));
+    assert(content.contains("上午")); // 种子会话 10:00 → 本地小结应提到上午时段
     file.close();
 
     // 同周再次 checkNow 不应重复生成（last_generated 去重）。

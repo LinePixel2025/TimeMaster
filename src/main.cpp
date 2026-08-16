@@ -133,13 +133,23 @@ int main(int argc, char *argv[])
         tray.showNotification(title, message);
     });
 
-    // 每周周报：生成成功后托盘通知并回填主页按钮。
+    // 每周周报：生成成功后回填主页按钮；手动触发的生成自动在浏览器打开，
+    // 自动定时生成仅托盘通知（避免无预期地弹出浏览器）。
+    bool manualWeeklyPending = false;
     QObject::connect(&weekly, &WeeklyReportManager::weeklyReportReady,
-                     [&tray, &window](const QString &path) {
+                     [&tray, &window, &manualWeeklyPending](const QString &path) {
         window.onWeeklyReportReady(path);
-        tray.showNotification(
-            QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe5\x91\xa8\xe6\x8a\xa5\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"),
-            QString::fromUtf8("\xe5\xb7\xb2\xe4\xbf\x9d\xe5\xad\x98\xef\xbc\x9a%1").arg(path));
+        if (manualWeeklyPending) {
+            manualWeeklyPending = false;
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+            tray.showNotification(
+                QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe5\x91\xa8\xe6\x8a\xa5\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"),
+                QString::fromUtf8("\xe5\xb7\xb2\xe5\x9c\xa8\xe6\xb5\x8f\xe8\xa7\x88\xe5\x99\xa8\xe4\xb8\xad\xe6\x89\x93\xe5\xbc\x80\xe3\x80\x82"));
+        } else {
+            tray.showNotification(
+                QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe5\x91\xa8\xe6\x8a\xa5\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"),
+                QString::fromUtf8("\xe5\xb7\xb2\xe4\xbf\x9d\xe5\xad\x98\xef\xbc\x9a%1").arg(path));
+        }
     });
     // 主页「上周周报」按钮：在系统浏览器打开 HTML。
     QObject::connect(&window, &MainWindow::weeklyReportOpenRequested,
@@ -150,12 +160,22 @@ int main(int argc, char *argv[])
     window.onWeeklyReportReady(
         db.getSetting("weekly_report_path", ""));
     // 主页「立即生成上周周报」按钮：手动触发生成（同周已生成过则打开已有文件）；
-    // 无数据时提示，不影响其他功能。
+    // 无数据时提示，不影响其他功能。generateNow 对「已有文件」场景会同步 emit
+    // ready，因此 flag 需在调用前置位。
     QObject::connect(&window, &MainWindow::weeklyReportGenerateRequested, [&]() {
+        manualWeeklyPending = true;
         if (!weekly.generateNow()) {
+            manualWeeklyPending = false;
             QMessageBox::warning(&window,
                 QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe5\x91\xa8\xe6\x8a\xa5\xe6\x9c\xaa\xe7\x94\x9f\xe6\x88\x90"),
                 QString::fromUtf8("\xe4\xb8\x8a\xe5\x91\xa8\xe6\x97\xa0\xe4\xbd\xbf\xe7\x94\xa8\xe6\x95\xb0\xe6\x8d\xae\xef\xbc\x8c\xe6\x97\xa0\xe6\xb3\x95\xe7\x94\x9f\xe6\x88\x90\xe5\x91\xa8\xe6\x8a\xa5\xe3\x80\x82"));
+            return;
+        }
+        // AI 已配置且请求在途：分析最多需要约 90 秒，先给出反馈避免误以为无响应。
+        if (weekly.isAiPending()) {
+            tray.showNotification(
+                QString::fromUtf8("\xe5\x91\xa8\xe6\x8a\xa5\xe7\x94\x9f\xe6\x88\x90\xe4\xb8\xad"),
+                QString::fromUtf8("AI \xe5\x88\x86\xe6\x9e\x90\xe8\xbf\x9b\xe8\xa1\x8c\xe4\xb8\xad\xef\xbc\x8c\xe5\xae\x8c\xe6\x88\x90\xe5\x90\x8e\xe5\xb0\x86\xe8\x87\xaa\xe5\x8a\xa8\xe6\x89\x93\xe5\xbc\x80\xe6\x8a\xa5\xe5\x91\x8a\xe3\x80\x82"));
         }
     });
 

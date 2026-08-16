@@ -6,9 +6,31 @@
 #include <QString>
 #include <QTime>
 #include <QTimer>
+#include <QVector>
 
 class DatabaseManager;
 class AiClient;
+
+/// 周报统计聚合结果：由一周会话明细（getAllSessions）一次计算得出，
+/// 供 HTML 报告各板块与本地小结复用，避免重复查询。
+struct WeekStats {
+    int dailyTotals[7] = {0};      // 每日总秒数，索引 0=周一…6=周日（按会话开始日归属，与 SQL date(start_time) 一致）
+    int prevDailyTotals[7] = {0};  // 前一周每日总秒数（对比折线用）
+    int weekTotal = 0;
+    int prevWeekTotal = 0;
+    int activeDays = 0;            // 有使用记录的天数
+    struct AppUsage {
+        QString name;
+        int seconds;
+    };
+    QVector<AppUsage> apps;        // 按时长降序（同名变体已按小写去空格键归一化合并）
+    int hourMatrix[7][24] = {};    // 星期×小时热力矩阵（会话按时段切分，跨小时/跨午夜分摊到实际占用时段）
+    int periodSeconds[4] = {0};    // 凌晨0-6 / 上午6-12 / 下午12-18 / 晚上18-24
+    int sessionCount = 0;
+    int longestSeconds = 0;        // 最长单次连续使用秒数
+    QString longestApp;
+    int longestDay = -1;           // 最长会话发生在周几（0=周一…6=周日）
+};
 
 /// 每周周报管理器：每周配置时刻自动生成上一完整周的 HTML 使用日报。
 /// 统计部分由本地数据组装，AI 已配置且该周有数据时异步请求分析文案回填
@@ -27,6 +49,9 @@ public:
 
     /// 30 秒轮询定时器是否已启动（start 后 true，stop 后 false）。
     bool isRunning() const;
+
+    /// AI 周报分析是否在途（手动生成时用于「生成中」反馈）。
+    bool isAiPending() const;
 
     /// 检查 now 时刻是否命中配置的「周几 + 时刻」并触发周报生成。
     /// now 为空时使用当前时间；公开以便测试注入时间（定时器间隔 30 秒，测试不便等待）。
@@ -50,8 +75,15 @@ private:
     /// 将分析区 HTML（AI 文案或本地小结）写入文件并更新去重/路径设置。
     void finishReport(const QDate &monday, const QString &aiHtml);
     int weekTotalFor(const QDate &start, const QDate &end) const;
+    /// 聚合上周与前一周的会话明细，产出报告所需的全部统计。
+    WeekStats collectWeekStats(const QDate &monday) const;
     QString buildHtml(const QString &aiAnalysis, const QDate &monday,
                       const QDate &sunday) const;
+    QString buildLineChartSvg(const WeekStats &stats, const QDate &monday) const;
+    QString buildHeatmapHtml(const WeekStats &stats) const;
+    QString buildPeriodBarsHtml(const WeekStats &stats) const;
+    QString buildAppRankHtml(const WeekStats &stats) const;
+    QString buildInsightsHtml(const WeekStats &stats) const;
     QString buildLocalSummary(const QDate &monday, const QDate &sunday) const;
     QString markdownToHtml(const QString &markdown) const;
     QString filePathFor(const QDate &monday) const;

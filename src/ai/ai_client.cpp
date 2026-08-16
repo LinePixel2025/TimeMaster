@@ -203,6 +203,41 @@ QString AiClient::buildPromptForRange(const QString &rangeLabel,
                          dailyTotals.value(d.toString(Qt::ISODate), 0)));
     }
 
+    // 活跃天数与峰值日：帮助 AI 把握一周节奏与高峰（同样由已查数据推导）。
+    int activeDays = 0;
+    QDate peakDate;
+    int peakSecs = -1;
+    for (int i = 0; i < days; ++i) {
+        const QDate d = start.addDays(i);
+        const int secs = dailyTotals.value(d.toString(Qt::ISODate), 0);
+        if (secs > 0)
+            ++activeDays;
+        if (secs > peakSecs) {
+            peakSecs = secs;
+            peakDate = d;
+        }
+    }
+    stats += QStringLiteral("\n活跃天数：%1/%2\n").arg(activeDays).arg(days);
+    if (peakSecs > 0) {
+        QString peakApp;
+        int peakAppSecs = 0;
+        for (const auto &row : rows) {
+            if (row[QStringLiteral("d")].toString() == peakDate.toString(Qt::ISODate)) {
+                const int secs = row[QStringLiteral("total_seconds")].toInt();
+                if (secs > peakAppSecs) {
+                    peakAppSecs = secs;
+                    peakApp = row[QStringLiteral("app_name")].toString();
+                }
+            }
+        }
+        stats += QStringLiteral("使用最长的一天：%1（%2）")
+                     .arg(peakDate.toString("M月d日"), formatDuration(peakSecs));
+        if (!peakApp.isEmpty())
+            stats += QStringLiteral("，当日主力应用：%1（%2）")
+                         .arg(peakApp, formatDuration(peakAppSecs));
+        stats += QStringLiteral("\n");
+    }
+
     return QStringLiteral(
                "你是 Time Master 屏幕时间管理助手。请基于以下统计数据，用简体中文"
                "生成一份%1屏幕使用报告。\n\n"
