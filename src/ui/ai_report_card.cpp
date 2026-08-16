@@ -265,6 +265,8 @@ void AiReportCard::openDetailDialog()
             &AiReportCard::weeklyReportOpenRequested);
     connect(&dialog, &ReportDetailDialog::weeklyReportGenerateRequested, this,
             &AiReportCard::weeklyReportGenerateRequested);
+    connect(&dialog, &ReportDetailDialog::weeklyReportRegenerateRequested, this,
+            &AiReportCard::weeklyReportRegenerateRequested);
     dialog.exec();
 }
 

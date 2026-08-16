@@ -296,6 +296,107 @@ void test_generate_now_already_generated()
     std::cout << "test_generate_now_already_generated PASS" << std::endl;
 }
 
+// 防回归：去重键命中但报告文件被删除时，手动 generateNow 应清除去重键并
+// 重新生成（而不是误报「上周无数据」）。
+void test_generate_now_regenerates_when_file_missing()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    seedLastWeekSession(db);
+    db.setSetting("weekly_report_enabled", "true");
+    setReportDayToToday(db);
+
+    QTemporaryDir outDir;
+    assert(outDir.isValid());
+
+    AiClient ai(&db);
+    WeeklyReportManager weekly(&db, &ai);
+    weekly.setOutputDir(outDir.path());
+    weekly.reloadSettings();
+    QSignalSpy readySpy(&weekly, &WeeklyReportManager::weeklyReportReady);
+
+    weekly.checkNow(QTime(9, 0)); // 先自动生成一次
+    assert(readySpy.count() == 1);
+    const QString firstPath = readySpy.first().at(0).toString();
+    assert(QFile::remove(firstPath)); // 模拟用户删除报告文件
+
+    readySpy.clear();
+    assert(weekly.generateNow()); // 文件缺失 → 重新生成
+    assert(readySpy.count() == 1);
+    assert(readySpy.first().at(0).toString() == firstPath);
+    assert(QFile::exists(firstPath));
+    std::cout << "test_generate_now_regenerates_when_file_missing PASS" << std::endl;
+}
+
+// 手动强制重新生成：去重键命中且文件存在时，regenerateNow 仍应覆盖重写。
+void test_regenerate_now_overrides_existing()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    seedLastWeekSession(db);
+    db.setSetting("weekly_report_enabled", "true");
+    setReportDayToToday(db);
+
+    QTemporaryDir outDir;
+    assert(outDir.isValid());
+
+    AiClient ai(&db);
+    WeeklyReportManager weekly(&db, &ai);
+    weekly.setOutputDir(outDir.path());
+    weekly.reloadSettings();
+    QSignalSpy readySpy(&weekly, &WeeklyReportManager::weeklyReportReady);
+
+    weekly.checkNow(QTime(9, 0)); // 先自动生成一次
+    assert(readySpy.count() == 1);
+    const QString reportPath = readySpy.first().at(0).toString();
+
+    // 篡改文件内容，随后强制重新生成应覆盖为合法报告。
+    {
+        QFile f(reportPath);
+        assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write("stale");
+        f.close();
+    }
+
+    readySpy.clear();
+    assert(weekly.regenerateNow());
+    assert(readySpy.count() == 1);
+    assert(readySpy.first().at(0).toString() == reportPath);
+    QFile file(reportPath);
+    assert(file.open(QIODevice::ReadOnly));
+    const QByteArray content = file.readAll();
+    file.close();
+    assert(content.contains("Time Master")); // 覆盖为重新生成的完整报告
+    std::cout << "test_regenerate_now_overrides_existing PASS" << std::endl;
+}
+
+// 强制重新生成：上周无数据时返回 false 且不触发 ready。
+void test_regenerate_now_no_data()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path); // 空数据库
+    AiClient ai(&db);
+    WeeklyReportManager weekly(&db, &ai);
+    weekly.reloadSettings();
+    QSignalSpy readySpy(&weekly, &WeeklyReportManager::weeklyReportReady);
+
+    assert(!weekly.regenerateNow());
+    assert(readySpy.count() == 0);
+    std::cout << "test_regenerate_now_no_data PASS" << std::endl;
+}
+
 // 防回归：start() 必须启动 30 秒轮询定时器（曾与提醒调度器同因漏掉
 // m_timer->start() 而只在启动瞬间检查一次）。
 void test_start_activates_timer()
@@ -331,6 +432,9 @@ int main(int argc, char *argv[])
     test_generate_now_manual();
     test_generate_now_no_data();
     test_generate_now_already_generated();
+    test_generate_now_regenerates_when_file_missing();
+    test_regenerate_now_overrides_existing();
+    test_regenerate_now_no_data();
     std::cout << "All weekly report tests passed!" << std::endl;
     return 0;
 }

@@ -105,6 +105,22 @@ ReportDetailDialog::ReportDetailDialog(const QString &title, const QString &mark
     });
     actionRow->addWidget(m_weeklyReportGenerateBtn);
 
+    // 重新生成：已有周报时可强制重新统计并覆盖（如想要新版样式或重跑 AI 分析）。
+    m_weeklyReportRegenerateBtn = new QPushButton(
+        QStringLiteral("重新生成"), this);
+    m_weeklyReportRegenerateBtn->setCursor(Qt::PointingHandCursor);
+    m_weeklyReportRegenerateBtn->setMinimumHeight(30);
+    m_weeklyReportRegenerateBtn->setEnabled(!weeklyReportPath.isEmpty());
+    m_weeklyReportRegenerateBtn->setToolTip(
+        weeklyReportPath.isEmpty()
+            ? QStringLiteral("周报尚未生成，点击「立即生成上周周报」")
+            : QStringLiteral("重新统计上周数据并覆盖当前周报（AI 分析将重新请求）"));
+    connect(m_weeklyReportRegenerateBtn, &QPushButton::clicked, this, [this]() {
+        emit weeklyReportRegenerateRequested();
+        accept();
+    });
+    actionRow->addWidget(m_weeklyReportRegenerateBtn);
+
     outer->addLayout(actionRow);
 
     m_scrollArea = new QScrollArea(this);
@@ -186,6 +202,7 @@ void ReportDetailDialog::applyTheme()
     m_generateBtn->setStyleSheet(secondaryStyle);
     m_weeklyReportBtn->setStyleSheet(secondaryStyle);
     m_weeklyReportGenerateBtn->setStyleSheet(secondaryStyle);
+    m_weeklyReportRegenerateBtn->setStyleSheet(secondaryStyle);
     m_copyBtn->setStyleSheet(secondaryStyle);
 
     const QString primaryStyle = QString(

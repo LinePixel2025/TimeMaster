@@ -271,8 +271,26 @@ bool WeeklyReportManager::generateNow()
             emit weeklyReportReady(path);
             return true;
         }
+        // 去重键命中但文件已不在（被删除/移动）：清除去重键重新生成。
+        // 数据仍在数据库中，手动请求应总能拿到报告，而不是误报「无数据」。
+        m_lastGenerated.clear();
+        m_db->setSetting("weekly_report_last_generated", QString());
+        return generateWeekReport();
     }
     return false;
+}
+
+bool WeeklyReportManager::regenerateNow()
+{
+    const QDate today = QDate::currentDate();
+    const QDate monday = today.addDays(-((today.dayOfWeek() - 1) % 7) - 7);
+    if (weekTotalFor(monday, monday.addDays(6)) <= 0)
+        return false; // 上周无使用记录。
+
+    // 强制重新生成：清去除重键（内存 + 数据库），覆盖已有文件。
+    m_lastGenerated.clear();
+    m_db->setSetting("weekly_report_last_generated", QString());
+    return generateWeekReport();
 }
 
 bool WeeklyReportManager::generateWeekReport()

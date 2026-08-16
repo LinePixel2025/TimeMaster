@@ -162,6 +162,8 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
             this, &MainWindow::weeklyReportOpenRequested);
     connect(m_aiCard, &AiReportCard::weeklyReportGenerateRequested,
             this, &MainWindow::weeklyReportGenerateRequested);
+    connect(m_aiCard, &AiReportCard::weeklyReportRegenerateRequested,
+            this, &MainWindow::weeklyReportRegenerateRequested);
     // 设置保存后重读 AI 配置与缓存（与 settingsChanged 的 main 端接线配合）。
     connect(this, &MainWindow::settingsChanged, this, [this]() {
         m_aiCard->reloadState();

@@ -26,6 +26,8 @@ signals:
     void weeklyReportOpenRequested(const QString &path);
     /// 点击「立即生成上周周报」。
     void weeklyReportGenerateRequested();
+    /// 点击「重新生成周报」：清除去重键强制重新统计并覆盖已有周报。
+    void weeklyReportRegenerateRequested();
 
 private:
     void applyTheme();
@@ -38,6 +40,7 @@ private:
     QPushButton *m_generateBtn = nullptr;
     QPushButton *m_weeklyReportBtn = nullptr;
     QPushButton *m_weeklyReportGenerateBtn = nullptr;
+    QPushButton *m_weeklyReportRegenerateBtn = nullptr;
     QPushButton *m_copyBtn = nullptr;
     QPushButton *m_closeBtn = nullptr;
     QString m_markdown;

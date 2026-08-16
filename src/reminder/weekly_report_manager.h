@@ -60,8 +60,12 @@ public:
 
     /// 手动生成上周周报：不受 weekly_report_enabled 开关限制（主动行为）。
     /// 同周已生成过且文件存在时直接打开已有文件（发 weeklyReportReady）；
-    /// 无数据或写入失败时返回 false。
+    /// 文件已不在时清除去重键重新生成；无数据或写入失败时返回 false。
     bool generateNow();
+
+    /// 强制重新生成上周周报：清除去重键后重新统计并覆盖已有文件
+    /// （AI 已配置时重新请求分析文案）。上周无数据时返回 false。
+    bool regenerateNow();
 
     /// 输出目录（默认 Documents/TimeMaster）；测试注入临时目录。
     void setOutputDir(const QString &dir);

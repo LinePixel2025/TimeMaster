@@ -41,6 +41,8 @@ signals:
     void weeklyReportOpenRequested(const QString &path);
     /// 用户点击「立即生成上周周报」。
     void weeklyReportGenerateRequested();
+    /// 用户点击「重新生成」，请求强制重新生成上周周报。
+    void weeklyReportRegenerateRequested();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
