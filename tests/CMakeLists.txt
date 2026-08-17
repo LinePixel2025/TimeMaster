@@ -115,10 +115,66 @@ if(BUILD_TESTING)
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
     add_test(NAME test_window_tracker COMMAND test_window_tracker)
 
+    add_executable(test_trend_chart_layout
+        test_trend_chart_layout.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/trend_chart_layout.cpp
+    )
+    target_include_directories(test_trend_chart_layout PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_trend_chart_layout PRIVATE Qt6::Core Qt6::Gui)
+    target_compile_options(test_trend_chart_layout PRIVATE
+        $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
+    add_test(NAME test_trend_chart_layout COMMAND test_trend_chart_layout)
+
+    add_executable(test_dashboard_layout
+        test_dashboard_layout.cpp
+    )
+    target_include_directories(test_dashboard_layout PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_dashboard_layout PRIVATE Qt6::Core)
+    target_compile_options(test_dashboard_layout PRIVATE
+        $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
+    add_test(NAME test_dashboard_layout COMMAND test_dashboard_layout)
+
+    add_executable(test_period_distribution_layout
+        test_period_distribution_layout.cpp
+    )
+    target_include_directories(test_period_distribution_layout PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_period_distribution_layout PRIVATE Qt6::Core)
+    target_compile_options(test_period_distribution_layout PRIVATE
+        $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
+    add_test(NAME test_period_distribution_layout COMMAND test_period_distribution_layout)
+
+    add_executable(test_rank_layout
+        test_rank_layout.cpp
+    )
+    target_include_directories(test_rank_layout PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_rank_layout PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
+    target_compile_options(test_rank_layout PRIVATE
+        $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
+    add_test(NAME test_rank_layout COMMAND test_rank_layout)
+
+    add_executable(test_trend_card_geometry
+        test_trend_card_geometry.cpp
+        ${CMAKE_SOURCE_DIR}/src/database/database_manager.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/card_frame.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/theme_manager.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/trend_chart_layout.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/trend_card.cpp
+    )
+    target_include_directories(test_trend_card_geometry PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_trend_card_geometry PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql)
+    target_compile_options(test_trend_card_geometry PRIVATE
+        $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
+    add_test(NAME test_trend_card_geometry COMMAND test_trend_card_geometry)
+
     get_filename_component(QT_INSTALL_ROOT "${Qt6_DIR}/../../.." ABSOLUTE)
     get_filename_component(COMPILER_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
     set_tests_properties(
-        test_database test_exporter test_lineweb_pusher test_cloud_sync test_ai_client test_reminder_scheduler test_weekly_report test_window_tracker
+        test_database test_exporter test_lineweb_pusher test_cloud_sync test_ai_client test_reminder_scheduler test_weekly_report test_daily_report test_window_tracker test_trend_chart_layout test_dashboard_layout test_period_distribution_layout test_rank_layout test_trend_card_geometry
         PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         ENVIRONMENT_MODIFICATION

@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QPalette>
+#include <QRegularExpression>
 
 ThemeManager *ThemeManager::instance()
 {
@@ -78,4 +79,19 @@ void ThemeManager::applyToApplication()
     pal.setColor(QPalette::ToolTipBase, surface);
     pal.setColor(QPalette::ToolTipText, DesignTokens::kText());
     qApp->setPalette(pal);
+
+    QString styleSheet = qApp->styleSheet();
+    static const QRegularExpression tooltipRule(
+        QStringLiteral("/\\* TimeMasterTooltip begin \\*/.*?/\\* TimeMasterTooltip end \\*/"),
+        QRegularExpression::DotMatchesEverythingOption);
+    styleSheet.remove(tooltipRule);
+    styleSheet += QStringLiteral(
+        "\\n/* TimeMasterTooltip begin */"
+        "QToolTip { background-color: %1; color: %2; border: 1px solid %3;"
+        " padding: 6px 8px; font-size: 12px; }"
+        "/* TimeMasterTooltip end */")
+        .arg(DesignTokens::kSurface().name(),
+             DesignTokens::kText().name(),
+             DesignTokens::kBorder().name());
+    qApp->setStyleSheet(styleSheet);
 }

@@ -5,6 +5,7 @@
 #include "ui/settings_icons.h"
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
+#include "ui/dashboard_layout.h"
 #include "ui/ui_utils.h"
 #include "ui/hero_card.h"
 #include "ui/trend_card.h"
@@ -18,6 +19,7 @@
 #include <QResizeEvent>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QLayout>
 #include <QGridLayout>
 #include <QPushButton>
 #include <QInputDialog>
@@ -28,6 +30,7 @@
 #include <QApplication>
 #include <QLabel>
 #include <QScreen>
+#include <QScrollArea>
 #include <QGuiApplication>
 #include <QDate>
 #include <QDateTime>
@@ -76,15 +79,18 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     central->setStyleSheet(QString("#centralWidget { background-color: %1; }").arg(bg.name()));
     setCentralWidget(central);
 
-    auto *layout = new QVBoxLayout(central);
-    layout->setContentsMargins(24, 16, 24, 22);
-    layout->setSpacing(16);
+    m_rootLayout = new QVBoxLayout(central);
+    m_rootLayout->setContentsMargins(DesignTokens::kOuterMargin,
+                                     DesignTokens::kWindowTopMargin,
+                                     DesignTokens::kOuterMargin,
+                                     DesignTokens::kWindowBottomMargin);
+    m_rootLayout->setSpacing(DesignTokens::kSectionSpacing);
 
     auto *headerLayout = new QHBoxLayout();
-    headerLayout->setSpacing(8);
+    headerLayout->setSpacing(DesignTokens::kHeaderSpacing);
 
     auto *titleColumn = new QVBoxLayout();
-    titleColumn->setSpacing(1);
+    titleColumn->setSpacing(DesignTokens::kTitleStackSpacing);
     m_titleLabel = new QLabel("Time Master", central);
     m_titleLabel->setFont(DesignTokens::appFont(20, QFont::DemiBold));
     titleColumn->addWidget(m_titleLabel);
@@ -97,10 +103,12 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     m_statusChip = new QLabel(QStringLiteral("空闲"), central);
     m_statusChip->setFont(DesignTokens::appFont(11, QFont::Medium));
     m_statusChip->setAlignment(Qt::AlignVCenter);
+    m_statusChip->setMaximumWidth(DesignTokens::kStatusChipMaxWidth);
+    m_statusChip->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     headerLayout->addWidget(m_statusChip);
 
     m_themeBtn = new QPushButton(central);
-    m_themeBtn->setFixedSize(36, 36);
+    m_themeBtn->setFixedSize(DesignTokens::kIconButtonSize, DesignTokens::kIconButtonSize);
     m_themeBtn->setCursor(Qt::PointingHandCursor);
     connect(m_themeBtn, &QPushButton::clicked, this, []() {
         ThemeManager::instance()->toggle();
@@ -108,40 +116,63 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     headerLayout->addWidget(m_themeBtn);
 
     m_moreBtn = new QPushButton(central);
-    m_moreBtn->setFixedSize(36, 36);
+    m_moreBtn->setFixedSize(DesignTokens::kIconButtonSize, DesignTokens::kIconButtonSize);
     m_moreBtn->setCursor(Qt::PointingHandCursor);
     m_moreBtn->setToolTip(QStringLiteral("更多"));
     connect(m_moreBtn, &QPushButton::clicked, this, &MainWindow::onMoreMenu);
     headerLayout->addWidget(m_moreBtn);
 
     m_settingsBtn = new QPushButton(central);
-    m_settingsBtn->setFixedSize(36, 36);
+    m_settingsBtn->setFixedSize(DesignTokens::kIconButtonSize, DesignTokens::kIconButtonSize);
     m_settingsBtn->setCursor(Qt::PointingHandCursor);
     m_settingsBtn->setToolTip(QStringLiteral("设置"));
     connect(m_settingsBtn, &QPushButton::clicked, this, &MainWindow::onSettings);
     headerLayout->addWidget(m_settingsBtn);
 
-    layout->addLayout(headerLayout);
+    m_rootLayout->addLayout(headerLayout);
+
+    m_dashboardScroll = new QScrollArea(central);
+    m_dashboardScroll->setObjectName(QStringLiteral("dashboardScroll"));
+    m_dashboardScroll->setWidgetResizable(true);
+    m_dashboardScroll->setFrameShape(QFrame::NoFrame);
+    m_dashboardScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_dashboardScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+    m_dashboardContent = new QWidget(m_dashboardScroll);
+    m_dashboardContent->setObjectName(QStringLiteral("dashboardContent"));
+    m_dashboardContent->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+    auto *dashboardLayout = new QVBoxLayout(m_dashboardContent);
+    dashboardLayout->setContentsMargins(0, 0, 0, 0);
+    dashboardLayout->setSpacing(0);
+    dashboardLayout->setSizeConstraint(QLayout::SetMinimumSize);
 
     m_grid = new QGridLayout();
-    m_grid->setSpacing(12);
+    m_grid->setSpacing(DesignTokens::kGridSpacing);
     m_grid->setContentsMargins(0, 0, 0, 0);
+    m_grid->setAlignment(Qt::AlignTop);
     m_grid->setColumnStretch(0, 1);
     m_grid->setColumnStretch(1, 1);
 
-    m_heroCard = new HeroCard(central);
-    m_trendCard = new TrendCard(central);
-    m_rankCard = new RankCard(central);
-    m_aiCard = new AiReportCard(ai, central);
+    m_heroCard = new HeroCard(m_dashboardContent);
+    m_trendCard = new TrendCard(m_dashboardContent);
+    m_rankCard = new RankCard(m_dashboardContent);
+    m_aiCard = new AiReportCard(ai, m_dashboardContent);
+    m_heroCard->setObjectName(QStringLiteral("heroCard"));
+    m_trendCard->setObjectName(QStringLiteral("trendCard"));
+    m_rankCard->setObjectName(QStringLiteral("rankCard"));
+    m_aiCard->setObjectName(QStringLiteral("aiReportCard"));
 
-    m_grid->addWidget(m_heroCard, 0, 0);
-    m_grid->addWidget(m_trendCard, 0, 1);
-    m_grid->addWidget(m_rankCard, 1, 0);
-    m_grid->addWidget(m_aiCard, 1, 1);
-    m_grid->setRowStretch(0, 1);
-    m_grid->setRowStretch(1, 1);
+    m_grid->addWidget(m_heroCard, 0, 0, 1, 2);
+    m_grid->addWidget(m_trendCard, 1, 0);
+    m_grid->addWidget(m_rankCard, 1, 1);
+    m_grid->addWidget(m_aiCard, 2, 0, 1, 2);
+    m_grid->setColumnStretch(0, 3);
+    m_grid->setColumnStretch(1, 2);
 
-    layout->addLayout(m_grid, 1);
+    dashboardLayout->addLayout(m_grid, 0);
+    dashboardLayout->addStretch(1);
+    m_dashboardScroll->setWidget(m_dashboardContent);
+    m_rootLayout->addWidget(m_dashboardScroll, 1);
 
     connect(m_aiCard, &AiReportCard::generateRequested, this, [this]() {
         emit aiReportRequested(AiPeriod::daily());
@@ -185,6 +216,7 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
 
     applyTheme();
     updateStatusChip();
+    applyResponsiveLayout();
     m_trendCard->setChartType(m_db->getSetting("chart_type", "bar"));
     refreshData();
 }
@@ -212,6 +244,15 @@ void MainWindow::applyTheme()
     setPalette(pal);
     centralWidget()->setStyleSheet(
         QString("#centralWidget { background-color: %1; }").arg(bg.name()));
+    m_dashboardScroll->setStyleSheet(QStringLiteral(
+        "QScrollArea { background: transparent; border: none; }"
+        "QScrollBar:vertical { background: transparent; width: 6px; margin: 0; }"
+        "QScrollBar::handle:vertical { background: %1; min-height: 24px; border-radius: 3px; }"
+        "QScrollBar::handle:vertical:hover { background: %2; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }")
+        .arg(DesignTokens::kTextFaint().name(), DesignTokens::kTextMute().name()));
+    m_dashboardScroll->viewport()->setStyleSheet(QStringLiteral("background: transparent;"));
 
     m_titleLabel->setStyleSheet(QString("color: %1; background: transparent;")
         .arg(DesignTokens::kTextStrong().name()));
@@ -220,13 +261,13 @@ void MainWindow::applyTheme()
 
     const QString iconStyle = QString(
         "QPushButton { background: transparent; color: %1; border: 1px solid transparent;"
-        " border-radius: 6px; font-size: 16px; padding: 0; }"
-        "QPushButton:hover { background: %2; border-color: %3; }"
-        "QPushButton:focus { border-color: %4; }")
+        " border-radius: %2px; font-size: 16px; padding: 0; }"
+        "QPushButton:hover { background: %3; border-color: %4; }")
         .arg(DesignTokens::kTextMute().name(),
+             QString::number(DesignTokens::kRadiusBtn),
              DesignTokens::kButtonHoverBg().name(),
-             DesignTokens::kBorder().name(),
-             DesignTokens::kAccent().name());
+             DesignTokens::kBorder().name())
+        + UiUtils::focusBorderRule();
     m_themeBtn->setStyleSheet(iconStyle);
     m_moreBtn->setStyleSheet(iconStyle);
     m_settingsBtn->setStyleSheet(iconStyle);
@@ -266,18 +307,44 @@ void MainWindow::updateStatusChip()
         text = QStringLiteral("追踪中 · %1").arg(m_activeApp);
     }
 
-    m_statusChip->setText(text);
+    m_statusText = text;
+    m_statusChip->setToolTip(m_statusText);
     m_statusChip->setStyleSheet(
-        QStringLiteral("QLabel { color: %1; background: %2; border-radius: 12px;"
-                       " padding: 4px 10px; }")
-            .arg(fg.name(), bg.name(QColor::HexArgb)));
+        QStringLiteral("QLabel { color: %1; background: %2; border-radius: %3px;"
+                       " padding: %4px %5px; }")
+            .arg(fg.name(), bg.name(QColor::HexArgb),
+                 QString::number(DesignTokens::kRadiusChip),
+                 QString::number(DesignTokens::kStatusChipPaddingV),
+                 QString::number(DesignTokens::kStatusChipPaddingH)));
+    updateStatusChipText();
+}
+
+void MainWindow::updateStatusChipText()
+{
+    if (!m_statusChip)
+        return;
+
+    const int width = qMax(0, m_statusChip->contentsRect().width());
+    const QString displayText = QFontMetrics(m_statusChip->font()).elidedText(
+        m_statusText, Qt::ElideRight, width);
+    m_statusChip->setText(displayText);
 }
 
 void MainWindow::applyResponsiveLayout()
 {
-    const bool narrow = width() < DesignTokens::kNarrowBreakpoint;
-    if (narrow == m_narrowLayout && m_grid->count() == 4)
+    int viewportWidth = m_dashboardScroll->viewport()->contentsRect().width();
+    if (viewportWidth <= 0)
+        viewportWidth = qMax(0, width() - 2 * DesignTokens::kOuterMargin);
+
+    const DashboardLayout::Mode previousMode = m_narrowLayout
+        ? DashboardLayout::Mode::SingleColumn
+        : DashboardLayout::Mode::DualColumn;
+    const bool narrow = DashboardLayout::resolveMode(viewportWidth, previousMode)
+        == DashboardLayout::Mode::SingleColumn;
+    if (narrow == m_narrowLayout && m_grid->count() == 4) {
+        updateStatusChipText();
         return;
+    }
     m_narrowLayout = narrow;
 
     m_grid->removeWidget(m_heroCard);
@@ -290,20 +357,20 @@ void MainWindow::applyResponsiveLayout()
         m_grid->addWidget(m_trendCard, 1, 0, 1, 2);
         m_grid->addWidget(m_rankCard, 2, 0, 1, 2);
         m_grid->addWidget(m_aiCard, 3, 0, 1, 2);
-        m_grid->setRowStretch(0, 1);
-        m_grid->setRowStretch(1, 1);
-        m_grid->setRowStretch(2, 1);
-        m_grid->setRowStretch(3, 1);
+        m_grid->setColumnStretch(0, 1);
+        m_grid->setColumnStretch(1, 0);
     } else {
-        m_grid->addWidget(m_heroCard, 0, 0);
-        m_grid->addWidget(m_trendCard, 0, 1);
-        m_grid->addWidget(m_rankCard, 1, 0);
-        m_grid->addWidget(m_aiCard, 1, 1);
-        m_grid->setRowStretch(0, 1);
-        m_grid->setRowStretch(1, 1);
-        m_grid->setRowStretch(2, 0);
-        m_grid->setRowStretch(3, 0);
+        m_grid->addWidget(m_heroCard, 0, 0, 1, 2);
+        m_grid->addWidget(m_trendCard, 1, 0);
+        m_grid->addWidget(m_rankCard, 1, 1);
+        m_grid->addWidget(m_aiCard, 2, 0, 1, 2);
+        m_grid->setColumnStretch(0, 3);
+        m_grid->setColumnStretch(1, 2);
     }
+
+    for (int row = 0; row < 4; ++row)
+        m_grid->setRowStretch(row, 0);
+    updateStatusChipText();
 }
 
 void MainWindow::showEvent(QShowEvent *event)
@@ -311,12 +378,14 @@ void MainWindow::showEvent(QShowEvent *event)
     QMainWindow::showEvent(event);
     applyDwmTitleBar(reinterpret_cast<HWND>(winId()),
                      ThemeManager::instance()->isDark());
+    updateStatusChipText();
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
     applyResponsiveLayout();
+    updateStatusChipText();
 }
 
 void MainWindow::refreshData()

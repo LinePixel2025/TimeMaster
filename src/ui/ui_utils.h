@@ -18,6 +18,15 @@ inline QString formatDuration(int totalSeconds)
     return QStringLiteral("%1m").arg(minutes);
 }
 
+/// 排行专用格式，避免不足一分钟的有效使用记录显示为“0m”。
+inline QString formatRankDuration(int totalSeconds)
+{
+    const int seconds = qMax(0, totalSeconds);
+    if (seconds < 60)
+        return QStringLiteral("%1s").arg(seconds);
+    return formatDuration(seconds);
+}
+
 /// Compact form used in tight spaces: "1h46" (no "m" suffix).
 inline QString formatCompact(int totalSeconds)
 {
@@ -27,6 +36,13 @@ inline QString formatCompact(int totalSeconds)
     if (hours > 0)
         return QStringLiteral("%1h%2").arg(hours).arg(remMins, 2, 10, QLatin1Char('0'));
     return QStringLiteral("%1m").arg(minutes);
+}
+
+/// 弹出菜单统一走设计 token，避免 Windows 原生菜单在暗色下黑底黑字。
+inline QString focusBorderRule(const QString &selector = QStringLiteral("QPushButton"))
+{
+    return QStringLiteral("%1:focus { border-color: %2; }")
+        .arg(selector, DesignTokens::kFocusBorder().name());
 }
 
 /// 弹出菜单统一走设计 token，避免 Windows 原生菜单在暗色下黑底黑字。

@@ -60,6 +60,8 @@ QString settingsStyle()
     const QString textMute    = DesignTokens::kTextMute().name(QColor::HexArgb);
     const QString textFaint   = DesignTokens::kTextFaint().name(QColor::HexArgb);
     const QString accent      = DesignTokens::kAccent().name(QColor::HexArgb);
+    const QString onAccent    = DesignTokens::kOnAccent().name(QColor::HexArgb);
+    const QString focus       = DesignTokens::kFocusBorder().name(QColor::HexArgb);
     const QString accentHover = DesignTokens::kAccentHover().name(QColor::HexArgb);
     const QString accentPress = DesignTokens::kAccentPressed().name(QColor::HexArgb);
     const QString accentLight = DesignTokens::kAccentLight().name(QColor::HexArgb);
@@ -78,29 +80,32 @@ QString settingsStyle()
         "QLabel#aboutVersion { color: %7; background: transparent; }"
         "QLabel#aboutDesc { color: %8; background: transparent; }"
 
-        "QPushButton#navItem { background: transparent; color: %4; border: none; border-radius: 6px;"
+        "QPushButton#navItem { background: transparent; color: %4; border: 1px solid transparent; border-radius: 6px;"
         " text-align: left; padding: 0 12px; font-size: 13px; }"
         "QPushButton#navItem:hover { background: %13; }"
         "QPushButton#navItem:checked { background: %12; color: %6; font-weight: 600; }"
+        "QPushButton#navItem:focus { border-color: %14; }"
         "QPushButton#navItem:disabled { color: %8; }"
 
-        "QPushButton#accentBtn { background: %6; color: white; border: none; border-radius: 6px;"
+        "QPushButton#accentBtn { background: %6; color: %15; border: 1px solid transparent; border-radius: 6px;"
         " padding: 8px 22px; font-size: 13px; font-weight: 600; }"
         "QPushButton#accentBtn:hover { background: %10; }"
         "QPushButton#accentBtn:pressed { background: %11; }"
+        "QPushButton#accentBtn:focus { border-color: %14; }"
         "QPushButton#accentBtn:disabled { background: %3; color: %8; }"
 
         "QPushButton#secondaryBtn { background: %2; color: %4; border: 1px solid %3;"
         " border-radius: 6px; padding: 7px 14px; font-size: 13px; }"
         "QPushButton#secondaryBtn:hover { background: %13; }"
         "QPushButton#secondaryBtn:pressed { background: %12; }"
+        "QPushButton#secondaryBtn:focus { border-color: %14; }"
         "QPushButton#secondaryBtn:disabled { color: %8; background: transparent; }"
 
         "QLineEdit, QSpinBox, QComboBox, QTimeEdit { color: %5; background: %2;"
         " border: 1px solid %3; border-radius: 6px; padding: 7px 9px; min-height: 18px;"
         " selection-background-color: %12; }"
         "QLineEdit:hover, QSpinBox:hover, QComboBox:hover, QTimeEdit:hover { border-color: %8; }"
-        "QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QTimeEdit:focus { border-color: %6; }"
+        "QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QTimeEdit:focus { border-color: %14; }"
         "QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled, QTimeEdit:disabled { color: %8; background: %13; }"
         "QLineEdit::placeholder { color: %8; }"
 
@@ -161,7 +166,9 @@ QString settingsStyle()
         .arg(accentHover)
         .arg(accentPress)
         .arg(accentLight)
-        .arg(hoverBg);
+        .arg(hoverBg)
+        .arg(focus)
+        .arg(onAccent);
 }
 
 } // namespace
@@ -172,15 +179,6 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     setWindowTitle(QString::fromUtf8("设置"));
     resize(980, 640);
     setMinimumSize(880, 560);
-
-    // 暗色主题下默认 QToolTip 白底黑字过亮，对话框打开期间统一为 Surface 底。
-    m_prevAppStyleSheet = qApp->styleSheet();
-    qApp->setStyleSheet(m_prevAppStyleSheet + QStringLiteral(
-        "QToolTip { background-color: %1; color: %2; border: 1px solid %3;"
-        " padding: 6px 8px; font-size: 12px; }")
-        .arg(DesignTokens::kSurface().name(),
-             DesignTokens::kText().name(),
-             DesignTokens::kBorder().name()));
 
     // 初始 palette 与样式（themeChanged 时由 applyTheme 整体重设）。
     applyTheme();
@@ -1024,13 +1022,6 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     m_linewebStatusTimer->start();
 
     loadSettings();
-}
-
-SettingsDialog::~SettingsDialog()
-{
-    // 还原对话框打开前应用级样式表（QToolTip 样式）。
-    if (qApp->styleSheet() != m_prevAppStyleSheet)
-        qApp->setStyleSheet(m_prevAppStyleSheet);
 }
 
 void SettingsDialog::applyTheme()

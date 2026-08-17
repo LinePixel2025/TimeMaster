@@ -8,9 +8,7 @@ class AiClient;
 class QLabel;
 class SummaryCard;
 
-/// 主页 AI 使用报告卡片：与其它仪表盘卡片共用 CardFrame 材质。
-/// 「今日报告」在浏览器打开统计网页，「生成分析」刷新 AI，
-/// 「上周周报」弹出打开/生成菜单。
+/// 主页 AI 使用报告卡片：横向洞察条，提供生成、日报与周报入口。
 class AiReportCard : public CardFrame
 {
     Q_OBJECT
@@ -46,10 +44,9 @@ private:
     void showWeeklyMenu();
     void refreshContent();
     void updateSummaryCard();
-    void applyThemeColors();
-    /// 提取「【总结】」/「总结：」后的 8 字短语；超长按字符截断。
+    /// 提取「【总结】」/「总结：」后的短语；超长按字符截断。
     QString summaryPhrase() const;
-    /// 短语统一截断：超过 12 字截为前 12 字 + 省略号。
+    /// 短语统一截断：超过 24 字截为前 24 字 + 省略号。
     QString capPhrase(const QString &phrase) const;
     /// 当前周期（今日）的展示文本，如「8月12日 · 星期三」。
     QString todayText() const;
@@ -61,7 +58,6 @@ private:
     QString m_error;
     bool m_loading = false;
 
-    QLabel *m_hintLabel = nullptr;
     SummaryCard *m_summaryCard = nullptr;
     QString m_weeklyReportPath;
 };

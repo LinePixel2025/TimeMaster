@@ -42,6 +42,7 @@ private:
 
     QButtonGroup *m_group = nullptr;
     QButtonGroup *m_heatGroup = nullptr;
+    QPushButton *m_formatBtn = nullptr;
     QPushButton *m_barBtn = nullptr;
     QPushButton *m_lineBtn = nullptr;
     QPushButton *m_weekBtn = nullptr;

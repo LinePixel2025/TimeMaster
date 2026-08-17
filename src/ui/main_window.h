@@ -7,6 +7,8 @@ class DatabaseManager;
 class QPushButton;
 class QLabel;
 class QGridLayout;
+class QScrollArea;
+class QVBoxLayout;
 
 class HeroCard;
 class TrendCard;
@@ -60,6 +62,7 @@ private:
     void applyTheme();
     void applyResponsiveLayout();
     void updateStatusChip();
+    void updateStatusChipText();
     QString dateText() const;
 
     DatabaseManager *m_db = nullptr;
@@ -70,10 +73,14 @@ private:
     QLabel *m_titleLabel = nullptr;
     QLabel *m_dateLabel = nullptr;
     QLabel *m_statusChip = nullptr;
+    QVBoxLayout *m_rootLayout = nullptr;
+    QScrollArea *m_dashboardScroll = nullptr;
+    QWidget *m_dashboardContent = nullptr;
     QGridLayout *m_grid = nullptr;
-    bool m_narrowLayout = false;
+    bool m_narrowLayout = true;
     bool m_trackingPaused = false;
     QString m_activeApp;
+    QString m_statusText;
     HeroCard *m_heroCard = nullptr;
     TrendCard *m_trendCard = nullptr;
     RankCard *m_rankCard = nullptr;

@@ -11,6 +11,7 @@ set(SOURCES
     ui/tray_manager.cpp
     ui/card_frame.cpp
     ui/hero_card.cpp
+    ui/trend_chart_layout.cpp
     ui/trend_card.cpp
     ui/rank_card.cpp
     ui/ai_report_card.cpp
@@ -38,11 +39,15 @@ set(HEADERS
     ui/theme_manager.h
     ui/tray_manager.h
     ui/design_tokens.h
+    ui/dashboard_layout.h
+    ui/period_distribution_layout.h
     ui/ui_utils.h
     ui/card_frame.h
     ui/hero_card.h
+    ui/trend_chart_layout.h
     ui/trend_card.h
     ui/rank_card.h
+    ui/rank_layout.h
     ui/ai_report_card.h
     report/report_html_builder.h
     report/daily_report_manager.h

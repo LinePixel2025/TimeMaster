@@ -15,8 +15,11 @@ CardFrame::CardFrame(const QString &title, QWidget *parent)
     outer->setSpacing(0);
 
     m_contentLayout = new QVBoxLayout();
-    m_contentLayout->setContentsMargins(20, 18, 20, 20);
-    m_contentLayout->setSpacing(12);
+    m_contentLayout->setContentsMargins(DesignTokens::kCardPaddingHorizontal,
+                                        DesignTokens::kCardPaddingTop,
+                                        DesignTokens::kCardPaddingHorizontal,
+                                        DesignTokens::kCardPaddingBottom);
+    m_contentLayout->setSpacing(DesignTokens::kCardContentSpacing);
 
     if (!title.isEmpty())
         setTitle(title);
@@ -44,6 +47,8 @@ void CardFrame::setTitle(const QString &title)
     if (!m_titleLabel) {
         m_titleLabel = new QLabel(this);
         m_titleLabel->setFont(DesignTokens::appFont(15, QFont::Medium));
+        m_titleLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+        m_titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         m_titleLabel->setStyleSheet(
             QString("color: %1; background: transparent;")
                 .arg(DesignTokens::kTextStrong().name()));

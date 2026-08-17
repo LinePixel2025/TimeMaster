@@ -1,7 +1,11 @@
 #pragma once
+
 #include <QColor>
 #include <QFont>
 #include <QString>
+
+#include <cmath>
+
 #include "ui/theme_manager.h"
 
 namespace DesignTokens {
@@ -28,6 +32,10 @@ inline QColor kTextStrong()   { return isDarkTheme() ? QColor("#F1F5F3") : QColo
 inline QColor kText()         { return isDarkTheme() ? QColor("#C5D0CB") : QColor("#374151"); }
 inline QColor kTextMute()     { return isDarkTheme() ? QColor("#8A9993") : QColor("#6B7280"); }
 inline QColor kTextFaint()    { return isDarkTheme() ? QColor("#5C6B66") : QColor("#9CA3AF"); }
+inline QColor kOnAccent()     { return isDarkTheme() ? kBg() : QColor(Qt::white); }
+inline QColor kFocusBorder()  { return isDarkTheme() ? kAccentHover() : kAccent(); }
+inline QColor kTextPlaceholder() { return kTextMute(); }
+inline QColor kChartValueText()  { return kTextMute(); }
 
 inline QColor kCardBorder()          { return kBorder(); }
 inline QColor kButtonHoverBg()       { return isDarkTheme() ? QColor("#24302C") : QColor("#E7EEEB"); }
@@ -37,19 +45,43 @@ inline QColor kChartAreaTop()        { return isDarkTheme() ? QColor(61,207,176,
 inline QColor kChartAreaBottom()     { return isDarkTheme() ? QColor(61,207,176,0) : QColor(53,185,154,0); }
 inline QColor kTodayGlow()           { return isDarkTheme() ? QColor(61,207,176,45) : QColor(11,122,102,35); }
 
+inline qreal relativeLuminance(const QColor &color)
+{
+    const auto channel = [](qreal value) {
+        value /= 255.0;
+        return value <= 0.04045 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(color.redF() * 255.0)
+         + 0.7152 * channel(color.greenF() * 255.0)
+         + 0.0722 * channel(color.blueF() * 255.0);
+}
+
+inline QColor readableTextOn(const QColor &background)
+{
+    const QColor darkText("#111827");
+    const QColor lightText(Qt::white);
+    const qreal backgroundLuminance = relativeLuminance(background);
+    const auto contrast = [backgroundLuminance](const QColor &foreground) {
+        const qreal foregroundLuminance = relativeLuminance(foreground);
+        return (qMax(backgroundLuminance, foregroundLuminance) + 0.05)
+             / (qMin(backgroundLuminance, foregroundLuminance) + 0.05);
+    };
+    return contrast(darkText) >= contrast(lightText) ? darkText : lightText;
+}
+
 /// 热力图色阶：level 0（空）→ 4（最强），明暗两套各 5 档离散色。
 inline QColor heatLevel(int level)
 {
     level = qBound(0, level, 4);
     if (isDarkTheme()) {
         static const QColor levels[5] = {
-            QColor("#24302C"), QColor("#16352E"), QColor("#0B7A66"),
+            QColor("#24302C"), QColor("#1C302B"), QColor("#0B7A66"),
             QColor("#15977B"), QColor("#3DCFB0")
         };
         return levels[level];
     }
     static const QColor levels[5] = {
-        QColor("#E4ECE9"), QColor("#CDE9E0"), QColor("#7FD4BE"),
+        QColor("#EDF3F0"), QColor("#D9EEE7"), QColor("#7FD4BE"),
         QColor("#35B99A"), QColor("#0B7A66")
     };
     return levels[level];
@@ -115,9 +147,41 @@ inline constexpr int kRadiusInput = 6;
 inline constexpr int kRadiusChip  = 999;
 
 // ============== LAYOUT ==============
-inline constexpr int kOuterMargin = 24;
-inline constexpr int kCardSpacing = 16;
+inline constexpr int kOuterMargin = kSpacingXl;
+inline constexpr int kWindowTopMargin = kSpacingLg;
+inline constexpr int kWindowBottomMargin = 22;
+inline constexpr int kSectionSpacing = kSpacingLg;
+inline constexpr int kHeaderSpacing = kSpacingSm;
+inline constexpr int kTitleStackSpacing = 1;
+inline constexpr int kGridSpacing = kSpacingMd;
+inline constexpr int kCardPaddingHorizontal = 20;
+inline constexpr int kCardPaddingTop = 18;
+inline constexpr int kCardPaddingBottom = 20;
+inline constexpr int kCardContentSpacing = kSpacingMd;
+inline constexpr int kCompactGap = kSpacingXs;
+inline constexpr int kControlGap = kSpacingSm;
+inline constexpr int kIconButtonSize = 36;
+inline constexpr int kToggleButtonHeight = 26;
+inline constexpr int kActionButtonMinHeight = 32;
+inline constexpr int kHeroCompactBreakpoint = 740;
+inline constexpr int kAiCompactBreakpoint = 740;
+inline constexpr int kHeroMinHeightWide = 176;
+inline constexpr int kHeroMinHeightCompact = 238;
+inline constexpr int kTrendMinHeightNormal = 216;
+inline constexpr int kTrendMinHeightMonth = 286;
+inline constexpr int kRankVisibleRows = 5;
+inline constexpr int kRankRowHeight = 32;
+inline constexpr int kRankRowSpacing = 4;
+inline constexpr int kRankProgressHeight = 4;
+inline constexpr int kRankListHeight = kRankVisibleRows * kRankRowHeight
+    + (kRankVisibleRows - 1) * kRankRowSpacing;
+inline constexpr int kRankMinHeight = 248;
+inline constexpr int kAiMinHeightWide = 148;
+inline constexpr int kAiMinHeightCompact = 244;
+inline constexpr int kStatusChipMaxWidth = 240;
+inline constexpr int kStatusChipPaddingH = 10;
+inline constexpr int kStatusChipPaddingV = 4;
+inline constexpr int kCardSpacing = kSectionSpacing;
 inline constexpr int kGridColumns = 2;
-inline constexpr int kNarrowBreakpoint = 1000;
 
 } // namespace DesignTokens
