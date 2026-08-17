@@ -70,7 +70,7 @@ src/
                             TrackingStore：会话持久化接口，DatabaseManager 实现它
   icon/                     AppIconProvider：通过 Windows Shell 提取并缓存应用图标
   ui/                       MainWindow、主题管理器、托盘管理器和仪表盘卡片
-                            HeroCard、TrendCard、RankCard、CompareCard、AiReportCard、SettingsDialog
+                            HeroCard、TrendCard、RankCard、AiReportCard、SettingsDialog
   ai/                       AiClient：OpenAI 兼容 Chat Completions 客户端，负责聚合统计、
                             构建中文 prompt、调用 AI 并缓存报告到 settings 表
   reminder/                 ReminderScheduler：按配置时间点定时触发托盘提醒，AI 短文案
@@ -80,8 +80,9 @@ src/
   report/                 ReportHtmlBuilder：周报/日报共享的液态玻璃 HTML 渲染层
                             （CSS、SVG 折线图、热力图、时段条、应用排行等纯静态片段）
                             DailyReportManager：把「今日使用报告」生成为与周报同款的
-                            HTML 网页（同日覆盖）；无定时调度，卡片「↗」查看时现场生成，
-                            「⟳」AI 分析完成后经 applyReportText 自动更新
+                            HTML 网页（同日覆盖）；无定时调度，卡片「今日报告」查看时现场生成，
+                            「生成分析」完成后经 applyReportText 自动更新
+                            session_hours.h：会话按小时切开的共享算法，主页日晷与日/周报共用
   export/                   CSV 导出器和基于内置 miniz 的手写 XLSX 写入器
   push/                     LineWebPusher：定时/退出前向 LineWeb 推送当日总时长
   utility/                  Windows 自启动注册表辅助逻辑；ProcessIdentity 进程键归一化
@@ -98,9 +99,9 @@ docs/                       LineWeb 健康 API 文档（health-api.md）与 supe
 
 - 程序启动后默认隐藏到系统托盘；通过托盘菜单显示主窗口或退出。验证主窗口时需要临时调用 `window.show()`，验证结束后恢复。
 - `WindowTracker` 轮询当前前台窗口，支持进程别名、忽略应用、追踪开关、轮询间隔、空闲阈值和最短追踪时长。轮询间隔使用数据库设置的 `poll_interval`，不能恢复成硬编码常量。4.0 起追踪逻辑抽为 `TrackingEngine` 状态机（Pending/Active/Idle），通过 `TrackingStore` 接口持久化，`WindowTracker` 只负责采集和线程管理。活跃会话按 `persistIntervalMs`（默认 30 秒）周期落库而非每秒写库，崩溃最多丢一个周期；时长以单调时钟为权威，墙钟偏差超过 5 秒时按"开始锚点 + 单调增量"推算（`sanitizeWallTime`），跨午夜会话自动切分且有段数上限（`kMaxMidnightSplits`）。
-- `MainWindow` 每 10 秒刷新数据，当前仪表盘固定包含 `HeroCard`、`TrendCard`、`RankCard` 和 `CompareCard`。不要重新引入已删除的 `StatsWidget`、`AppRankWidget`、`DashboardCard`、`ReportDetailDialog`（每日报告详情弹窗）或旧的动态网格编辑器，除非任务明确要求。
-- AI 智能模块：`AiClient` 通过 OpenAI 兼容 `POST {endpoint}/chat/completions` 生成报告（`Authorization: Bearer <key>`，解析 `choices[0].message.content`），支持 daily/weekly 两个周期。报告文本与锚点日期缓存于 `ai_report_{daily,weekly}_{text,date}` 设置，跨天/跨周后由 `AiReportCard` 判定过期。主页卡片点击「⟳」→ `MainWindow::aiReportRequested` → `AiClient::generateReport`，结果经 `reportReady/reportFailed` 回填卡片并联动日报网页；`refreshData` 不触发 AI 请求。
-- 每日报告网页：`DailyReportManager` 把今日统计（小时分布、时段、应用 Top5、会话洞察、目标完成度）+ AI 缓存文本生成为 `Documents/TimeMaster/日报-yyyy-MM-dd.html`（同日覆盖，纯 SVG/CSS 离线可用，样式与周报同款液态玻璃）。AI 未配置或无缓存时统计板块仍完整，AI 区显示引导空态。卡片「↗」经 `dailyReportOpenRequested` 由 main 调 `refreshToday()` 后 `openUrl` 打开；「⟳」手动生成 AI 后经 `applyReportText` 自动更新并打开。报告 HTML 片段统一走 `src/report/report_html_builder`，周报与日报不得各自维护样式副本。
+- `MainWindow` 每 10 秒刷新数据，当前仪表盘固定包含 `HeroCard`（含昨日对比与 24 小时日晷）、`TrendCard`、`RankCard` 和 `AiReportCard`。昨日对比已并入 Hero，不要重新引入 `CompareCard`。不要重新引入已删除的 `StatsWidget`、`AppRankWidget`、`DashboardCard`、`ReportDetailDialog`（每日报告详情弹窗）或旧的动态网格编辑器，除非任务明确要求。顶栏只保留主题、更多菜单（导出 / 云同步 / 刷新）和设置；状态芯片显示「追踪中 · 应用」/「空闲」/「已暂停」，由 `WindowTracker::activeWindowChanged` 队列连接更新。窄窗口（&lt; 1000px）改为单列。日晷小时数据来自 `getAllSessions` + `SessionHours::addToDayHours`，禁止 `strftime('%H', start_time)` 分组。
+- AI 智能模块：`AiClient` 通过 OpenAI 兼容 `POST {endpoint}/chat/completions` 生成报告（`Authorization: Bearer <key>`，解析 `choices[0].message.content`），支持 daily/weekly 两个周期。报告文本与锚点日期缓存于 `ai_report_{daily,weekly}_{text,date}` 设置，跨天/跨周后由 `AiReportCard` 判定过期。主页卡片点击「生成分析」→ `MainWindow::aiReportRequested` → `AiClient::generateReport`，结果经 `reportReady/reportFailed` 回填卡片并联动日报网页；`refreshData` 不触发 AI 请求。
+- 每日报告网页：`DailyReportManager` 把今日统计（小时分布、时段、应用 Top5、会话洞察、目标完成度）+ AI 缓存文本生成为 `Documents/TimeMaster/日报-yyyy-MM-dd.html`（同日覆盖，纯 SVG/CSS 离线可用，样式与周报同款液态玻璃）。AI 未配置或无缓存时统计板块仍完整，AI 区显示引导空态。卡片「今日报告」经 `dailyReportOpenRequested` 由 main 调 `refreshToday()` 后 `openUrl` 打开；「生成分析」完成后经 `applyReportText` 自动更新并打开。报告 HTML 片段统一走 `src/report/report_html_builder`，周报与日报不得各自维护样式副本。小时切分与主页日晷共用 `src/report/session_hours.h`。
 - 定时提醒：`ReminderScheduler` 用 30 秒 QTimer 轮询，`reminder_times` 为逗号分隔的 "HH:mm" 列表；到点以「日期|HH:mm」去重（同分钟一次、跨天自然失效），每次命中写 `reminder_last_fired` 触发记录（设置界面「上次触发」据此展示）。今日无数据时不发真实提醒，但弹一条说明"今日暂无使用记录"，避免配置了却不响。内容优先 `AiClient::generateReminderMessage`（`max_tokens: 200`，经 `reminderReady/reminderFailed` 按 tag 回填，不写缓存），AI 未配置或失败时回退 `buildLocalMessage` 本地统计模板（含今日时长、距目标差、主力应用）。托盘气泡由 `TrayManager::showNotification` 发出（底层 `Shell_NotifyIcon` 经典气泡；勿扰模式、系统通知被关闭等会导致不显示，非代码问题）。
 - 间隔提醒：与时间点提醒并列的另一种模式（`reminder_interval_enabled`/`reminder_interval_minutes`，默认 45 分钟），自锚定时刻起每隔设定分钟数触发一次，触发逻辑（AI 优先/本地回退、无数据说明）复用 `fireReminderCore`。锚点 `m_intervalAnchor` 为内存态：首次检查仅锚定不触发，程序重启后重新计时；`reloadSettings` 仅在间隔配置变化时清空锚点重新计时，无关设置的 reload 不得误重置。测试经 `checkNow(QDateTime)` 注入时刻驱动。
 - `ReminderScheduler` 与 `WeeklyReportManager` 的 `start()` 必须调用 `m_timer->start()` 启动 30 秒轮询（曾漏掉导致只在启动瞬间检查一次）；`isRunning()` 为防回归断言，测试中有覆盖。
@@ -136,7 +137,8 @@ int DatabaseManager::getTodayTotal()
 
 ## UI 约定
 
-- Windows 字体使用 `Microsoft YaHei`，不要使用 `PingFang SC`。优先复用 `DesignTokens::appFont()` 和 `DesignTokens` 中的颜色、间距、圆角。
+- Windows 字体使用 `Microsoft YaHei`，不要使用 `PingFang SC`。优先复用 `DesignTokens::appFont()` 和 `DesignTokens` 中的颜色、间距、圆角。数字/时长使用 `DesignTokens::monoFont()`，主程序时长格式为 `3h 10m`。
+- `ThemeManager::applyToApplication` 必须读 `DesignTokens`，禁止再写死靛蓝调色板，否则原生对话框会与仪表盘串色。
 - 保持纯色窗口背景和现有主题体系。禁止重新引入 `WA_TranslucentBackground`、`DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)` 或 `DwmExtendFrameIntoClientArea`；这些方案曾导致不同 Windows 版本出现黑色客户区。
 - 修改 UI 后先构建，再通过托盘显示窗口进行手动检查；检查浅色/深色主题、窄窗口、长中文文本、空数据和托盘退出流程。
 - 不要为了验证而提交临时的 `window.show()`、截图或运行时数据库。

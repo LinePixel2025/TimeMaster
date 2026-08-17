@@ -45,6 +45,9 @@ private:
     void refreshKnownAppsList();
     void refreshIgnoredList();
     void refreshAliasTable();
+    /// 应用内别名编辑面板，替代系统 QInputDialog。
+    bool promptAlias(const QString &title, QString *processName,
+                     QString *displayName, bool processReadOnly);
 
     DatabaseManager *m_db;
 

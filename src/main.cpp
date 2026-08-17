@@ -52,6 +52,9 @@ int main(int argc, char *argv[])
     MainWindow window(&db, &ai);
 
     WindowTracker tracker(&db);
+    QObject::connect(&tracker, &WindowTracker::activeWindowChanged,
+                     &window, &MainWindow::onActiveWindowChanged,
+                     Qt::QueuedConnection);
     tracker.start();
 
     TrayManager tray("Time Master");

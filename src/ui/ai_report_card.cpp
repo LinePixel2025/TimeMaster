@@ -2,16 +2,13 @@
 #include "ai/ai_client.h"
 #include "ui/design_tokens.h"
 #include "ui/theme_manager.h"
+#include "ui/ui_utils.h"
 
 #include <QDate>
-#include <QEnterEvent>
 #include <QFile>
-#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
-#include <QPainter>
-#include <QPainterPath>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -44,18 +41,9 @@ QString weekdayCn(int dayOfWeek)
     return (dayOfWeek >= 1 && dayOfWeek <= 7) ? kNames[dayOfWeek - 1] : QString();
 }
 
-// 渐变卡上的白色文字（各级透明度）。
-QString whiteText(int alpha)
-{
-    return QString("color: rgba(255,255,255,%1); background: transparent;")
-        .arg(alpha);
-}
-
 } // namespace
 
-/// Apple 风格总结卡内容区：透明容器，承载日期、8 字总结大字、
-/// 「AI 今日总结」小字与右下角展开图标。背景（渐变/光晕）由外层
-/// AiReportCard 整卡自绘，避免出现「卡中卡」。
+/// 总结区：日期、8 字总结、说明与文字按钮。材质交给外层 CardFrame。
 class SummaryCard : public QWidget
 {
     Q_OBJECT
@@ -64,65 +52,83 @@ public:
         : QWidget(parent)
     {
         auto *layout = new QVBoxLayout(this);
-        layout->setContentsMargins(0, 6, 0, 0);
-        layout->setSpacing(5);
+        layout->setContentsMargins(0, 4, 0, 0);
+        layout->setSpacing(6);
 
         m_dateLabel = new QLabel(this);
-        m_dateLabel->setAlignment(Qt::AlignCenter);
+        m_dateLabel->setAlignment(Qt::AlignLeft);
         m_dateLabel->setFont(DesignTokens::eyebrowFont(11));
-        m_dateLabel->setStyleSheet(whiteText(210));
         layout->addWidget(m_dateLabel);
 
         m_phraseLabel = new QLabel(this);
-        m_phraseLabel->setAlignment(Qt::AlignCenter);
-        m_phraseLabel->setFont(DesignTokens::appFont(25, QFont::DemiBold));
-        m_phraseLabel->setStyleSheet(QStringLiteral("color: white; background: transparent;"));
+        m_phraseLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        m_phraseLabel->setWordWrap(true);
+        m_phraseLabel->setFont(DesignTokens::appFont(22, QFont::DemiBold));
         layout->addWidget(m_phraseLabel, 1);
 
+        m_captionLabel = new QLabel(this);
+        m_captionLabel->setAlignment(Qt::AlignLeft);
+        m_captionLabel->setFont(DesignTokens::appFont(11));
+        layout->addWidget(m_captionLabel);
+
         auto *bottomRow = new QHBoxLayout();
-        bottomRow->setContentsMargins(0, 0, 0, 0);
+        bottomRow->setContentsMargins(0, 4, 0, 0);
         bottomRow->setSpacing(8);
 
-        m_captionLabel = new QLabel(this);
-        m_captionLabel->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
-        m_captionLabel->setFont(DesignTokens::appFont(11));
-        m_captionLabel->setStyleSheet(whiteText(200));
-        bottomRow->addWidget(m_captionLabel);
-        bottomRow->addStretch();
-
-        // 刷新报告：重新生成今日 AI 分析（位于展开图标左侧）。
-        const QString roundBtnStyle = QString(
-            "QPushButton { border: none; border-radius: 17px;"
-            " background: rgba(255,255,255,45); color: white; font-size: 16px; }"
-            "QPushButton:hover { background: rgba(255,255,255,110); }");
-        m_refreshBtn = new QPushButton(QStringLiteral("⟳"), this);
+        m_refreshBtn = new QPushButton(QStringLiteral("生成分析"), this);
         m_refreshBtn->setCursor(Qt::PointingHandCursor);
-        m_refreshBtn->setFixedSize(34, 34);
-        m_refreshBtn->setToolTip(QStringLiteral("生成 / 刷新 AI 分析"));
-        m_refreshBtn->setStyleSheet(roundBtnStyle);
+        m_refreshBtn->setMinimumHeight(32);
         connect(m_refreshBtn, &QPushButton::clicked,
                 this, &SummaryCard::refreshRequested);
-        bottomRow->addWidget(m_refreshBtn, 0, Qt::AlignBottom);
+        bottomRow->addWidget(m_refreshBtn);
 
-        // 上周周报：弹出操作菜单（打开 / 生成 / 重新生成）。
-        m_weeklyBtn = new QPushButton(QStringLiteral("▤"), this);
+        m_weeklyBtn = new QPushButton(QStringLiteral("上周周报"), this);
         m_weeklyBtn->setCursor(Qt::PointingHandCursor);
-        m_weeklyBtn->setFixedSize(34, 34);
-        m_weeklyBtn->setToolTip(QStringLiteral("上周周报"));
-        m_weeklyBtn->setStyleSheet(roundBtnStyle);
+        m_weeklyBtn->setMinimumHeight(32);
         connect(m_weeklyBtn, &QPushButton::clicked,
                 this, &SummaryCard::weeklyClicked);
-        bottomRow->addWidget(m_weeklyBtn, 0, Qt::AlignBottom);
+        bottomRow->addWidget(m_weeklyBtn);
 
-        m_detailBtn = new QPushButton(QStringLiteral("↗"), this);
+        m_detailBtn = new QPushButton(QStringLiteral("今日报告"), this);
         m_detailBtn->setCursor(Qt::PointingHandCursor);
-        m_detailBtn->setFixedSize(34, 34);
-        m_detailBtn->setToolTip(QStringLiteral("查看完整报告（浏览器打开）"));
-        m_detailBtn->setStyleSheet(roundBtnStyle);
+        m_detailBtn->setMinimumHeight(32);
         connect(m_detailBtn, &QPushButton::clicked,
                 this, &SummaryCard::detailClicked);
-        bottomRow->addWidget(m_detailBtn, 0, Qt::AlignBottom);
+        bottomRow->addWidget(m_detailBtn);
+        bottomRow->addStretch();
         layout->addLayout(bottomRow);
+        applyTheme();
+    }
+
+    void applyTheme()
+    {
+        m_dateLabel->setStyleSheet(
+            QStringLiteral("color: %1; background: transparent;")
+                .arg(DesignTokens::kTextMute().name()));
+        m_phraseLabel->setStyleSheet(
+            QStringLiteral("color: %1; background: transparent;")
+                .arg(DesignTokens::kTextStrong().name()));
+        m_captionLabel->setStyleSheet(
+            QStringLiteral("color: %1; background: transparent;")
+                .arg(DesignTokens::kTextMute().name()));
+
+        const QString secondary = QStringLiteral(
+            "QPushButton { background: %1; color: %2; border: 1px solid %3;"
+            " border-radius: 6px; padding: 0 12px; font-size: 12px; }"
+            "QPushButton:hover { background: %4; }")
+            .arg(DesignTokens::kSurface().name(),
+                 DesignTokens::kText().name(),
+                 DesignTokens::kBorder().name(),
+                 DesignTokens::kButtonHoverBg().name());
+        const QString primary = QStringLiteral(
+            "QPushButton { background: %1; color: white; border: 1px solid %1;"
+            " border-radius: 6px; padding: 0 14px; font-size: 12px; font-weight: 600; }"
+            "QPushButton:hover { background: %2; border-color: %2; }")
+            .arg(DesignTokens::kAccent().name(),
+                 DesignTokens::kAccentHover().name());
+        m_refreshBtn->setStyleSheet(secondary);
+        m_weeklyBtn->setStyleSheet(secondary);
+        m_detailBtn->setStyleSheet(primary);
     }
 
     void setDateText(const QString &text) { m_dateLabel->setText(text); }
@@ -156,17 +162,13 @@ AiReportCard::AiReportCard(AiClient *ai, QWidget *parent)
     : CardFrame(QStringLiteral("AI 使用报告"), parent)
     , m_ai(ai)
 {
-    // 小窗口下收紧卡片上下留白，为总结大字与按钮留出空间。
     contentLayout()->setContentsMargins(20, 14, 20, 16);
     contentLayout()->setSpacing(8);
-    // 整卡为圆角渐变（paintEvent 自绘），标题与提示均为白色系。
-    titleLabel()->setStyleSheet(QStringLiteral("color: white; background: transparent;"));
 
     m_hintLabel = new QLabel(this);
     m_hintLabel->setWordWrap(true);
     m_hintLabel->setFont(DesignTokens::appFont(11));
     m_hintLabel->setTextFormat(Qt::PlainText);
-    m_hintLabel->setStyleSheet(whiteText(220));
     contentLayout()->addWidget(m_hintLabel);
 
     m_summaryCard = new SummaryCard(this);
@@ -185,56 +187,21 @@ AiReportCard::AiReportCard(AiClient *ai, QWidget *parent)
 
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, [this](ThemeManager::Theme) {
-        // 后于 CardFrame 的 themeChanged 触发，保证标题恒为白色。
-        titleLabel()->setStyleSheet(
-            QStringLiteral("color: white; background: transparent;"));
+        applyThemeColors();
         refreshContent();
     });
 
+    applyThemeColors();
     reloadState();
 }
 
-void AiReportCard::paintEvent(QPaintEvent *event)
+void AiReportCard::applyThemeColors()
 {
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    const qreal radius = 16.0;
-    const QRectF r(0.5, 0.5, width() - 1.0, height() - 1.0);
-    QPainterPath path;
-    path.addRoundedRect(r, radius, radius);
-
-    // 柔和渐变底（顶部亮 → 底部深，随主题取色）。
-    QLinearGradient bg(0, 0, width(), height());
-    bg.setColorAt(0.0, DesignTokens::kChartGradientTop());
-    bg.setColorAt(1.0, DesignTokens::kChartGradientBottom());
-    painter.fillPath(path, bg);
-
-    // 顶部光晕：玻璃质感高光，hover 时增亮。
-    QLinearGradient gloss(0, 0, 0, height() * 0.55);
-    gloss.setColorAt(0.0, QColor(255, 255, 255, m_glossAlpha));
-    gloss.setColorAt(1.0, QColor(255, 255, 255, 0));
-    painter.fillPath(path, gloss);
-
-    // 细边框：浅色主题下与背景区分。
-    painter.setPen(QPen(DesignTokens::kCardBorder(), 1.0));
-    painter.drawPath(path);
-
-    QWidget::paintEvent(event);
-}
-
-void AiReportCard::enterEvent(QEnterEvent *event)
-{
-    m_glossAlpha = 95;
-    update();
-    QWidget::enterEvent(event);
-}
-
-void AiReportCard::leaveEvent(QEvent *event)
-{
-    m_glossAlpha = 70;
-    update();
-    QWidget::leaveEvent(event);
+    m_hintLabel->setStyleSheet(
+        QStringLiteral("color: %1; background: transparent;")
+            .arg(DesignTokens::kTextMute().name()));
+    if (m_summaryCard)
+        m_summaryCard->applyTheme();
 }
 
 void AiReportCard::setWeeklyReportPath(const QString &path)
@@ -274,21 +241,7 @@ void AiReportCard::showError(const QString &error)
 void AiReportCard::showWeeklyMenu()
 {
     QMenu menu(this);
-    // QMenu 在 Windows 原生样式下不跟随应用 palette（暗色主题出现黑底黑字），
-    // 显式样式表优先级最高，明暗主题均按设计 token 取色。
-    const bool dark = DesignTokens::isDarkTheme();
-    menu.setStyleSheet(QString(
-        "QMenu { background: %1; color: %2; border: 1px solid %3;"
-        " border-radius: 8px; padding: 6px 2px; }"
-        "QMenu::item { padding: 7px 26px 7px 16px; border-radius: 6px; }"
-        "QMenu::item:selected { background: %4; color: %5; }"
-        "QMenu::item:disabled { color: %6; }"
-        "QMenu::separator { height: 1px; background: %3; margin: 5px 8px; }")
-        .arg(DesignTokens::kSurface().name(), DesignTokens::kText().name(),
-             DesignTokens::kBorder().name(),
-             DesignTokens::kAccentLight().name(),
-             DesignTokens::kAccent().name(),
-             DesignTokens::kTextFaint().name()));
+    UiUtils::applyMenuStyle(&menu);
     QAction *openAct = menu.addAction(QStringLiteral("打开上周周报"));
     menu.addSeparator();
     QAction *genAct = menu.addAction(QStringLiteral("立即生成上周周报"));
@@ -326,22 +279,20 @@ void AiReportCard::refreshContent()
     if (!m_error.isEmpty()) {
         m_hintLabel->setText(QStringLiteral("生成失败，可以重试"));
         m_hintLabel->setStyleSheet(
-            QString("color: white; background: transparent; font-weight: 600;"));
+            QStringLiteral("color: %1; background: transparent; font-weight: 600;")
+                .arg(DesignTokens::kError().name()));
         m_summaryCard->setPhrase(QStringLiteral("生成失败，可以重试"));
-        m_summaryCard->setCaption(
-            QStringLiteral("点击 ⟳ 重试；↗ 可查看统计报告"));
+        m_summaryCard->setCaption(QStringLiteral("可重新生成分析，或先查看今日统计报告"));
         m_summaryCard->setButtonsVisible(true, true, true);
         return;
     }
-    m_hintLabel->setStyleSheet(whiteText(220));
+    applyThemeColors();
 
     if (!m_ai->isConfigured()) {
         m_reportText.clear();
-        m_hintLabel->setText(QStringLiteral("⚙ AI 智能尚未配置"));
-        m_summaryCard->setPhrase(QStringLiteral("AI 智能尚未配置"));
-        m_summaryCard->setCaption(
-            QStringLiteral("↗ 查看今日统计报告 · 设置中可启用 AI"));
-        // AI 未配置：隐藏 ⟳（无 AI 可生成），保留 ↗ 统计网页与 ▤ 周报。
+        m_hintLabel->setText(QStringLiteral("AI 智能尚未配置"));
+        m_summaryCard->setPhrase(QStringLiteral("先看今日统计"));
+        m_summaryCard->setCaption(QStringLiteral("可打开今日报告；设置中启用 AI 后可生成分析"));
         m_summaryCard->setButtonsVisible(false, true, true);
         return;
     }
@@ -350,19 +301,17 @@ void AiReportCard::refreshContent()
         const QString cachedDate = m_ai->cachedReportDate(AiPeriod::daily());
         const bool fresh = (cachedDate == QDate::currentDate().toString(Qt::ISODate));
         m_hintLabel->setText(
-            fresh ? QStringLiteral("✔ 报告已更新（%1）").arg(todayText())
-                  : QStringLiteral("⏳ 报告缓存于 %1，点击 ⟳ 更新")
-                        .arg(cachedDate));
+            fresh ? QStringLiteral("报告已更新 · %1").arg(todayText())
+                  : QStringLiteral("报告缓存于 %1，可重新生成").arg(cachedDate));
         m_summaryCard->setCaption(QStringLiteral("AI 今日总结"));
         m_summaryCard->setButtonsVisible(true, true, true);
         updateSummaryCard();
         return;
     }
 
-    // 无缓存：AI 已配置但今日未生成 → 引导生成。
-    m_hintLabel->setText(QStringLiteral("点击 ↗ 在浏览器查看今日统计报告"));
+    m_hintLabel->setText(QStringLiteral("还没有今日分析"));
     m_summaryCard->setPhrase(QStringLiteral("还没有今日报告"));
-    m_summaryCard->setCaption(QStringLiteral("点击 ⟳ 生成每日分析报告"));
+    m_summaryCard->setCaption(QStringLiteral("可先查看统计报告，或生成每日分析"));
     m_summaryCard->setButtonsVisible(true, true, true);
 }
 

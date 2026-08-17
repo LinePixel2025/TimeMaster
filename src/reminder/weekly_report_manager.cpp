@@ -2,6 +2,7 @@
 #include "ai/ai_client.h"
 #include "database/database_manager.h"
 #include "report/report_html_builder.h"
+#include "report/session_hours.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -229,21 +230,14 @@ WeekStats WeeklyReportManager::collectWeekStats(const QDate &monday) const
             entry.display = appName;
         }
 
-        // 时段切分：跨小时/跨午夜的会话按实际占用分摊进热力矩阵，
-        // 以 duration_seconds 为权威（chunk 恒 >= 1，循环必然终止）。
-        qint64 remaining = secs;
-        QDateTime cursor = start;
-        while (remaining > 0) {
-            const int intoHour = cursor.time().msecsSinceStartOfDay() % 3600000 / 1000;
-            const qint64 chunk = qMin<qint64>(remaining, 3600 - intoHour);
+        // 时段切分：跨小时/跨午夜按实际占用分摊进热力矩阵。
+        SessionHours::forEachHourChunk(start, secs, [&](const QDateTime &cursor, int chunk) {
             const int curDay = monday.daysTo(cursor.date());
             if (curDay >= 0 && curDay <= 6) {
-                stats.hourMatrix[curDay][cursor.time().hour()] += int(chunk);
-                stats.periodSeconds[cursor.time().hour() / 6] += int(chunk);
+                stats.hourMatrix[curDay][cursor.time().hour()] += chunk;
+                stats.periodSeconds[cursor.time().hour() / 6] += chunk;
             }
-            remaining -= chunk;
-            cursor = cursor.addSecs(int(chunk));
-        }
+        });
     }
 
     const auto prevRows = m_db->getAllSessions(prevMonday.toString(Qt::ISODate),

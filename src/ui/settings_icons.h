@@ -24,6 +24,9 @@ enum Kind {
     Cloud,    // 云端同步
     Sparkle,  // AI 智能
     Info,     // 关于
+    Sun,      // 切换到浅色
+    Moon,     // 切换到暗色
+    More,     // 顶栏更多菜单
 };
 
 namespace detail {
@@ -151,6 +154,32 @@ inline void drawIcon(QPainter &p, Kind kind, const QRectF &r)
         p.drawEllipse(QPointF(cx, cy - s * 0.24), 1.0, 1.0);
         p.setBrush(Qt::NoBrush);
         p.drawLine(QPointF(cx, cy - s * 0.10), QPointF(cx, cy + s * 0.26));
+        break;
+    }
+    case Sun: {
+        p.drawEllipse(QPointF(cx, cy), s * 0.16, s * 0.16);
+        for (int i = 0; i < 8; ++i) {
+            const qreal a = qDegreesToRadians(45.0 * i);
+            const QPointF d(qCos(a), qSin(a));
+            p.drawLine(QPointF(cx, cy) + d * (s * 0.24),
+                       QPointF(cx, cy) + d * (s * 0.40));
+        }
+        break;
+    }
+    case Moon: {
+        QPainterPath moon;
+        moon.addEllipse(QRectF(cx - s * 0.22, cy - s * 0.26, s * 0.44, s * 0.52));
+        QPainterPath cut;
+        cut.addEllipse(QRectF(cx - s * 0.04, cy - s * 0.28, s * 0.40, s * 0.48));
+        p.drawPath(moon.subtracted(cut));
+        break;
+    }
+    case More: {
+        const QColor base = p.pen().color();
+        p.setBrush(base);
+        for (int i = -1; i <= 1; ++i)
+            p.drawEllipse(QPointF(cx + i * s * 0.18, cy), 1.5, 1.5);
+        p.setBrush(Qt::NoBrush);
         break;
     }
     }

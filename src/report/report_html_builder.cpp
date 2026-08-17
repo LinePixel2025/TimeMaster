@@ -9,16 +9,16 @@ namespace ReportHtml {
 namespace {
 
 // 报告页样式：液态玻璃卡片 + 渐变模糊色斑背景 + 深浅色自适应（纯 CSS，离线可用）。
-const char kReportStyle[] = R"CSS(:root{--text-strong:#122019;--text:#374151;--text-mute:#6B7280;
---accent:#087F6B;--accent-light:#35B99A;--chip:rgba(8,127,107,.10);--track:rgba(10,70,58,.08);
---grid-line:rgba(10,70,58,.10);--h0:#E9F0EC;--h1:#CDE9E0;--h2:#7FD4BE;--h3:#35B99A;--h4:#087F6B;
---p0:#7C8BFE;--p1:#66CDB4;--p2:#1F9E7F;--p3:#0B8A72;
+const char kReportStyle[] = R"CSS(:root{--text-strong:#111827;--text:#374151;--text-mute:#6B7280;
+--accent:#0B7A66;--accent-light:#35B99A;--chip:rgba(11,122,102,.10);--track:rgba(10,70,58,.08);
+--grid-line:rgba(10,70,58,.10);--h0:#E4ECE9;--h1:#CDE9E0;--h2:#7FD4BE;--h3:#35B99A;--h4:#0B7A66;
+--p0:#66CDB4;--p1:#35B99A;--p2:#15977B;--p3:#0B7A66;
 --glass-bg:rgba(255,255,255,.60);--glass-border:rgba(255,255,255,.70);--glass-inner:rgba(255,255,255,.75)}
-@media (prefers-color-scheme:dark){:root{--text-strong:#F1F6F3;--text:#CBD5D1;--text-mute:#94A3B8;
---accent:#4DD6B0;--accent-light:#72E2C2;--chip:rgba(77,214,176,.14);--track:rgba(255,255,255,.08);
---grid-line:rgba(255,255,255,.10);--h0:#2A3532;--h1:#1B4A3E;--h2:#0F6B56;--h3:#15977B;--h4:#4DD6B0;
---p0:#8B93F8;--p1:#7FD4BE;--p2:#35B99A;--p3:#15977B;
---glass-bg:rgba(24,32,30,.55);--glass-border:rgba(255,255,255,.12);--glass-inner:rgba(255,255,255,.08)}}
+@media (prefers-color-scheme:dark){:root{--text-strong:#F1F5F3;--text:#C5D0CB;--text-mute:#8A9993;
+--accent:#3DCFB0;--accent-light:#5FDBBF;--chip:rgba(61,207,176,.14);--track:rgba(255,255,255,.08);
+--grid-line:rgba(255,255,255,.10);--h0:#24302C;--h1:#16352E;--h2:#0B7A66;--h3:#15977B;--h4:#3DCFB0;
+--p0:#5FDBBF;--p1:#3DCFB0;--p2:#15977B;--p3:#0B7A66;
+--glass-bg:rgba(16,22,20,.62);--glass-border:rgba(255,255,255,.12);--glass-inner:rgba(255,255,255,.08)}}
 *{box-sizing:border-box}
 body{margin:0;padding:44px 16px 36px;font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;
 color:var(--text);background:linear-gradient(160deg,#E7F2EC 0%,#E6EEF3 48%,#EDEFF6 100%);

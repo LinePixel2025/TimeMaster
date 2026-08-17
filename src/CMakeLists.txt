@@ -13,7 +13,6 @@ set(SOURCES
     ui/hero_card.cpp
     ui/trend_card.cpp
     ui/rank_card.cpp
-    ui/compare_card.cpp
     ui/ai_report_card.cpp
     report/report_html_builder.cpp
     report/daily_report_manager.cpp
@@ -44,7 +43,6 @@ set(HEADERS
     ui/hero_card.h
     ui/trend_card.h
     ui/rank_card.h
-    ui/compare_card.h
     ui/ai_report_card.h
     report/report_html_builder.h
     report/daily_report_manager.h

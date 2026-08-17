@@ -5,27 +5,34 @@
 #include "ui/settings_icons.h"
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
+#include "ui/ui_utils.h"
 #include "ui/hero_card.h"
 #include "ui/trend_card.h"
 #include "ui/rank_card.h"
-#include "ui/compare_card.h"
 #include "ui/ai_report_card.h"
 #include "export/exporter.h"
+#include "report/session_hours.h"
 
 #include <QCloseEvent>
 #include <QShowEvent>
+#include <QResizeEvent>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QGridLayout>
 #include <QPushButton>
 #include <QInputDialog>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QMenu>
 #include <QWidget>
 #include <QApplication>
 #include <QLabel>
 #include <QScreen>
 #include <QGuiApplication>
 #include <QDate>
+#include <QDateTime>
+
+#include <array>
 
 #include <windows.h>
 #include <dwmapi.h>
@@ -47,14 +54,11 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     : QMainWindow(parent), m_db(db)
 {
     setWindowTitle("Time Master");
-    // Four dashboard cards plus the AI report card need this stable floor to
-    // keep text and charts readable while the user resizes the window.
-    setMinimumSize(900, 700);
+    setMinimumSize(840, 640);
 
-    // Qt 返回逻辑像素，直接按可用工作区计算默认尺寸。
     const QRect avail = QGuiApplication::primaryScreen()->availableGeometry();
-    const QSize defSize(qMin(960, qRound(avail.width() * 0.80)),
-                        qMin(740, qRound(avail.height() * 0.82)));
+    const QSize defSize(qMin(1100, qRound(avail.width() * 0.80)),
+                        qMin(760, qRound(avail.height() * 0.82)));
     resize(defSize);
 
     QColor bg = DesignTokens::kBg();
@@ -74,7 +78,7 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
 
     auto *layout = new QVBoxLayout(central);
     layout->setContentsMargins(24, 16, 24, 22);
-    layout->setSpacing(18);
+    layout->setSpacing(16);
 
     auto *headerLayout = new QHBoxLayout();
     headerLayout->setSpacing(8);
@@ -84,76 +88,60 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     m_titleLabel = new QLabel("Time Master", central);
     m_titleLabel->setFont(DesignTokens::appFont(20, QFont::DemiBold));
     titleColumn->addWidget(m_titleLabel);
-    m_dateLabel = new QLabel(QDate::currentDate().toString(QString::fromUtf8("yyyy年M月d日  dddd")), central);
-    m_dateLabel->setFont(DesignTokens::appFont(10));
+    m_dateLabel = new QLabel(dateText(), central);
+    m_dateLabel->setFont(DesignTokens::appFont(11));
     titleColumn->addWidget(m_dateLabel);
     headerLayout->addLayout(titleColumn);
     headerLayout->addStretch();
 
-    m_themeBtn = new QPushButton(
-        ThemeManager::instance()->isDark()
-            ? QString::fromUtf8("\xe2\x98\x80")
-            : QString::fromUtf8("\xf0\x9f\x8c\x99"),
-        central);
+    m_statusChip = new QLabel(QStringLiteral("空闲"), central);
+    m_statusChip->setFont(DesignTokens::appFont(11, QFont::Medium));
+    m_statusChip->setAlignment(Qt::AlignVCenter);
+    headerLayout->addWidget(m_statusChip);
+
+    m_themeBtn = new QPushButton(central);
     m_themeBtn->setFixedSize(36, 36);
-    m_themeBtn->setToolTip(
-        ThemeManager::instance()->isDark()
-            ? QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe4\xba\xae\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f")
-            : QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"));
+    m_themeBtn->setCursor(Qt::PointingHandCursor);
     connect(m_themeBtn, &QPushButton::clicked, this, []() {
         ThemeManager::instance()->toggle();
     });
     headerLayout->addWidget(m_themeBtn);
 
+    m_moreBtn = new QPushButton(central);
+    m_moreBtn->setFixedSize(36, 36);
+    m_moreBtn->setCursor(Qt::PointingHandCursor);
+    m_moreBtn->setToolTip(QStringLiteral("更多"));
+    connect(m_moreBtn, &QPushButton::clicked, this, &MainWindow::onMoreMenu);
+    headerLayout->addWidget(m_moreBtn);
+
     m_settingsBtn = new QPushButton(central);
     m_settingsBtn->setFixedSize(36, 36);
-    m_settingsBtn->setIcon(SettingsIcons::icon(SettingsIcons::Gear, 18));
-    m_settingsBtn->setIconSize(QSize(18, 18));
-    m_settingsBtn->setToolTip(QString::fromUtf8("设置"));
+    m_settingsBtn->setCursor(Qt::PointingHandCursor);
+    m_settingsBtn->setToolTip(QStringLiteral("设置"));
     connect(m_settingsBtn, &QPushButton::clicked, this, &MainWindow::onSettings);
     headerLayout->addWidget(m_settingsBtn);
 
-    m_exportBtn = new QPushButton(QString::fromUtf8("\xe5\xaf\xbc\xe5\x87\xba\xe8\xae\xb0\xe5\xbd\x95"), central);
-    m_exportBtn->setMinimumHeight(36);
-    connect(m_exportBtn, &QPushButton::clicked, this, &MainWindow::onExport);
-    headerLayout->addWidget(m_exportBtn);
-
-    m_cloudSyncBtn = new QPushButton(QString::fromUtf8("\xe4\xba\x91\xe7\xab\xaf\xe5\x90\x8c\xe6\xad\xa5"), central);
-    m_cloudSyncBtn->setMinimumHeight(36);
-    m_cloudSyncBtn->setToolTip(QString::fromUtf8("\xe7\xab\x8b\xe5\x8d\xb3\xe6\x8e\xa8\xe9\x80\x81\xe4\xbb\x8a\xe6\x97\xa5\xe6\x97\xb6\xe9\x95\xbf\xe5\xb9\xb6\xe5\x90\x8c\xe6\xad\xa5\xe4\xba\x91\xe7\xab\xaf\xe7\x9b\xae\xe6\xa0\x87"));
-    connect(m_cloudSyncBtn, &QPushButton::clicked, this, &MainWindow::cloudSyncRequested);
-    headerLayout->addWidget(m_cloudSyncBtn);
-
-    m_refreshBtn = new QPushButton(QString::fromUtf8("\xe5\x88\xb7\xe6\x96\xb0"), central);
-    m_refreshBtn->setMinimumHeight(36);
-    connect(m_refreshBtn, &QPushButton::clicked, this, &MainWindow::refreshData);
-    headerLayout->addWidget(m_refreshBtn);
-
     layout->addLayout(headerLayout);
 
-    auto *grid = new QGridLayout();
-    grid->setSpacing(12);
-    grid->setContentsMargins(0, 0, 0, 0);
-    grid->setColumnStretch(0, 1);
-    grid->setColumnStretch(1, 1);
+    m_grid = new QGridLayout();
+    m_grid->setSpacing(12);
+    m_grid->setContentsMargins(0, 0, 0, 0);
+    m_grid->setColumnStretch(0, 1);
+    m_grid->setColumnStretch(1, 1);
 
     m_heroCard = new HeroCard(central);
     m_trendCard = new TrendCard(central);
-    m_compareCard = new CompareCard(central);
     m_rankCard = new RankCard(central);
-
-    grid->addWidget(m_heroCard, 0, 0);
-    grid->addWidget(m_trendCard, 0, 1);
-    grid->addWidget(m_compareCard, 1, 0);
-    grid->addWidget(m_rankCard, 1, 1);
-    grid->setRowStretch(0, 5);
-    grid->setRowStretch(1, 5);
-
     m_aiCard = new AiReportCard(ai, central);
-    grid->addWidget(m_aiCard, 2, 0, 1, 2); // 第 3 行跨两列
-    grid->setRowStretch(2, 4);
 
-    layout->addLayout(grid, 1);
+    m_grid->addWidget(m_heroCard, 0, 0);
+    m_grid->addWidget(m_trendCard, 0, 1);
+    m_grid->addWidget(m_rankCard, 1, 0);
+    m_grid->addWidget(m_aiCard, 1, 1);
+    m_grid->setRowStretch(0, 1);
+    m_grid->setRowStretch(1, 1);
+
+    layout->addLayout(m_grid, 1);
 
     connect(m_aiCard, &AiReportCard::generateRequested, this, [this]() {
         emit aiReportRequested(AiPeriod::daily());
@@ -166,9 +154,9 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
             this, &MainWindow::weeklyReportGenerateRequested);
     connect(m_aiCard, &AiReportCard::weeklyReportRegenerateRequested,
             this, &MainWindow::weeklyReportRegenerateRequested);
-    // 设置保存后重读 AI 配置与缓存（与 settingsChanged 的 main 端接线配合）。
     connect(this, &MainWindow::settingsChanged, this, [this]() {
         m_aiCard->reloadState();
+        updateStatusChip();
     });
 
     connect(m_trendCard, &TrendCard::chartTypeChanged, this,
@@ -189,27 +177,28 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
 
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, [this](ThemeManager::Theme theme) {
-        const bool dark = (theme == ThemeManager::Dark);
-        m_themeBtn->setText(dark ? QString::fromUtf8("\xe2\x98\x80")
-                                 : QString::fromUtf8("\xf0\x9f\x8c\x99"));
-        m_themeBtn->setToolTip(
-            dark
-                ? QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe4\xba\xae\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f")
-                : QString::fromUtf8("\xe5\x88\x87\xe6\x8d\xa2\xe5\x88\xb0\xe6\x9a\x97\xe8\x89\xb2\xe6\xa8\xa1\xe5\xbc\x8f"));
-
         applyTheme();
-
-        if (isVisible()) {
-            applyDwmTitleBar(reinterpret_cast<HWND>(winId()), dark);
-        }
+        if (isVisible())
+            applyDwmTitleBar(reinterpret_cast<HWND>(winId()),
+                             theme == ThemeManager::Dark);
     });
 
     applyTheme();
-
-    // 读回柱状/折线视图偏好（此前只写不读，重启会回落到柱状）。
+    updateStatusChip();
     m_trendCard->setChartType(m_db->getSetting("chart_type", "bar"));
-
     refreshData();
+}
+
+QString MainWindow::dateText() const
+{
+    static const QString kWeek[] = {
+        QStringLiteral("周一"), QStringLiteral("周二"), QStringLiteral("周三"),
+        QStringLiteral("周四"), QStringLiteral("周五"), QStringLiteral("周六"),
+        QStringLiteral("周日")
+    };
+    const QDate d = QDate::currentDate();
+    return QStringLiteral("%1月%2日 · %3")
+        .arg(d.month()).arg(d.day()).arg(kWeek[d.dayOfWeek() - 1]);
 }
 
 void MainWindow::applyTheme()
@@ -239,29 +228,82 @@ void MainWindow::applyTheme()
              DesignTokens::kBorder().name(),
              DesignTokens::kAccent().name());
     m_themeBtn->setStyleSheet(iconStyle);
+    m_moreBtn->setStyleSheet(iconStyle);
     m_settingsBtn->setStyleSheet(iconStyle);
+
+    const bool dark = ThemeManager::instance()->isDark();
+    m_themeBtn->setIcon(SettingsIcons::icon(
+        dark ? SettingsIcons::Sun : SettingsIcons::Moon, 18, DesignTokens::kTextMute()));
+    m_themeBtn->setIconSize(QSize(18, 18));
+    m_themeBtn->setToolTip(dark ? QStringLiteral("切换到浅色模式")
+                                : QStringLiteral("切换到暗色模式"));
+    m_moreBtn->setIcon(SettingsIcons::icon(
+        SettingsIcons::More, 18, DesignTokens::kTextMute()));
+    m_moreBtn->setIconSize(QSize(18, 18));
     m_settingsBtn->setIcon(SettingsIcons::icon(
         SettingsIcons::Gear, 18, DesignTokens::kTextMute()));
+    m_settingsBtn->setIconSize(QSize(18, 18));
 
-    const QString secondaryStyle = QString(
-        "QPushButton { background: %1; color: %2; border: 1px solid %3;"
-        " border-radius: 6px; padding: 0 16px; font-size: 12px; }"
-        "QPushButton:hover { background: %4; }"
-        "QPushButton:focus { border-color: %5; }")
-        .arg(DesignTokens::kSurface().name(), DesignTokens::kText().name(),
-             DesignTokens::kBorder().name(), DesignTokens::kButtonHoverBg().name(),
-             DesignTokens::kAccent().name());
-    m_exportBtn->setStyleSheet(secondaryStyle);
+    updateStatusChip();
+}
 
-    const QString primaryStyle = QString(
-        "QPushButton { background: %1; color: white; border: 1px solid %1;"
-        " border-radius: 6px; padding: 0 18px; font-size: 12px; font-weight: 600; }"
-        "QPushButton:hover { background: %2; border-color: %2; }"
-        "QPushButton:pressed { background: %3; border-color: %3; }")
-        .arg(DesignTokens::kAccent().name(), DesignTokens::kAccentHover().name(),
-             DesignTokens::kAccentPressed().name());
-    m_refreshBtn->setStyleSheet(primaryStyle);
-    m_cloudSyncBtn->setStyleSheet(primaryStyle);
+void MainWindow::updateStatusChip()
+{
+    m_trackingPaused = (m_db->getSetting("tracking_enabled", "true") != "true");
+
+    QString text;
+    QColor fg = DesignTokens::kAccent();
+    QColor bg = DesignTokens::kAccentLight();
+    if (m_trackingPaused) {
+        text = QStringLiteral("已暂停");
+        fg = DesignTokens::kTextMute();
+        bg = DesignTokens::kButtonHoverBg();
+    } else if (m_activeApp.isEmpty()) {
+        text = QStringLiteral("空闲");
+        fg = DesignTokens::kTextMute();
+        bg = DesignTokens::kButtonHoverBg();
+    } else {
+        text = QStringLiteral("追踪中 · %1").arg(m_activeApp);
+    }
+
+    m_statusChip->setText(text);
+    m_statusChip->setStyleSheet(
+        QStringLiteral("QLabel { color: %1; background: %2; border-radius: 12px;"
+                       " padding: 4px 10px; }")
+            .arg(fg.name(), bg.name(QColor::HexArgb)));
+}
+
+void MainWindow::applyResponsiveLayout()
+{
+    const bool narrow = width() < DesignTokens::kNarrowBreakpoint;
+    if (narrow == m_narrowLayout && m_grid->count() == 4)
+        return;
+    m_narrowLayout = narrow;
+
+    m_grid->removeWidget(m_heroCard);
+    m_grid->removeWidget(m_trendCard);
+    m_grid->removeWidget(m_rankCard);
+    m_grid->removeWidget(m_aiCard);
+
+    if (narrow) {
+        m_grid->addWidget(m_heroCard, 0, 0, 1, 2);
+        m_grid->addWidget(m_trendCard, 1, 0, 1, 2);
+        m_grid->addWidget(m_rankCard, 2, 0, 1, 2);
+        m_grid->addWidget(m_aiCard, 3, 0, 1, 2);
+        m_grid->setRowStretch(0, 1);
+        m_grid->setRowStretch(1, 1);
+        m_grid->setRowStretch(2, 1);
+        m_grid->setRowStretch(3, 1);
+    } else {
+        m_grid->addWidget(m_heroCard, 0, 0);
+        m_grid->addWidget(m_trendCard, 0, 1);
+        m_grid->addWidget(m_rankCard, 1, 0);
+        m_grid->addWidget(m_aiCard, 1, 1);
+        m_grid->setRowStretch(0, 1);
+        m_grid->setRowStretch(1, 1);
+        m_grid->setRowStretch(2, 0);
+        m_grid->setRowStretch(3, 0);
+    }
 }
 
 void MainWindow::showEvent(QShowEvent *event)
@@ -271,13 +313,29 @@ void MainWindow::showEvent(QShowEvent *event)
                      ThemeManager::instance()->isDark());
 }
 
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+    applyResponsiveLayout();
+}
+
 void MainWindow::refreshData()
 {
     const int todayTotal = m_db->getTodayTotal();
     const int yesterdayTotal = m_db->getYesterdayTotal();
     const int dailyGoal = m_db->getSetting("daily_goal", "28800").toInt();
 
-    m_heroCard->setData(todayTotal, yesterdayTotal, dailyGoal);
+    std::array<int, 24> hours {};
+    const QDate today = QDate::currentDate();
+    const auto rows = m_db->getAllSessions(today.toString(Qt::ISODate),
+                                           today.toString(Qt::ISODate));
+    for (const auto &row : rows) {
+        const int secs = row.value(QStringLiteral("duration_seconds")).toInt();
+        const QDateTime start = QDateTime::fromString(
+            row.value(QStringLiteral("start_time")).toString(), Qt::ISODate);
+        SessionHours::addToDayHours(start, secs, today, hours.data());
+    }
+    m_heroCard->setData(todayTotal, yesterdayTotal, dailyGoal, hours);
 
     const QString format = m_db->getSetting("trend_display_format", "normal");
     m_trendCard->setDisplayFormat(format);
@@ -289,7 +347,15 @@ void MainWindow::refreshData()
     }
 
     m_rankCard->refresh(m_db->getAppRank());
-    m_compareCard->setData(todayTotal, yesterdayTotal);
+    m_dateLabel->setText(dateText());
+    updateStatusChip();
+}
+
+void MainWindow::onActiveWindowChanged(const QString &, const QString &,
+                                       const QString &appName)
+{
+    m_activeApp = appName;
+    updateStatusChip();
 }
 
 void MainWindow::onAiReportReady(const QString &, const QString &text)
@@ -307,23 +373,39 @@ void MainWindow::onWeeklyReportReady(const QString &path)
     m_aiCard->setWeeklyReportPath(path);
 }
 
+void MainWindow::onMoreMenu()
+{
+    QMenu menu(this);
+    UiUtils::applyMenuStyle(&menu);
+    QAction *exportAct = menu.addAction(QStringLiteral("导出记录"));
+    QAction *syncAct = menu.addAction(QStringLiteral("云端同步"));
+    QAction *refreshAct = menu.addAction(QStringLiteral("刷新"));
+    QAction *chosen = menu.exec(m_moreBtn->mapToGlobal(QPoint(0, m_moreBtn->height())));
+    if (chosen == exportAct)
+        onExport();
+    else if (chosen == syncAct)
+        emit cloudSyncRequested();
+    else if (chosen == refreshAct)
+        refreshData();
+}
+
 void MainWindow::onExport()
 {
     QStringList formats;
-    formats << QString::fromUtf8("CSV (.csv)")
-            << QString::fromUtf8("Excel (.xlsx)");
+    formats << QStringLiteral("CSV (.csv)")
+            << QStringLiteral("Excel (.xlsx)");
     bool ok = false;
     QString fmt = QInputDialog::getItem(this,
-        QString::fromUtf8("\xe5\xaf\xbc\xe5\x87\xba\xe6\xa0\xbc\xe5\xbc\x8f"),
-        QString::fromUtf8("\xe9\x80\x89\xe6\x8b\xa9\xe5\xaf\xbc\xe5\x87\xba\xe6\xa0\xbc\xe5\xbc\x8f:"),
+        QStringLiteral("导出格式"),
+        QStringLiteral("选择导出格式:"),
         formats, 0, false, &ok);
     if (!ok) return;
 
     QString filter = fmt.contains("CSV")
-        ? QString::fromUtf8("CSV \xe6\x96\x87\xe4\xbb\xb6 (*.csv)")
-        : QString::fromUtf8("Excel \xe6\x96\x87\xe4\xbb\xb6 (*.xlsx)");
+        ? QStringLiteral("CSV 文件 (*.csv)")
+        : QStringLiteral("Excel 文件 (*.xlsx)");
     QString path = QFileDialog::getSaveFileName(this,
-        QString::fromUtf8("\xe4\xbf\x9d\xe5\xad\x98\xe6\x96\x87\xe4\xbb\xb6"),
+        QStringLiteral("保存文件"),
         QString(), filter);
     if (path.isEmpty()) return;
 
@@ -335,16 +417,16 @@ void MainWindow::onExport()
 
         if (success) {
             QMessageBox::information(this,
-                QString::fromUtf8("\xe5\xaf\xbc\xe5\x87\xba\xe6\x88\x90\xe5\x8a\x9f"),
-                QString::fromUtf8("\xe8\xae\xb0\xe5\xbd\x95\xe5\xb7\xb2\xe5\xaf\xbc\xe5\x87\xba\xe5\x88\xb0:\n") + path);
+                QStringLiteral("导出成功"),
+                QStringLiteral("记录已导出到:\n") + path);
         } else {
             QMessageBox::critical(this,
-                QString::fromUtf8("\xe5\xaf\xbc\xe5\x87\xba\xe5\xa4\xb1\xe8\xb4\xa5"),
-                QString::fromUtf8("\xe6\x97\xa0\xe6\xb3\x95\xe5\x86\x99\xe5\x85\xa5\xe6\x96\x87\xe4\xbb\xb6"));
+                QStringLiteral("导出失败"),
+                QStringLiteral("无法写入文件"));
         }
     } catch (const std::exception &e) {
         QMessageBox::critical(this,
-            QString::fromUtf8("\xe5\xaf\xbc\xe5\x87\xba\xe5\xa4\xb1\xe8\xb4\xa5"),
+            QStringLiteral("导出失败"),
             e.what());
     }
 }

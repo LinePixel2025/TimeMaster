@@ -12,6 +12,7 @@
 #include "ai/ai_client.h"
 #include "database/database_manager.h"
 #include "report/daily_report_manager.h"
+#include "report/session_hours.h"
 
 // 插入一条今日的会话，使今日数据非空。seconds 默认 3600（1 小时）。
 static void seedTodaySession(DatabaseManager &db, int seconds = 3600)
@@ -123,6 +124,20 @@ void test_same_day_overwrites()
     std::cout << "test_same_day_overwrites PASS" << std::endl;
 }
 
+// 跨小时会话必须按占用分摊，不能整段落在起始小时。
+void test_session_hours_split_across_hour()
+{
+    int hours[24] = {};
+    int periods[4] = {};
+    const QDate today = QDate::currentDate();
+    const QDateTime start(today, QTime(10, 30));
+    SessionHours::addToDayHours(start, 3600, today, hours, periods);
+    assert(hours[10] == 1800);
+    assert(hours[11] == 1800);
+    assert(periods[1] == 3600);
+    std::cout << "test_session_hours_split_across_hour PASS" << std::endl;
+}
+
 // AI 分析回填：applyReportText 后页面应包含注入的文本（Markdown 转换后）。
 void test_apply_report_text()
 {
@@ -162,6 +177,7 @@ int main(int argc, char *argv[])
     test_generates_html();
     test_empty_day_still_generates();
     test_same_day_overwrites();
+    test_session_hours_split_across_hour();
     test_apply_report_text();
     std::cout << "All daily report tests passed!" << std::endl;
     return 0;

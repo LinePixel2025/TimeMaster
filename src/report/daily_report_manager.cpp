@@ -1,6 +1,7 @@
 #include "report/daily_report_manager.h"
 #include "ai/ai_client.h"
 #include "database/database_manager.h"
+#include "report/session_hours.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -100,19 +101,9 @@ DayStats DailyReportManager::collectDayStats(const QDate &date) const
             entry.display = appName;
         }
 
-        // 时段切分：跨小时的会话按实际占用分摊；跨午夜溢出的部分不计入当日。
-        qint64 remaining = secs;
-        QDateTime cursor = start;
-        while (remaining > 0) {
-            const int intoHour = cursor.time().msecsSinceStartOfDay() % 3600000 / 1000;
-            const qint64 chunk = qMin<qint64>(remaining, 3600 - intoHour);
-            if (cursor.date() == date) {
-                stats.hourTotals[cursor.time().hour()] += int(chunk);
-                stats.periodSeconds[cursor.time().hour() / 6] += int(chunk);
-            }
-            remaining -= chunk;
-            cursor = cursor.addSecs(int(chunk));
-        }
+        // 时段切分：跨小时按实际占用分摊；跨午夜溢出不计入当日。
+        SessionHours::addToDayHours(start, secs, date,
+                                    stats.hourTotals, stats.periodSeconds);
     }
 
     for (int h = 0; h < 24; ++h)

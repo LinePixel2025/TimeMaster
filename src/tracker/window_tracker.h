@@ -23,6 +23,7 @@ public:
     void reloadSettings();
 
 signals:
+    /// 前台应用变化。appName 为空表示空闲、忽略或追踪已关闭。
     void activeWindowChanged(const QString &processName, const QString &windowTitle,
                              const QString &appName);
 protected:

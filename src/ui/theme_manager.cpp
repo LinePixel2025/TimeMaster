@@ -1,5 +1,6 @@
 #include "ui/theme_manager.h"
 #include "database/database_manager.h"
+#include "ui/design_tokens.h"
 
 #include <QApplication>
 #include <QPalette>
@@ -44,7 +45,8 @@ void ThemeManager::loadFromDb(DatabaseManager *db)
 {
     m_db = db;
     QString saved = db->getSetting("theme", "light");
-    setTheme(saved == "dark" ? Dark : Light);
+    m_theme = (saved == "dark") ? Dark : Light;
+    applyToApplication();
 }
 
 void ThemeManager::saveToDb(Theme theme)
@@ -56,33 +58,24 @@ void ThemeManager::saveToDb(Theme theme)
 
 void ThemeManager::applyToApplication()
 {
+    // 必须先写入 m_theme 再取 token：DesignTokens 通过 isDark() 读当前主题。
+    const QColor bg = DesignTokens::kBg();
+    const QColor surface = DesignTokens::kSurface();
+    const QColor text = DesignTokens::kTextStrong();
+    const QColor accent = DesignTokens::kAccent();
+    const QColor hover = DesignTokens::kButtonHoverBg();
+
     QPalette pal = qApp->palette();
-
-    if (m_theme == Dark) {
-        pal.setColor(QPalette::Window, QColor("#1E1E2E"));
-        pal.setColor(QPalette::Base, QColor("#2D2D3F"));
-        pal.setColor(QPalette::AlternateBase, QColor("#252538"));
-        pal.setColor(QPalette::Text, QColor("#F1F5F9"));
-        pal.setColor(QPalette::WindowText, QColor("#F1F5F9"));
-        pal.setColor(QPalette::Button, QColor("#2D2D3F"));
-        pal.setColor(QPalette::ButtonText, QColor("#F1F5F9"));
-        pal.setColor(QPalette::Highlight, QColor("#818CF8"));
-        pal.setColor(QPalette::HighlightedText, QColor("#1E1E2E"));
-        pal.setColor(QPalette::ToolTipBase, QColor("#2D2D3F"));
-        pal.setColor(QPalette::ToolTipText, QColor("#F1F5F9"));
-    } else {
-        pal.setColor(QPalette::Window, QColor("#F0F2F5"));
-        pal.setColor(QPalette::Base, QColor("#FFFFFF"));
-        pal.setColor(QPalette::AlternateBase, QColor("#F8F9FB"));
-        pal.setColor(QPalette::Text, QColor("#1F2937"));
-        pal.setColor(QPalette::WindowText, QColor("#1F2937"));
-        pal.setColor(QPalette::Button, QColor("#FFFFFF"));
-        pal.setColor(QPalette::ButtonText, QColor("#1F2937"));
-        pal.setColor(QPalette::Highlight, QColor("#6366F1"));
-        pal.setColor(QPalette::HighlightedText, QColor("#FFFFFF"));
-        pal.setColor(QPalette::ToolTipBase, QColor("#FFFFFF"));
-        pal.setColor(QPalette::ToolTipText, QColor("#1F2937"));
-    }
-
+    pal.setColor(QPalette::Window, bg);
+    pal.setColor(QPalette::Base, surface);
+    pal.setColor(QPalette::AlternateBase, hover);
+    pal.setColor(QPalette::Text, text);
+    pal.setColor(QPalette::WindowText, text);
+    pal.setColor(QPalette::Button, surface);
+    pal.setColor(QPalette::ButtonText, text);
+    pal.setColor(QPalette::Highlight, accent);
+    pal.setColor(QPalette::HighlightedText, m_theme == Dark ? bg : QColor("#FFFFFF"));
+    pal.setColor(QPalette::ToolTipBase, surface);
+    pal.setColor(QPalette::ToolTipText, DesignTokens::kText());
     qApp->setPalette(pal);
 }

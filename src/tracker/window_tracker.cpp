@@ -174,10 +174,15 @@ void WindowTracker::run()
         sample.appName = info.appName;
 
         const QString oldProcessKey = engine.currentProcessKey();
+        const TrackingEngine::State oldState = engine.state();
         engine.process(sample, config);
-        if (engine.state() == TrackingEngine::State::Active &&
-            oldProcessKey != engine.currentProcessKey()) {
-            emit activeWindowChanged(info.processName, info.windowTitle, info.appName);
+        const TrackingEngine::State newState = engine.state();
+        if (newState == TrackingEngine::State::Active) {
+            if (oldProcessKey != engine.currentProcessKey() ||
+                oldState != TrackingEngine::State::Active)
+                emit activeWindowChanged(info.processName, info.windowTitle, info.appName);
+        } else if (oldState == TrackingEngine::State::Active) {
+            emit activeWindowChanged(QString(), QString(), QString());
         }
 
         QMutexLocker lock(&m_settingsMutex);

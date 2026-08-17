@@ -12,7 +12,6 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QInputDialog>
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QShortcut>
@@ -28,6 +27,7 @@
 #include <QUrl>
 #include <QApplication>
 #include <QTimer>
+#include <QDialogButtonBox>
 
 namespace {
 
@@ -122,10 +122,10 @@ QString settingsStyle()
         "QSpinBox::up-arrow:disabled, QSpinBox::down-arrow:disabled { border-bottom-color: %8; }"
         "QSpinBox::down-arrow:disabled { border-top-color: %8; }"
 
-        "QCheckBox { color: %4; spacing: 9px; padding: 5px 0; }"
+        "QCheckBox { color: %4; spacing: 12px; padding: 8px 0; }"
         "QCheckBox:disabled { color: %8; }"
-        "QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; }"
-        "QCheckBox::indicator:unchecked { background: %2; border: 1px solid %3; }"
+        "QCheckBox::indicator { width: 36px; height: 20px; border-radius: 10px; }"
+        "QCheckBox::indicator:unchecked { background: %13; border: 1px solid %3; }"
         "QCheckBox::indicator:unchecked:hover { border-color: %6; }"
         "QCheckBox::indicator:checked { background: %6; border: 1px solid %6; }"
         "QCheckBox::indicator:checked:hover { background: %10; border-color: %10; }"
@@ -957,11 +957,23 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         pageLayout->addSpacing(20);
 
         auto *descLabel = new QLabel(
-            QString::fromUtf8("Windows 桌面时间追踪工具"), this);
+            QString::fromUtf8("Windows 桌面时间追踪工具。记录前台应用时长，"
+                              "生成今日报告与上周周报，并可同步云端目标。"), this);
         descLabel->setObjectName(QStringLiteral("aboutDesc"));
         descLabel->setFont(DesignTokens::appFont(12));
         descLabel->setAlignment(Qt::AlignCenter);
+        descLabel->setWordWrap(true);
         pageLayout->addWidget(descLabel);
+        pageLayout->addSpacing(16);
+
+        auto *dataLabel = new QLabel(
+            QString::fromUtf8("数据目录\n%1").arg(m_db->databasePath()), this);
+        dataLabel->setObjectName(QStringLiteral("aboutDesc"));
+        dataLabel->setFont(DesignTokens::appFont(11));
+        dataLabel->setAlignment(Qt::AlignCenter);
+        dataLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        dataLabel->setWordWrap(true);
+        pageLayout->addWidget(dataLabel);
 
         pageLayout->addStretch(1);
         m_stack->addWidget(pageLayout->parentWidget());
@@ -1323,21 +1335,53 @@ void SettingsDialog::onRemoveIgnored()
     refreshKnownAppsList();
 }
 
+bool SettingsDialog::promptAlias(const QString &title, QString *processName,
+                                 QString *displayName, bool processReadOnly)
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(title);
+    dlg.setMinimumWidth(360);
+    dlg.setStyleSheet(settingsStyle());
+    auto *layout = new QVBoxLayout(&dlg);
+    layout->setContentsMargins(20, 18, 20, 16);
+    layout->setSpacing(12);
+
+    auto *processEdit = new QLineEdit(*processName, &dlg);
+    processEdit->setPlaceholderText(QStringLiteral("例如 code.exe"));
+    processEdit->setReadOnly(processReadOnly);
+    auto *displayEdit = new QLineEdit(*displayName, &dlg);
+    displayEdit->setPlaceholderText(QStringLiteral("显示名"));
+
+    auto *processLabel = new QLabel(QStringLiteral("进程名"), &dlg);
+    auto *displayLabel = new QLabel(QStringLiteral("显示名"), &dlg);
+    layout->addWidget(processLabel);
+    layout->addWidget(processEdit);
+    layout->addWidget(displayLabel);
+    layout->addWidget(displayEdit);
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("确定"));
+    buttons->button(QDialogButtonBox::Ok)->setObjectName(QStringLiteral("accentBtn"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
+    buttons->button(QDialogButtonBox::Cancel)->setObjectName(QStringLiteral("secondaryBtn"));
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return false;
+    *processName = processEdit->text().trimmed();
+    *displayName = displayEdit->text().trimmed();
+    return !processName->isEmpty() && !displayName->isEmpty();
+}
+
 void SettingsDialog::onAddAlias()
 {
-    bool ok = false;
-    QString processName = QInputDialog::getText(this,
-        QString::fromUtf8("添加别名"),
-        QString::fromUtf8("进程名 (e.g. code.exe):"),
-        QLineEdit::Normal, QString(), &ok);
-    if (!ok || processName.isEmpty()) return;
-
-    QString displayName = QInputDialog::getText(this,
-        QString::fromUtf8("添加别名"),
-        QString::fromUtf8("显示名:"),
-        QLineEdit::Normal, QString(), &ok);
-    if (!ok || displayName.isEmpty()) return;
-
+    QString processName;
+    QString displayName;
+    if (!promptAlias(QStringLiteral("添加别名"), &processName, &displayName, false))
+        return;
     m_db->setAppAlias(ProcessIdentity::normalizeKey(processName), displayName);
     refreshAliasTable();
 }
@@ -1351,17 +1395,11 @@ void SettingsDialog::onEditAlias()
             QString::fromUtf8("请先选择要编辑的别名"));
         return;
     }
-    const QString processName = m_aliasTable->item(row, 0)->text();
-    const QString currentDisplay = m_aliasTable->item(row, 1)->text();
-
-    bool ok = false;
-    QString newDisplay = QInputDialog::getText(this,
-        QString::fromUtf8("编辑别名"),
-        QString::fromUtf8("显示名:"),
-        QLineEdit::Normal, currentDisplay, &ok);
-    if (!ok || newDisplay.isEmpty()) return;
-
-    m_db->setAppAlias(processName, newDisplay);
+    QString processName = m_aliasTable->item(row, 0)->text();
+    QString displayName = m_aliasTable->item(row, 1)->text();
+    if (!promptAlias(QStringLiteral("编辑别名"), &processName, &displayName, true))
+        return;
+    m_db->setAppAlias(processName, displayName);
     refreshAliasTable();
 }
 

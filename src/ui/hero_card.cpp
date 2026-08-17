@@ -5,191 +5,248 @@
 
 #include <QLabel>
 #include <QPainter>
+#include <QPainterPath>
+#include <QTime>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
+#include <QtMath>
 
-/// Self-contained goal progress ring that fills its widget area.
-class GoalRing : public QWidget
+#include <algorithm>
+#include <cmath>
+
+/// 24 小时日晷：宽卡画上弧，窄卡降级为横向时段条。当前小时用刻度针标出。
+class SundialArea : public QWidget
 {
 public:
-    explicit GoalRing(QWidget *parent = nullptr)
+    explicit SundialArea(QWidget *parent = nullptr)
         : QWidget(parent)
     {
-        setMinimumSize(96, 96);
+        setMinimumHeight(72);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         connect(ThemeManager::instance(), &ThemeManager::themeChanged,
                 this, [this](ThemeManager::Theme) { update(); });
     }
 
-    void setProgress(int pct)
+    void setHours(const std::array<int, 24> &hours)
     {
-        m_pct = qBound(0, pct, 100);
-        update();
-    }
-
-    void setProgressColor(const QColor &color)
-    {
-        if (m_progressColor != color) {
-            m_progressColor = color;
-            update();
+        m_hours = hours;
+        m_maxHour = 1;
+        m_empty = true;
+        for (int v : m_hours) {
+            m_maxHour = std::max(m_maxHour, v);
+            if (v > 0)
+                m_empty = false;
         }
-    }
-
-    void resetProgressColor()
-    {
-        setProgressColor(DesignTokens::kAccent());
+        update();
     }
 
 protected:
     void paintEvent(QPaintEvent *) override
     {
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
-        painter.setRenderHint(QPainter::TextAntialiasing);
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setRenderHint(QPainter::TextAntialiasing);
 
-        const qreal side = qMin(width(), height());
-        const qreal lineWidth = qMax<qreal>(6.0, side * 0.09);
-        const qreal inset = lineWidth / 2.0 + 2.0;
-        const QRectF ringRect((width() - side) / 2.0 + inset,
-                              (height() - side) / 2.0 + inset,
-                              side - inset * 2.0,
-                              side - inset * 2.0);
-        const qreal radius = ringRect.width() / 2.0;
-
-        QPen bgPen(DesignTokens::kProgressBg(), lineWidth);
-        bgPen.setCapStyle(Qt::RoundCap);
-        painter.setPen(bgPen);
-        painter.setBrush(Qt::NoBrush);
-        painter.drawEllipse(ringRect.center(), radius, radius);
-
-        if (m_pct > 0) {
-            QPen fgPen(m_progressColor, lineWidth);
-            fgPen.setCapStyle(Qt::RoundCap);
-            painter.setPen(fgPen);
-            painter.drawArc(ringRect, 90 * 16, -qRound(m_pct * 3.6 * 16));
+        if (m_empty) {
+            p.setFont(DesignTokens::appFont(13));
+            p.setPen(DesignTokens::kTextFaint());
+            p.drawText(rect(), Qt::AlignCenter, QStringLiteral("今日暂无记录"));
+            return;
         }
 
-        painter.setFont(DesignTokens::appFont(qMax(13, qRound(side * 0.16)), QFont::Bold));
-        painter.setPen(DesignTokens::kTextStrong());
-        painter.drawText(ringRect, Qt::AlignCenter, QString("%1%").arg(m_pct));
+        if (width() < 280)
+            paintBar(p);
+        else
+            paintArc(p);
     }
 
 private:
-    int m_pct = 0;
-    QColor m_progressColor = DesignTokens::kAccent();
+    void paintArc(QPainter &p)
+    {
+        const qreal w = width();
+        const qreal h = height();
+        const qreal margin = 10.0;
+        const qreal labelH = 16.0;
+        const qreal availableH = h - labelH - 4.0;
+        const qreal radius = qMin(w * 0.46, availableH * 1.05);
+        const QPointF center(w / 2.0, margin + radius);
+        const QRectF arcRect(center.x() - radius, center.y() - radius,
+                             radius * 2.0, radius * 2.0);
+        const qreal trackW = qBound(8.0, radius * 0.16, 16.0);
+
+        QPen track(DesignTokens::kProgressBg(), trackW);
+        track.setCapStyle(Qt::FlatCap);
+        p.setPen(track);
+        p.setBrush(Qt::NoBrush);
+        p.drawArc(arcRect, 0, 180 * 16);
+
+        const int nowHour = QTime::currentTime().hour();
+        for (int hour = 0; hour < 24; ++hour) {
+            const qreal startA = 180.0 - hour * (180.0 / 24.0);
+            const qreal span = 180.0 / 24.0 - 0.8;
+            const qreal t = qreal(m_hours[hour]) / qreal(m_maxHour);
+            if (t <= 0.0)
+                continue;
+            QColor c = DesignTokens::kAccent();
+            c.setAlphaF(0.28 + 0.72 * t);
+            QPen seg(c, trackW);
+            seg.setCapStyle(Qt::FlatCap);
+            p.setPen(seg);
+            p.drawArc(arcRect, qRound(startA * 16), -qRound(span * 16));
+        }
+
+        // 当前时刻刻度针。
+        const qreal nowA = 180.0 - (nowHour + QTime::currentTime().minute() / 60.0)
+                           * (180.0 / 24.0);
+        const qreal rad = qDegreesToRadians(nowA);
+        const QPointF inner(center.x() + std::cos(rad) * (radius - trackW),
+                            center.y() - std::sin(rad) * (radius - trackW));
+        const QPointF outer(center.x() + std::cos(rad) * (radius + 6.0),
+                            center.y() - std::sin(rad) * (radius + 6.0));
+        p.setPen(QPen(DesignTokens::kTextStrong(), 1.6, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(inner, outer);
+        p.setBrush(DesignTokens::kAccent());
+        p.setPen(Qt::NoPen);
+        p.drawEllipse(outer, 3.2, 3.2);
+
+        p.setFont(DesignTokens::appFont(11));
+        p.setPen(DesignTokens::kTextFaint());
+        p.drawText(QRectF(center.x() - radius - 2, h - labelH, 28, labelH),
+                   Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("0"));
+        p.drawText(QRectF(center.x() - 14, margin - 2, 28, labelH),
+                   Qt::AlignCenter, QStringLiteral("12"));
+        p.drawText(QRectF(center.x() + radius - 26, h - labelH, 28, labelH),
+                   Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("24"));
+    }
+
+    void paintBar(QPainter &p)
+    {
+        const qreal w = width();
+        const qreal h = height();
+        const qreal top = 8.0;
+        const qreal barH = qMax(18.0, h - 28.0);
+        const qreal gap = 2.0;
+        const qreal cellW = (w - 23.0 * gap) / 24.0;
+        const int nowHour = QTime::currentTime().hour();
+
+        for (int hour = 0; hour < 24; ++hour) {
+            const qreal x = hour * (cellW + gap);
+            const qreal t = qreal(m_hours[hour]) / qreal(m_maxHour);
+            QColor c = DesignTokens::kProgressBg();
+            if (t > 0.0) {
+                c = DesignTokens::kAccent();
+                c.setAlphaF(0.28 + 0.72 * t);
+            }
+            p.setPen(Qt::NoPen);
+            p.setBrush(c);
+            p.drawRoundedRect(QRectF(x, top, cellW, barH), 2.0, 2.0);
+            if (hour == nowHour) {
+                p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(DesignTokens::kTextStrong(), 1.2));
+                p.drawRoundedRect(QRectF(x, top, cellW, barH), 2.0, 2.0);
+            }
+        }
+
+        p.setFont(DesignTokens::appFont(11));
+        p.setPen(DesignTokens::kTextFaint());
+        p.drawText(QRectF(0, h - 16, 24, 16), Qt::AlignLeft | Qt::AlignVCenter,
+                   QStringLiteral("0"));
+        p.drawText(QRectF(w / 2.0 - 12, h - 16, 24, 16), Qt::AlignCenter,
+                   QStringLiteral("12"));
+        p.drawText(QRectF(w - 24, h - 16, 24, 16), Qt::AlignRight | Qt::AlignVCenter,
+                   QStringLiteral("24"));
+    }
+
+    std::array<int, 24> m_hours {};
+    int m_maxHour = 1;
+    bool m_empty = true;
 };
 
 HeroCard::HeroCard(QWidget *parent)
-    : CardFrame(QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf"), parent)
+    : CardFrame(QStringLiteral("今日总时长"), parent)
 {
     contentLayout()->setContentsMargins(24, 14, 24, 16);
-    contentLayout()->setSpacing(10);
+    contentLayout()->setSpacing(8);
 
-    auto *contentRow = new QHBoxLayout();
-    contentRow->setContentsMargins(0, 0, 0, 0);
-    contentRow->setSpacing(16);
-
-    auto *leftCol = new QVBoxLayout();
-    leftCol->setContentsMargins(0, 0, 0, 0);
-    leftCol->setSpacing(6);
-
-    m_timeLabel = new QLabel("0m", this);
-    m_timeLabel->setFont(DesignTokens::appFont(34, QFont::Bold));
-    m_timeLabel->setStyleSheet(
-        QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextStrong().name()));
-    leftCol->addWidget(m_timeLabel);
+    m_timeLabel = new QLabel(QStringLiteral("0m"), this);
+    m_timeLabel->setFont(DesignTokens::monoFont(40, QFont::Bold));
+    contentLayout()->addWidget(m_timeLabel);
 
     m_subLabel = new QLabel(this);
     m_subLabel->setFont(DesignTokens::appFont(13));
-    m_subLabel->setStyleSheet(
-        QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kTextMute().name()));
-    leftCol->addWidget(m_subLabel);
+    m_subLabel->setWordWrap(true);
+    contentLayout()->addWidget(m_subLabel);
 
-    m_goalLabel = new QLabel(this);
-    m_goalLabel->setFont(DesignTokens::appFont(13, QFont::Medium));
-    m_goalLabel->setStyleSheet(
-        QString("color: %1; background: transparent;")
-            .arg(DesignTokens::kAccent().name()));
-    leftCol->addWidget(m_goalLabel);
-    leftCol->addStretch();
+    m_sundial = new SundialArea(this);
+    contentLayout()->addWidget(m_sundial, 1);
 
-    m_ring = new GoalRing(this);
-    m_ring->setFixedSize(96, 96);
-
-    contentRow->addLayout(leftCol, 1);
-    contentRow->addWidget(m_ring, 0, Qt::AlignVCenter);
-    contentLayout()->addLayout(contentRow, 1);
-
+    applyLabelColors();
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, [this](ThemeManager::Theme) {
-        m_timeLabel->setStyleSheet(
-            QString("color: %1; background: transparent;")
-                .arg(DesignTokens::kTextStrong().name()));
-        m_subLabel->setStyleSheet(
-            QString("color: %1; background: transparent;")
-                .arg(DesignTokens::kTextMute().name()));
-        m_goalLabel->setStyleSheet(
-            QString("color: %1; background: transparent;")
-                .arg(DesignTokens::kAccent().name()));
+        applyLabelColors();
+        updateDisplay();
     });
 }
 
-void HeroCard::setData(int todaySeconds, int yesterdaySeconds, int goalSeconds)
+void HeroCard::setData(int todaySeconds, int yesterdaySeconds, int goalSeconds,
+                       const std::array<int, 24> &hourTotals)
 {
     m_today = todaySeconds;
     m_yesterday = yesterdaySeconds;
     m_goal = goalSeconds;
+    m_sundial->setHours(hourTotals);
     updateDisplay();
+}
+
+void HeroCard::applyLabelColors()
+{
+    m_timeLabel->setStyleSheet(
+        QStringLiteral("color: %1; background: transparent;")
+            .arg(DesignTokens::kTextStrong().name()));
 }
 
 void HeroCard::updateDisplay()
 {
     m_timeLabel->setText(UiUtils::formatDuration(m_today));
 
-    QString sub = QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x80\xbb\xe6\x97\xb6\xe9\x95\xbf");
+    QStringList parts;
     if (m_yesterday > 0) {
-        const int delta = UiUtils::percentChange(m_today, m_yesterday);
-        if (delta > 0)
-            sub += QString::fromUtf8("  \xe2\x86\x91 %1%").arg(delta);
-        else if (delta < 0)
-            sub += QString::fromUtf8("  \xe2\x86\x93 %1%").arg(-delta);
+        const int delta = m_today - m_yesterday;
+        const int pct = UiUtils::percentChange(m_today, m_yesterday);
+        if (delta < 0)
+            parts << QStringLiteral("比昨日少 %1 · %2%")
+                         .arg(UiUtils::formatDuration(-delta)).arg(qAbs(pct));
+        else if (delta > 0)
+            parts << QStringLiteral("比昨日多 %1 · %2%")
+                         .arg(UiUtils::formatDuration(delta)).arg(pct);
         else
-            sub += QString::fromUtf8("  \xe2\x80\x94 0%");
+            parts << QStringLiteral("与昨日持平");
+    } else {
+        parts << QStringLiteral("昨日暂无数据");
     }
-    m_subLabel->setText(sub);
 
     if (m_goal > 0) {
         const int pct = qMin(100, m_today * 100 / m_goal);
-        m_ring->setProgress(pct);
         if (m_today >= m_goal) {
-            // 达到或超出目标：环变色提示（达成绿 / 超出红）。
-            m_ring->setProgressColor(DesignTokens::kSuccess());
-            m_goalLabel->setStyleSheet(
-                QString("color: %1; background: transparent;")
-                    .arg(DesignTokens::kError().name()));
             const int overMinutes = (m_today - m_goal) / 60;
-            m_goalLabel->setText(overMinutes > 0
-                ? QString::fromUtf8("\xe7\x9b\xae\xe6\xa0\x87 %1h \xc2\xb7 \xe5\xb7\xb2\xe8\xb6\x85 %2 \xe5\x88\x86\xe9\x92\x9f")
-                    .arg(qMax(0, m_goal) / 3600).arg(overMinutes)
-                : QString::fromUtf8("\xe7\x9b\xae\xe6\xa0\x87 %1h \xc2\xb7 \xe5\xb7\xb2\xe8\xbe\xbe\xe6\x88\x90")
-                    .arg(qMax(0, m_goal) / 3600));
+            parts << (overMinutes > 0
+                          ? QStringLiteral("已超目标 %1 分钟").arg(overMinutes)
+                          : QStringLiteral("已达目标"));
+            m_subLabel->setStyleSheet(
+                QStringLiteral("color: %1; background: transparent;")
+                    .arg(DesignTokens::kAmber().name()));
         } else {
-            m_ring->resetProgressColor();
-            m_goalLabel->setStyleSheet(
-                QString("color: %1; background: transparent;")
-                    .arg(DesignTokens::kAccent().name()));
-            m_goalLabel->setText(
-                QString::fromUtf8("\xe7\x9b\xae\xe6\xa0\x87 %1h \xc2\xb7 %2%")
-                    .arg(qMax(0, m_goal) / 3600)
-                    .arg(pct));
+            parts << QStringLiteral("距目标 %1 · %2%")
+                         .arg(UiUtils::formatDuration(m_goal - m_today))
+                         .arg(pct);
+            m_subLabel->setStyleSheet(
+                QStringLiteral("color: %1; background: transparent;")
+                    .arg(DesignTokens::kTextMute().name()));
         }
     } else {
-        m_ring->setProgress(0);
-        m_ring->resetProgressColor();
-        m_goalLabel->setStyleSheet(
-            QString("color: %1; background: transparent;")
-                .arg(DesignTokens::kAccent().name()));
-        m_goalLabel->clear();
+        m_subLabel->setStyleSheet(
+            QStringLiteral("color: %1; background: transparent;")
+                .arg(DesignTokens::kTextMute().name()));
     }
+
+    m_subLabel->setText(parts.join(QStringLiteral("  ·  ")));
 }

@@ -15,12 +15,13 @@ namespace {
 class RankItem : public QWidget
 {
 public:
-    RankItem(int rank, const QString &appName, int totalSeconds,
+    RankItem(int rank, const QString &appName, int totalSeconds, int maxSeconds,
              const QIcon &icon, QWidget *parent)
         : QWidget(parent), m_rank(rank), m_appName(appName),
-          m_totalSeconds(totalSeconds), m_icon(icon)
+          m_totalSeconds(totalSeconds), m_maxSeconds(qMax(1, maxSeconds)),
+          m_icon(icon)
     {
-        setFixedHeight(40);
+        setFixedHeight(44);
     }
 
 protected:
@@ -60,21 +61,32 @@ protected:
                                           iconSize, iconSize).toRect());
         }
 
-        // Name.
+        // Name + share bar + time.
         const qreal nameX = iconX + (m_icon.isNull() ? 0 : iconSize + 8);
-        const qreal timeW = 64;
-        const qreal nameW = qMax<qreal>(40, w - nameX - timeW - 24);
+        const qreal timeW = 72;
+        const qreal nameW = qMax<qreal>(40, w - nameX - timeW - 16);
         painter.setFont(DesignTokens::appFont(13));
         painter.setPen(DesignTokens::kText());
         const QString displayName = QFontMetrics(DesignTokens::appFont(13))
             .elidedText(m_appName, Qt::ElideRight, qRound(nameW));
-        painter.drawText(QRectF(nameX, 0, nameW, h),
+        painter.drawText(QRectF(nameX, 2, nameW, 20),
                          Qt::AlignLeft | Qt::AlignVCenter, displayName);
 
-        // Time.
-        painter.setFont(DesignTokens::appFont(13, QFont::Medium));
+        const qreal barY = 26;
+        const qreal barH = 5;
+        const qreal ratio = qreal(m_totalSeconds) / qreal(m_maxSeconds);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(DesignTokens::kProgressBg());
+        painter.drawRoundedRect(QRectF(nameX, barY, nameW, barH), 2.5, 2.5);
+        if (ratio > 0.0) {
+            painter.setBrush(DesignTokens::kAccent());
+            painter.drawRoundedRect(
+                QRectF(nameX, barY, qMax<qreal>(4.0, nameW * ratio), barH), 2.5, 2.5);
+        }
+
+        painter.setFont(DesignTokens::monoFont(12, QFont::Medium));
         painter.setPen(DesignTokens::kTextStrong());
-        painter.drawText(QRectF(w - timeW - 16, 0, timeW, h),
+        painter.drawText(QRectF(w - timeW - 12, 0, timeW, h),
                          Qt::AlignRight | Qt::AlignVCenter,
                          UiUtils::formatDuration(m_totalSeconds));
     }
@@ -83,6 +95,7 @@ private:
     int m_rank;
     QString m_appName;
     int m_totalSeconds;
+    int m_maxSeconds;
     QIcon m_icon;
 };
 
@@ -149,6 +162,8 @@ void RankCard::refresh(const QVector<QVariantMap> &rankData)
         return;
     }
 
+    const int maxSeconds = rankData.isEmpty()
+        ? 1 : rankData.first()[QStringLiteral("total_seconds")].toInt();
     for (int i = 0; i < rankData.size(); ++i) {
         const QString processName = rankData[i][QStringLiteral("process_name")].toString();
         const QIcon icon = AppIconProvider::instance()->icon(processName, 22);
@@ -156,6 +171,7 @@ void RankCard::refresh(const QVector<QVariantMap> &rankData)
             i + 1,
             rankData[i][QStringLiteral("app_name")].toString(),
             rankData[i][QStringLiteral("total_seconds")].toInt(),
+            maxSeconds,
             icon,
             m_listWidget);
         m_listLayout->insertWidget(i, item);

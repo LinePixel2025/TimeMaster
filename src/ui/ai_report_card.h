@@ -6,15 +6,11 @@
 
 class AiClient;
 class QLabel;
-class QPaintEvent;
-class QEnterEvent;
 class SummaryCard;
 
-/// 主页 AI 使用报告卡片：整个组件即为一张 Apple 风格圆角渐变卡
-///（自绘渐变底 + 顶部光晕 + 圆角边框，无内外嵌套卡片），内含标题、
-/// 状态提示与 SummaryCard（日期 + 8 字总结大字 + 操作按钮）。
-/// 「↗」在浏览器打开今日报告网页（与周报一致），「⟳」生成/刷新 AI 分析，
-/// 「▤」弹出上周周报菜单；AI 未配置时统计网页仍然完整可用。
+/// 主页 AI 使用报告卡片：与其它仪表盘卡片共用 CardFrame 材质。
+/// 「今日报告」在浏览器打开统计网页，「生成分析」刷新 AI，
+/// 「上周周报」弹出打开/生成菜单。
 class AiReportCard : public CardFrame
 {
     Q_OBJECT
@@ -35,9 +31,9 @@ public slots:
     void showError(const QString &error);
 
 signals:
-    /// 用户点击「生成报告」（⟳ 刷新按钮）。
+    /// 用户点击「生成分析」。
     void generateRequested();
-    /// 用户点击「↗」：请求在浏览器打开今日报告网页。
+    /// 用户点击「今日报告」：请求在浏览器打开今日报告网页。
     void dailyReportOpenRequested();
     /// 用户点击「上周周报」，携带 HTML 绝对路径（不存在时不发出）。
     void weeklyReportOpenRequested(const QString &path);
@@ -46,18 +42,14 @@ signals:
     /// 用户点击「重新生成」，请求强制重新生成上周周报。
     void weeklyReportRegenerateRequested();
 
-protected:
-    void paintEvent(QPaintEvent *event) override;
-    void enterEvent(QEnterEvent *event) override;
-    void leaveEvent(QEvent *event) override;
-
 private:
     void showWeeklyMenu();
     void refreshContent();
     void updateSummaryCard();
+    void applyThemeColors();
     /// 提取「【总结】」/「总结：」后的 8 字短语；超长按字符截断。
     QString summaryPhrase() const;
-    /// 短语统一截断：超过 12 字截为前 12 字 + 省略号（大字卡片宽度恒可容纳）。
+    /// 短语统一截断：超过 12 字截为前 12 字 + 省略号。
     QString capPhrase(const QString &phrase) const;
     /// 当前周期（今日）的展示文本，如「8月12日 · 星期三」。
     QString todayText() const;
@@ -65,12 +57,11 @@ private:
     QString overviewFirstSentence() const;
 
     AiClient *m_ai = nullptr;
-    QString m_reportText; // 当前展示的原始 Markdown 报告
-    QString m_error;      // 最近一次生成失败的错误描述
+    QString m_reportText;
+    QString m_error;
     bool m_loading = false;
 
-    QLabel *m_hintLabel = nullptr;   // 报告状态提示（渐变卡内白字）
-    SummaryCard *m_summaryCard = nullptr; // 渐变卡内容区（透明容器）
-    int m_glossAlpha = 70;           // 顶部光晕透明度（hover 增亮）
-    QString m_weeklyReportPath; // 最近生成的周报 HTML 绝对路径
+    QLabel *m_hintLabel = nullptr;
+    SummaryCard *m_summaryCard = nullptr;
+    QString m_weeklyReportPath;
 };

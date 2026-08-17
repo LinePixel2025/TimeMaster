@@ -6,11 +6,11 @@
 class DatabaseManager;
 class QPushButton;
 class QLabel;
+class QGridLayout;
 
 class HeroCard;
 class TrendCard;
 class RankCard;
-class CompareCard;
 class AiReportCard;
 class AiClient;
 
@@ -27,12 +27,15 @@ public slots:
     void onAiReportFailed(const QString &period, const QString &error);
     /// 每周周报生成成功后回填主页按钮（由 main 转发）。
     void onWeeklyReportReady(const QString &path);
+    /// 追踪线程报告前台应用变化；appName 为空表示空闲或已暂停。
+    void onActiveWindowChanged(const QString &processName, const QString &windowTitle,
+                               const QString &appName);
 
 signals:
     void settingsChanged();
-    /// 用户点击主界面「云端同步」按钮，请求立即执行云端同步。
+    /// 用户点击「云端同步」，请求立即执行云端同步。
     void cloudSyncRequested();
-    /// 用户在 AI 报告卡片点击「生成报告」，携带当前周期（daily/weekly）。
+    /// 用户在 AI 报告卡片点击「生成分析」，携带当前周期（daily/weekly）。
     void aiReportRequested(const QString &period);
     /// 用户在 AI 报告卡片点击「上周周报」，携带 HTML 绝对路径。
     void weeklyReportOpenRequested(const QString &path);
@@ -40,32 +43,39 @@ signals:
     void weeklyReportGenerateRequested();
     /// 用户在 AI 报告卡片点击「重新生成」，请求强制重新生成上周周报。
     void weeklyReportRegenerateRequested();
-    /// 用户在 AI 报告卡片点击「↗」，请求生成并在浏览器打开今日报告网页。
+    /// 用户在 AI 报告卡片点击「今日报告」，请求生成并在浏览器打开。
     void dailyReportOpenRequested();
 
 protected:
     void showEvent(QShowEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private slots:
     void onExport();
     void onSettings();
+    void onMoreMenu();
 
 private:
     void applyTheme();
+    void applyResponsiveLayout();
+    void updateStatusChip();
+    QString dateText() const;
 
     DatabaseManager *m_db = nullptr;
     QTimer *m_refreshTimer = nullptr;
     QPushButton *m_themeBtn = nullptr;
+    QPushButton *m_moreBtn = nullptr;
     QPushButton *m_settingsBtn = nullptr;
-    QPushButton *m_exportBtn = nullptr;
-    QPushButton *m_refreshBtn = nullptr;
-    QPushButton *m_cloudSyncBtn = nullptr;
     QLabel *m_titleLabel = nullptr;
     QLabel *m_dateLabel = nullptr;
+    QLabel *m_statusChip = nullptr;
+    QGridLayout *m_grid = nullptr;
+    bool m_narrowLayout = false;
+    bool m_trackingPaused = false;
+    QString m_activeApp;
     HeroCard *m_heroCard = nullptr;
     TrendCard *m_trendCard = nullptr;
     RankCard *m_rankCard = nullptr;
-    CompareCard *m_compareCard = nullptr;
     AiReportCard *m_aiCard = nullptr;
 };
