@@ -9,8 +9,6 @@
 namespace TrendChartLayout {
 
 inline constexpr int kWeekdayCount = 7;
-inline constexpr int kHeatmapMinReadableCellSide = 18;
-inline constexpr int kHeatmapMaxUsefulCellSide = 32;
 
 struct NormalSlot
 {
@@ -36,15 +34,21 @@ struct HeatCell
 struct HeatmapLayout
 {
     QVector<HeatCell> cells;
+    QRectF contentRect;
     QRectF monthInfoRect;
+    QRectF matrixRect;
     QRectF gridRect;
+    QRectF insightRect;
     QRectF legendRect;
     double cellWidth = 0;
     double cellHeight = 0;
+    double horizontalGap = 0;
+    double verticalGap = 0;
     double gap = 0;
     int columns = kWeekdayCount;
     int rows = 0;
     bool isMonth = false;
+    bool compactInsight = false;
 };
 
 NormalLayout makeNormalLayout(const QSizeF &size, const QDate &monday);
@@ -52,7 +56,6 @@ HeatmapLayout makeWeekHeatmapLayout(const QSizeF &size, const QDate &monday);
 HeatmapLayout makeMonthHeatmapLayout(const QSizeF &size, const QDate &month);
 
 int monthRowCount(const QDate &month);
-int preferredMonthHeatmapHeight(int chartWidth, const QDate &month);
 
 int normalSlotAt(const NormalLayout &layout, const QPointF &position);
 int heatCellAt(const HeatmapLayout &layout, const QPointF &position);

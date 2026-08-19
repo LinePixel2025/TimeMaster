@@ -125,10 +125,15 @@ RankCard::RankCard(QWidget *parent)
                 "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
                 "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }")
             .arg(DesignTokens::kTextFaint().name()));
-    m_scrollArea->viewport()->setStyleSheet("background: transparent;");
+    // 同主窗口：透明规则用 id 选择器，避免级联到 QToolTip。
+    m_scrollArea->viewport()->setObjectName(QStringLiteral("rankViewport"));
+    m_scrollArea->viewport()->setStyleSheet(
+        QStringLiteral("#rankViewport { background: transparent; }"));
 
     m_listWidget = new QWidget();
-    m_listWidget->setStyleSheet("background: transparent;");
+    m_listWidget->setObjectName(QStringLiteral("rankListWidget"));
+    m_listWidget->setStyleSheet(
+        QStringLiteral("#rankListWidget { background: transparent; }"));
     m_listLayout = new QVBoxLayout(m_listWidget);
     m_listLayout->setContentsMargins(0, 0, 3, 0);
     m_listLayout->setSpacing(DesignTokens::kRankRowSpacing);

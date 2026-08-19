@@ -81,12 +81,14 @@ void ThemeManager::applyToApplication()
     qApp->setPalette(pal);
 
     QString styleSheet = qApp->styleSheet();
+    // 连同块前换行一起移除，避免重复应用主题时垃圾累积导致 QToolTip 规则失效
+    //（规则失效时提示气泡会回退系统原生配色，深色系统下出现黑底暗字）。
     static const QRegularExpression tooltipRule(
-        QStringLiteral("/\\* TimeMasterTooltip begin \\*/.*?/\\* TimeMasterTooltip end \\*/"),
+        QStringLiteral("(?:\\n)?/\\* TimeMasterTooltip begin \\*/.*?/\\* TimeMasterTooltip end \\*/"),
         QRegularExpression::DotMatchesEverythingOption);
     styleSheet.remove(tooltipRule);
     styleSheet += QStringLiteral(
-        "\\n/* TimeMasterTooltip begin */"
+        "\n/* TimeMasterTooltip begin */"
         "QToolTip { background-color: %1; color: %2; border: 1px solid %3;"
         " padding: 6px 8px; font-size: 12px; }"
         "/* TimeMasterTooltip end */")

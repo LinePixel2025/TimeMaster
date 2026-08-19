@@ -47,6 +47,8 @@ signals:
     void weeklyReportRegenerateRequested();
     /// 用户在 AI 报告卡片点击「今日报告」，请求生成并在浏览器打开。
     void dailyReportOpenRequested();
+    /// 用户在 AI 报告卡片点击「昨日报告」，请求生成并在浏览器打开。
+    void yesterdayReportOpenRequested();
 
 protected:
     void showEvent(QShowEvent *event) override;

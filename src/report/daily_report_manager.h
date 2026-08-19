@@ -46,6 +46,10 @@ public:
     /// 写入失败返回空串。无数据日也生成空态页（查看操作不应失败）。
     QString refreshToday();
 
+    /// 生成/覆盖指定日期（如昨天）的报告 HTML；标题、对比与周节奏均按
+    /// 报告日计算，AI 区仅在该日有缓存时展示，否则历史日空态说明。
+    QString refreshDay(const QDate &date);
+
     /// 回填最新 AI 分析文本（锚点=今天）并重新生成页面。
     void applyReportText(const QString &text);
 
@@ -55,7 +59,7 @@ signals:
 
 private:
     DayStats collectDayStats(const QDate &date) const;
-    QString buildHtml(const DayStats &stats) const;
+    QString buildHtml(const DayStats &stats, const QDate &date) const;
     QString filePathFor(const QDate &date) const;
 
     DatabaseManager *m_db;

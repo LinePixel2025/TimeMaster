@@ -1,6 +1,6 @@
 # AGENTS.md - Time Master
 
-Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 5.6.0。
+Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 5.6.1。
 
 ## 语言与环境
 
@@ -44,16 +44,22 @@ ctest --test-dir build-tests --output-on-failure
 .\build-tests\tests\test_ai_client.exe
 .\build-tests\tests\test_reminder_scheduler.exe
 .\build-tests\tests\test_weekly_report.exe
+.\build-tests\tests\test_daily_report.exe
 .\build-tests\tests\test_window_tracker.exe
+.\build-tests\tests\test_trend_chart_layout.exe
+.\build-tests\tests\test_trend_card_geometry.exe
+.\build-tests\tests\test_dashboard_layout.exe
+.\build-tests\tests\test_period_distribution_layout.exe
+.\build-tests\tests\test_rank_layout.exe
 ```
 
-测试目标是独立可执行文件，使用裸 `assert()` 和 Qt Test 的 `QSignalSpy`，没有 GoogleTest/Catch2。测试的 `main()` 必须创建 `QCoreApplication`，否则 Qt SQL 插件可能在启动时崩溃。`test_window_tracker` 用 `FakeStore` 驱动 `TrackingEngine`，不访问真实数据库。涉及网络的 `test_lineweb_pusher` 会访问本机无效端口和测试地址，不要把它改成真实服务依赖；`test_cloud_sync` 在本地起 `QTcpServer`（`FakeHealthServer`）模拟健康 API，驱动 `LineWebPusher` 的推送/云端目标拉取，同样不依赖真实服务。`test_ai_client`、`test_reminder_scheduler`、`test_weekly_report` 只验证未配置/空数据的短路逻辑与无效端口的失败回退，不依赖真实 AI 服务。`test_weekly_report` 通过 `setOutputDir` 注入临时目录，不写用户文档目录。
+测试目标是独立可执行文件，使用裸 `assert()` 和 Qt Test 的 `QSignalSpy`，没有 GoogleTest/Catch2。测试的 `main()` 必须创建 `QCoreApplication`（GUI/Widget 相关的几何与布局测试需创建 `QApplication` 或 `QGuiApplication`），否则 Qt SQL 插件或 GUI 模块可能在启动时崩溃。`test_window_tracker` 用 `FakeStore` 驱动 `TrackingEngine`，不访问真实数据库。涉及网络的 `test_lineweb_pusher` 会访问本机无效端口和测试地址，不要把它改成真实服务依赖；`test_cloud_sync` 在本地起 `QTcpServer`（`FakeHealthServer`）模拟健康 API，驱动 `LineWebPusher` 的推送/云端目标拉取，同样不依赖真实服务。`test_ai_client`、`test_reminder_scheduler`、`test_weekly_report` 只验证未配置/空数据的短路逻辑与无效端口的失败回退，不依赖真实 AI 服务。`test_weekly_report` 和 `test_daily_report` 通过注入临时目录，不写用户文档目录。UI 布局与几何测试（`test_trend_chart_layout`、`test_trend_card_geometry`、`test_dashboard_layout`、`test_period_distribution_layout`、`test_rank_layout`）纯本地计算，不依赖系统事件。
 
 ## 发布与安装包
 
 - 主程序构建产物：`build\src\TimeMaster.exe`。
 - 当前仓库没有 `package_installer.ps1`；不要在文档或脚本中假设该文件存在。
-- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-5.6.0.exe`。
+- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-5.6.1.exe`。
 - 发布前手动准备 `dist\TimeMaster`：复制主程序，执行 `windeployqt --no-translations --no-compiler-runtime --release`，再放入 MinGW 的 `libgcc_s_seh-1.dll`、`libstdc++-6.dll` 和 `libwinpthread-1.dll`。
 - 安装目标默认为 `C:\Program Files\Time Master`；数据库保存在 `%LOCALAPPDATA%\TimeMaster\data.db`，不应写入安装目录。
 - 生成安装包需要 Inno Setup 6，默认编译器路径通常为 `C:\Users\22798\AppData\Local\Programs\Inno Setup 6\ISCC.exe`。
@@ -71,6 +77,7 @@ src/
   icon/                     AppIconProvider：通过 Windows Shell 提取并缓存应用图标
   ui/                       MainWindow、主题管理器、托盘管理器和仪表盘卡片
                             HeroCard、TrendCard、RankCard、AiReportCard、SettingsDialog
+                            CardFrame 容器与各种卡片纯布局辅助类（TrendChartLayout、DashboardLayout 等）
   ai/                       AiClient：OpenAI 兼容 Chat Completions 客户端，负责聚合统计、
                             构建中文 prompt、调用 AI 并缓存报告到 settings 表
   reminder/                 ReminderScheduler：按配置时间点定时触发托盘提醒，AI 短文案
@@ -88,7 +95,7 @@ src/
   utility/                  Windows 自启动注册表辅助逻辑；ProcessIdentity 进程键归一化
 third_party/miniz/          内置 miniz ZIP 实现，以 miniz_all.cpp 编译
 resources/                  应用图标和 Qt resources.qrc
-tests/                      test_database、test_exporter、test_lineweb_pusher、test_cloud_sync、test_ai_client、test_reminder_scheduler、test_weekly_report、test_daily_report、test_window_tracker
+tests/                      test_database、test_exporter、test_lineweb_pusher、test_cloud_sync、test_ai_client、test_reminder_scheduler、test_weekly_report、test_daily_report、test_window_tracker、test_trend_chart_layout、test_trend_card_geometry、test_dashboard_layout、test_period_distribution_layout、test_rank_layout
 docs/                       LineWeb 健康 API 文档（health-api.md）与 superpowers/ 下的设计规格
 .superpowers/sdd/           任务简报、审查差异和报告
 ```

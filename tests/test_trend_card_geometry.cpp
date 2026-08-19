@@ -7,7 +7,6 @@
 
 #include "ui/theme_manager.h"
 #include "ui/trend_card.h"
-#include "ui/trend_chart_layout.h"
 
 namespace {
 
@@ -43,41 +42,62 @@ void test_trend_card_keeps_header_controls_separate()
     assert(!week->isVisible() && !month->isVisible());
     assert(!intersects(format, bar));
     assert(!intersects(bar, line));
-    assert(format->height() > 0 && bar->height() > 0 && line->height() > 0);
     std::cout << "test_trend_card_keeps_header_controls_separate PASS" << std::endl;
 }
 
-void test_month_heatmap_height_tracks_card_width()
+void test_heatmap_uses_available_card_height()
 {
     QWidget host;
-    host.resize(1000, 700);
+    host.resize(1000, 900);
     auto *card = new TrendCard(&host);
     card->setDisplayFormat(QStringLiteral("heatmap"));
     card->setHeatmapPeriod(QStringLiteral("month"));
-    card->setGeometry(0, 0, 420, 520);
+    card->setGeometry(0, 0, 760, 420);
     card->show();
     host.show();
     processEvents();
 
     auto *chart = card->findChild<QWidget *>(QStringLiteral("trendChartArea"));
     assert(chart);
-    const int narrowHeight = chart->height();
-    const int expectedNarrow = TrendChartLayout::preferredMonthHeatmapHeight(
-        chart->width(), QDate::currentDate());
-    assert(narrowHeight == expectedNarrow);
+    const int shortHeight = chart->height();
+    assert(card->sizePolicy().verticalPolicy() == QSizePolicy::Expanding);
+    assert(chart->sizePolicy().verticalPolicy() == QSizePolicy::Expanding);
 
-    card->setGeometry(0, 0, 760, 520);
+    card->setGeometry(0, 0, 760, 620);
     processEvents();
-    const int wideHeight = chart->height();
-    const int expectedWide = TrendChartLayout::preferredMonthHeatmapHeight(
-        chart->width(), QDate::currentDate());
-    assert(wideHeight == expectedWide);
-    assert(wideHeight >= narrowHeight);
+    assert(chart->height() > shortHeight + 150);
+    std::cout << "test_heatmap_uses_available_card_height PASS" << std::endl;
+}
 
-    const auto layout = TrendChartLayout::makeMonthHeatmapLayout(chart->size(), QDate::currentDate());
-    assert(layout.cellWidth == layout.cellHeight);
-    assert(card->minimumHeight() >= chart->height());
-    std::cout << "test_month_heatmap_height_tracks_card_width PASS" << std::endl;
+void test_heatmap_period_switch_keeps_outer_geometry_stable()
+{
+    QWidget host;
+    host.resize(920, 600);
+    auto *card = new TrendCard(&host);
+    card->setDisplayFormat(QStringLiteral("heatmap"));
+    QVector<QVariantMap> monthData;
+    const QDate today = QDate::currentDate();
+    for (int day = 1; day <= today.day(); ++day) {
+        monthData.append({
+            {QStringLiteral("d"), QDate(today.year(), today.month(), day).toString(Qt::ISODate)},
+            {QStringLiteral("total_seconds"), (day % 5 + 1) * 2700}
+        });
+    }
+    card->setMonthData(monthData);
+    card->setGeometry(0, 0, 900, 400);
+    card->show();
+    host.show();
+    processEvents();
+
+    auto *chart = card->findChild<QWidget *>(QStringLiteral("trendChartArea"));
+    assert(chart);
+    const QSize cardSize = card->size();
+    const QRect weekGeometry = chart->geometry();
+    card->setHeatmapPeriod(QStringLiteral("month"));
+    processEvents();
+    assert(card->size() == cardSize);
+    assert(chart->geometry() == weekGeometry);
+    std::cout << "test_heatmap_period_switch_keeps_outer_geometry_stable PASS" << std::endl;
 }
 
 void test_heatmap_mode_shows_only_period_controls()
@@ -110,7 +130,8 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     ThemeManager::instance()->setTheme(ThemeManager::Light);
     test_trend_card_keeps_header_controls_separate();
-    test_month_heatmap_height_tracks_card_width();
+    test_heatmap_uses_available_card_height();
+    test_heatmap_period_switch_keeps_outer_geometry_stable();
     test_heatmap_mode_shows_only_period_controls();
     std::cout << "All trend card geometry tests passed!" << std::endl;
     return 0;

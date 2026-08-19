@@ -37,9 +37,22 @@ void DailyReportManager::setOutputDir(const QString &dir)
 
 QString DailyReportManager::refreshToday()
 {
-    const QDate today = QDate::currentDate();
-    const QString html = buildHtml(collectDayStats(today));
-    const QString path = filePathFor(today);
+    return refreshDay(QDate::currentDate());
+}
+
+QString DailyReportManager::refreshDay(const QDate &date)
+{
+    // 每次生成前重读 AI 缓存，页面始终采用缓存中的最新分析文本
+    //（数据库为权威来源；缓存为空时保留 applyReportText 的内存回填）。
+    const QString cached = m_ai->cachedReport(AiPeriod::daily());
+    if (!cached.trimmed().isEmpty()) {
+        m_aiText = cached;
+        m_aiAnchor = QDate::fromString(
+            m_ai->cachedReportDate(AiPeriod::daily()), Qt::ISODate);
+    }
+
+    const QString html = buildHtml(collectDayStats(date), date);
+    const QString path = filePathFor(date);
 
     if (!QDir().mkpath(m_outputDir)) {
         qWarning() << "[DailyReport] 无法创建输出目录:" << m_outputDir;
@@ -126,23 +139,35 @@ DayStats DailyReportManager::collectDayStats(const QDate &date) const
 
     stats.dailyGoal = m_db->getSetting("daily_goal", "28800").toInt();
 
-    // 本周节奏：本周一至 date 的每日时长（getWeekSummary 以真实当前周为准，
-    // 因此仅当 date 为今天时两者对齐；报告场景恒为今天）。
-    for (const auto &row : m_db->getWeekSummary()) {
+    // 本周节奏：报告日所在周周一至 date 的每日时长（按日聚合，无记录日补 0；
+    // getDailySummaries 支持任意日期范围，历史日报告也能画出所在周节奏）。
+    const QDate monday = date.addDays(-date.dayOfWeek() + 1);
+    QMap<QDate, int> dayTotals;
+    const auto weekRows = m_db->getDailySummaries(
+        monday.toString(Qt::ISODate), date.toString(Qt::ISODate));
+    for (const auto &row : weekRows) {
         const QDate d = QDate::fromString(row[QStringLiteral("d")].toString(),
                                           Qt::ISODate);
-        if (!d.isValid() || d > date)
-            continue;
-        stats.weekTotals.append(row[QStringLiteral("total_seconds")].toInt());
+        if (d.isValid())
+            dayTotals[d] += row[QStringLiteral("total_seconds")].toInt();
+    }
+    for (QDate d = monday; d <= date; d = d.addDays(1)) {
+        stats.weekTotals.append(dayTotals.value(d, 0));
         stats.weekLabels << dayOfWeekCn(d.dayOfWeek());
     }
 
     return stats;
 }
 
-QString DailyReportManager::buildHtml(const DayStats &stats) const
+QString DailyReportManager::buildHtml(const DayStats &stats, const QDate &date) const
 {
     const QDate today = QDate::currentDate();
+    const bool isToday = date == today;
+    const QString dayLabel = isToday
+        ? QStringLiteral("今日")
+        : (date == today.addDays(-1)
+               ? QStringLiteral("昨日")
+               : date.toString(QStringLiteral("M月d日")));
     const QString generatedAt =
         QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"));
 
@@ -150,23 +175,24 @@ QString DailyReportManager::buildHtml(const DayStats &stats) const
         "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n"
         "<meta charset=\"utf-8\">\n"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-        "<title>Time Master 今日使用报告</title>\n"
-        "<style>%1</style>\n</head>\n<body>\n"
+        "<title>Time Master %1使用报告</title>\n"
+        "<style>%2</style>\n</head>\n<body>\n"
         "<div class=\"blob blob-a\"></div><div class=\"blob blob-b\"></div>"
         "<div class=\"blob blob-c\"></div>\n"
-        "<main class=\"report\">\n").arg(ReportHtml::style());
+        "<main class=\"report\">\n").arg(dayLabel, ReportHtml::style());
 
     html += QStringLiteral(
         "<header class=\"glass hero\">\n"
         "<div class=\"hero-main\">\n"
         "<div class=\"brand\">Time Master</div>\n"
-        "<h1>今日使用报告</h1>\n"
-        "<p class=\"range\"><b>%1</b> · %2</p>\n"
+        "<h1>%1使用报告</h1>\n"
+        "<p class=\"range\"><b>%2</b> · %3</p>\n"
         "</div>\n"
-        "<div class=\"hero-chip\">生成于 %3</div>\n"
+        "<div class=\"hero-chip\">生成于 %4</div>\n"
         "</header>\n")
-        .arg(today.toString(QStringLiteral("yyyy年M月d日")),
-             dayOfWeekCn(today.dayOfWeek()), generatedAt);
+        .arg(dayLabel,
+             date.toString(QStringLiteral("yyyy年M月d日")),
+             dayOfWeekCn(date.dayOfWeek()), generatedAt);
 
     // 总览：今日总时长（对比昨日）、目标完成度、活跃小时、最长连续使用。
     QString changeValue = QStringLiteral("—");
@@ -192,7 +218,7 @@ QString DailyReportManager::buildHtml(const DayStats &stats) const
 
     html += QStringLiteral(
         "<section class=\"stat-grid\">\n"
-        "<div class=\"glass stat\"><div class=\"label\">今日总时长</div>"
+        "<div class=\"glass stat\"><div class=\"label\">%11总时长</div>"
         "<div class=\"value\">%1</div><div class=\"sub\">较昨日 <span class=\"%2\">%3</span>"
         " · 昨日 %4</div></div>\n"
         "<div class=\"glass stat\"><div class=\"label\">目标完成度</div>"
@@ -212,7 +238,8 @@ QString DailyReportManager::buildHtml(const DayStats &stats) const
         .arg(stats.longestSeconds > 0 ? formatDuration(stats.longestSeconds)
                                       : QStringLiteral("—"))
         .arg(stats.longestSeconds > 0 ? escapeHtml(stats.longestApp)
-                                      : QStringLiteral("暂无记录"));
+                                      : QStringLiteral("暂无记录"))
+        .arg(dayLabel);
 
     // 每小时使用折线：24 点，数值标签过密只靠 y 轴刻度与悬停提示。
     ReportHtml::LineChartOptions hourly;
@@ -233,11 +260,11 @@ QString DailyReportManager::buildHtml(const DayStats &stats) const
         ReportHtml::buildLineChart(hourly)
             + QStringLiteral("<p class=\"chart-note\">横轴为 0-23 时；悬停数据点可查看该小时时长。</p>"));
 
-    // 本周节奏：本周一至今日，今日高亮。
+    // 本周节奏：报告日所在周周一至报告日，报告日高亮。
     if (stats.weekTotals.size() >= 2) {
         ReportHtml::LineChartOptions week;
         ReportHtml::LineSeries weekSeries;
-        const QDate monday = today.addDays(-today.dayOfWeek() + 1);
+        const QDate monday = date.addDays(-date.dayOfWeek() + 1);
         for (int i = 0; i < stats.weekTotals.size(); ++i) {
             week.xLabels << stats.weekLabels.value(i);
             week.xSubLabels << monday.addDays(i).toString(QStringLiteral("M/d"));
@@ -248,12 +275,15 @@ QString DailyReportManager::buildHtml(const DayStats &stats) const
         }
         week.series.append(weekSeries);
         week.valueLabels = true;
-        week.highlightIndex = stats.weekTotals.size() - 1; // 今日
+        week.highlightIndex = stats.weekTotals.size() - 1; // 报告日
         week.ariaLabel = QStringLiteral("本周每日使用时长折线图");
         html += ReportHtml::wrapCard(
             QStringLiteral("本周节奏"),
             ReportHtml::buildLineChart(week)
-                + QStringLiteral("<p class=\"chart-note\">本周一至今日的每日使用时长，今日为高亮点。</p>"));
+                + (isToday
+                       ? QStringLiteral("<p class=\"chart-note\">本周一至今日的每日使用时长，今日为高亮点。</p>")
+                       : QStringLiteral("<p class=\"chart-note\">本周一至%1的每日使用时长，%1为高亮点。</p>")
+                             .arg(date.toString(QStringLiteral("M月d日")))));
     }
 
     html += ReportHtml::wrapCard(QStringLiteral("时段分布"),
@@ -275,18 +305,23 @@ QString DailyReportManager::buildHtml(const DayStats &stats) const
                                  ReportHtml::buildInsights(insights));
 
     // AI 分析区：缓存文本 + 锚点标注；无缓存时显示引导空态（统计板块仍然完整）。
+    // 缓存仅保留最新一次，因此历史日报告只在锚点恰好等于报告日时展示 AI 文本。
     QString aiBody;
-    if (!m_aiText.trimmed().isEmpty()) {
+    const bool hasAiText = !m_aiText.trimmed().isEmpty();
+    if (hasAiText && (isToday || m_aiAnchor == date)) {
         aiBody = ReportHtml::markdownToHtml(m_aiText);
         if (m_aiAnchor.isValid())
             aiBody += QStringLiteral("<p class=\"chart-note\">AI 分析生成于 %1%2</p>")
                           .arg(m_aiAnchor.toString(QStringLiteral("M月d日")),
                                m_aiAnchor == today ? QString()
                                                    : QStringLiteral("，点击应用卡片 ⟳ 更新"));
-    } else {
+    } else if (isToday) {
         aiBody = QStringLiteral(
             "<p class=\"chart-note\">今日 AI 分析尚未生成：点击应用卡片上的 ⟳ 生成；"
             "未配置 AI 时，本页统计板块仍然完整。</p>");
+    } else {
+        aiBody = QStringLiteral(
+            "<p class=\"chart-note\">AI 分析仅缓存最新一次，历史日报告以统计板块为准。</p>");
     }
     html += ReportHtml::wrapCard(QStringLiteral("AI 智能分析"),
                                  QStringLiteral("<div class=\"ai\">%1</div>").arg(aiBody));

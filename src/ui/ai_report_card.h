@@ -33,6 +33,8 @@ signals:
     void generateRequested();
     /// 用户点击「今日报告」：请求在浏览器打开今日报告网页。
     void dailyReportOpenRequested();
+    /// 用户点击「昨日报告」：请求在浏览器打开昨日报告网页。
+    void yesterdayReportOpenRequested();
     /// 用户点击「上周周报」，携带 HTML 绝对路径（不存在时不发出）。
     void weeklyReportOpenRequested(const QString &path);
     /// 用户点击「立即生成上周周报」。

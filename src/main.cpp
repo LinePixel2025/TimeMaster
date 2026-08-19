@@ -122,6 +122,7 @@ int main(int argc, char *argv[])
     // generateReport 返回 false 时（如该周期数据清零）立即回填失败，避免卡片
     // 停留在生成中状态。dailyManualPending 标记手动请求，AI 完成后自动打开日报。
     bool dailyManualPending = false;
+    bool dailyOpenPending = false; // 打开报告时检查到 AI 过期，自动更新完成后再打开
     QString dailyAiUsageText; // 本次手动生成的 token 消耗，随完成气泡展示后失效
     QObject::connect(&window, &MainWindow::aiReportRequested, &window,
                      [&](const QString &period) {
@@ -154,29 +155,56 @@ int main(int argc, char *argv[])
         if (period == AiPeriod::daily()) {
             dailyManualPending = false; // 失败不自动打开，卡片显示错误
             dailyAiUsageText.clear();
+            if (dailyOpenPending) {
+                // 打开前自动更新失败：回退为直接打开现有页面，点击不落空。
+                dailyOpenPending = false;
+                const QString path = daily.refreshToday();
+                if (!path.isEmpty())
+                    QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+            }
         }
     });
     QObject::connect(&daily, &DailyReportManager::dailyReportReady,
-                     [&tray, &dailyManualPending, &dailyAiUsageText](
-                         const QString &path) {
-        if (dailyManualPending) {
-            dailyManualPending = false;
-            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
-            // 接口未返回 usage 时 formatUsageText 为空串，气泡保持原文案。
-            QString msg = QString::fromUtf8(
-                "\xe5\xb7\xb2\xe5\x9c\xa8\xe6\xb5\x8f\xe8\xa7\x88\xe5\x99\xa8"
-                "\xe4\xb8\xad\xe6\x89\x93\xe5\xbc\x80\xe3\x80\x82");
-            msg += dailyAiUsageText;
-            dailyAiUsageText.clear();
-            tray.showNotification(
-                QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x8a\xa5\xe5\x91\x8a\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"),
-                msg);
-        }
+                     [&tray, &dailyManualPending, &dailyOpenPending,
+                      &dailyAiUsageText](const QString &path) {
+        if (!dailyManualPending && !dailyOpenPending)
+            return;
+        const bool manual = dailyManualPending;
+        dailyManualPending = false;
+        dailyOpenPending = false;
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        // 接口未返回 usage 时 formatUsageText 为空串，气泡保持原文案。
+        QString msg = QString::fromUtf8(
+            "\xe5\xb7\xb2\xe5\x9c\xa8\xe6\xb5\x8f\xe8\xa7\x88\xe5\x99\xa8"
+            "\xe4\xb8\xad\xe6\x89\x93\xe5\xbc\x80\xe3\x80\x82");
+        msg += dailyAiUsageText;
+        dailyAiUsageText.clear();
+        tray.showNotification(
+            manual ? QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x8a\xa5\xe5\x91\x8a\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90")
+                   : QString::fromUtf8("\xe4\xbb\x8a\xe6\x97\xa5\xe6\x8a\xa5\xe5\x91\x8a\xe5\xb7\xb2\xe6\x9b\xb4\xe6\x96\xb0"),
+            msg);
     });
     // 主页「↗」：现场生成最新统计的今日报告网页并在浏览器打开
     //（AI 未配置/无缓存时统计板块仍然完整）。
+    // 打开前检查 AI 分析是否为今日最新版：过期且 AI 已配置时自动重新生成，
+    // 完成后打开新页面；生成失败或当日无数据时回退为直接打开现有页面。
     QObject::connect(&window, &MainWindow::dailyReportOpenRequested, [&]() {
+        const bool stale =
+            ai.cachedReportDate(AiPeriod::daily())
+                != QDate::currentDate().toString(Qt::ISODate);
+        if (ai.isConfigured() && stale) {
+            dailyOpenPending = true;
+            if (ai.generateReport(AiPeriod::daily()))
+                return; // 等待 reportReady/reportFailed 后打开
+            dailyOpenPending = false;
+        }
         const QString path = daily.refreshToday();
+        if (!path.isEmpty())
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    });
+    // 主页「昨日报告」：现场生成昨天的报告网页并在浏览器打开。
+    QObject::connect(&window, &MainWindow::yesterdayReportOpenRequested, [&]() {
+        const QString path = daily.refreshDay(QDate::currentDate().addDays(-1));
         if (!path.isEmpty())
             QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     });

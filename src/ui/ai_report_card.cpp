@@ -81,6 +81,14 @@ public:
                 this, &SummaryCard::detailClicked);
         m_actionsLayout->addWidget(m_detailBtn);
 
+        m_yesterdayBtn = new QPushButton(QStringLiteral("昨日报告"), m_actionArea);
+        m_yesterdayBtn->setObjectName(QStringLiteral("aiYesterdayReportButton"));
+        m_yesterdayBtn->setCursor(Qt::PointingHandCursor);
+        m_yesterdayBtn->setMinimumHeight(DesignTokens::kActionButtonMinHeight);
+        connect(m_yesterdayBtn, &QPushButton::clicked,
+                this, &SummaryCard::yesterdayClicked);
+        m_actionsLayout->addWidget(m_yesterdayBtn);
+
         m_weeklyBtn = new QPushButton(QStringLiteral("周报 ▾"), m_actionArea);
         m_weeklyBtn->setObjectName(QStringLiteral("aiWeeklyReportButton"));
         m_weeklyBtn->setCursor(Qt::PointingHandCursor);
@@ -131,6 +139,7 @@ public:
             + UiUtils::focusBorderRule();
         m_generateBtn->setStyleSheet(primary);
         m_detailBtn->setStyleSheet(secondary);
+        m_yesterdayBtn->setStyleSheet(secondary);
         m_weeklyBtn->setStyleSheet(secondary);
     }
 
@@ -143,11 +152,12 @@ public:
 
     void setPhrase(const QString &phrase) { m_phraseLabel->setText(phrase); }
 
-    /// 生成是主操作；日报始终为次操作；周报以轻量菜单入口保留。
+    /// 生成是主操作；今日/昨日报告始终为次操作；周报以轻量菜单入口保留。
     void setButtonsVisible(bool generate, bool detail, bool weekly)
     {
         m_generateBtn->setVisible(generate);
         m_detailBtn->setVisible(detail);
+        m_yesterdayBtn->setVisible(detail);
         m_weeklyBtn->setVisible(weekly);
     }
 
@@ -161,6 +171,7 @@ public:
 
 signals:
     void detailClicked();
+    void yesterdayClicked();
     void refreshRequested();
     void weeklyClicked();
 
@@ -194,6 +205,7 @@ private:
     QPushButton *m_generateBtn = nullptr;
     QPushButton *m_weeklyBtn = nullptr;
     QPushButton *m_detailBtn = nullptr;
+    QPushButton *m_yesterdayBtn = nullptr;
 };
 
 AiReportCard::AiReportCard(AiClient *ai, QWidget *parent)
@@ -211,6 +223,8 @@ AiReportCard::AiReportCard(AiClient *ai, QWidget *parent)
     m_summaryCard = new SummaryCard(this);
     connect(m_summaryCard, &SummaryCard::detailClicked,
             this, &AiReportCard::dailyReportOpenRequested);
+    connect(m_summaryCard, &SummaryCard::yesterdayClicked,
+            this, &AiReportCard::yesterdayReportOpenRequested);
     connect(m_summaryCard, &SummaryCard::refreshRequested, this, [this]() {
         setLoading(true);
         emit generateRequested();

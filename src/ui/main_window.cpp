@@ -59,10 +59,8 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     setWindowTitle("Time Master");
     setMinimumSize(840, 640);
 
-    const QRect avail = QGuiApplication::primaryScreen()->availableGeometry();
-    const QSize defSize(qMin(1100, qRound(avail.width() * 0.80)),
-                        qMin(760, qRound(avail.height() * 0.82)));
-    resize(defSize);
+    // 默认以当前允许的最小尺寸启动（最紧凑的完整布局），用户可再手动放大。
+    resize(minimumSize());
 
     QColor bg = DesignTokens::kBg();
     QColor textStrong = DesignTokens::kTextStrong();
@@ -101,6 +99,7 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     headerLayout->addStretch();
 
     m_statusChip = new QLabel(QStringLiteral("空闲"), central);
+    m_statusChip->setObjectName(QStringLiteral("statusChip"));
     m_statusChip->setFont(DesignTokens::appFont(11, QFont::Medium));
     m_statusChip->setAlignment(Qt::AlignVCenter);
     m_statusChip->setMaximumWidth(DesignTokens::kStatusChipMaxWidth);
@@ -133,6 +132,9 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
 
     m_dashboardScroll = new QScrollArea(central);
     m_dashboardScroll->setObjectName(QStringLiteral("dashboardScroll"));
+    // viewport 透明规则必须用 id 选择器：无选择器规则会随 Qt 的
+    // _q_stylesheet_parent 级联到 QToolTip，把提示背景染成透明（黑）。
+    m_dashboardScroll->viewport()->setObjectName(QStringLiteral("dashboardViewport"));
     m_dashboardScroll->setWidgetResizable(true);
     m_dashboardScroll->setFrameShape(QFrame::NoFrame);
     m_dashboardScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -162,12 +164,14 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     m_rankCard->setObjectName(QStringLiteral("rankCard"));
     m_aiCard->setObjectName(QStringLiteral("aiReportCard"));
 
+    // 初始排布与 m_narrowLayout 的初始值（单列）保持一致；
+    // 宽窗口在首次 resizeEvent 时会切换为双列。
     m_grid->addWidget(m_heroCard, 0, 0, 1, 2);
-    m_grid->addWidget(m_trendCard, 1, 0);
-    m_grid->addWidget(m_rankCard, 1, 1);
-    m_grid->addWidget(m_aiCard, 2, 0, 1, 2);
-    m_grid->setColumnStretch(0, 3);
-    m_grid->setColumnStretch(1, 2);
+    m_grid->addWidget(m_trendCard, 1, 0, 1, 2);
+    m_grid->addWidget(m_rankCard, 2, 0, 1, 2);
+    m_grid->addWidget(m_aiCard, 3, 0, 1, 2);
+    m_grid->setColumnStretch(0, 1);
+    m_grid->setColumnStretch(1, 0);
 
     dashboardLayout->addLayout(m_grid, 0);
     dashboardLayout->addStretch(1);
@@ -179,6 +183,8 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     });
     connect(m_aiCard, &AiReportCard::dailyReportOpenRequested,
             this, &MainWindow::dailyReportOpenRequested);
+    connect(m_aiCard, &AiReportCard::yesterdayReportOpenRequested,
+            this, &MainWindow::yesterdayReportOpenRequested);
     connect(m_aiCard, &AiReportCard::weeklyReportOpenRequested,
             this, &MainWindow::weeklyReportOpenRequested);
     connect(m_aiCard, &AiReportCard::weeklyReportGenerateRequested,
@@ -252,7 +258,8 @@ void MainWindow::applyTheme()
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
         "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }")
         .arg(DesignTokens::kTextFaint().name(), DesignTokens::kTextMute().name()));
-    m_dashboardScroll->viewport()->setStyleSheet(QStringLiteral("background: transparent;"));
+    m_dashboardScroll->viewport()->setStyleSheet(
+        QStringLiteral("#dashboardViewport { background: transparent; }"));
 
     m_titleLabel->setStyleSheet(QString("color: %1; background: transparent;")
         .arg(DesignTokens::kTextStrong().name()));
@@ -324,9 +331,12 @@ void MainWindow::updateStatusChipText()
     if (!m_statusChip)
         return;
 
-    const int width = qMax(0, m_statusChip->contentsRect().width());
+    // 按固定最大宽度上限省略：若按当前 contentsRect 省略，芯片会因
+    // sizeHint 收缩陷入「越省越窄」的死循环，最终只剩「追…」。
+    const int available = DesignTokens::kStatusChipMaxWidth
+        - 2 * DesignTokens::kStatusChipPaddingH;
     const QString displayText = QFontMetrics(m_statusChip->font()).elidedText(
-        m_statusText, Qt::ElideRight, width);
+        m_statusText, Qt::ElideRight, available);
     m_statusChip->setText(displayText);
 }
 

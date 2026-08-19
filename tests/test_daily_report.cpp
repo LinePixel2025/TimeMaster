@@ -124,6 +124,59 @@ void test_same_day_overwrites()
     std::cout << "test_same_day_overwrites PASS" << std::endl;
 }
 
+// 插入一条昨天的会话。seconds 默认 3600（1 小时）。
+static void seedYesterdaySession(DatabaseManager &db, int seconds = 3600)
+{
+    const QDate yesterday = QDate::currentDate().addDays(-1);
+    const QDateTime start(yesterday, QTime(14, 0));
+    db.insertSession(QStringLiteral("notepad.exe"), QStringLiteral("test"),
+                     QStringLiteral("记事本"),
+                     start, start.addSecs(seconds), seconds);
+}
+
+// 昨日报告：标题、总时长与文件命名均按报告日计算，AI 区为历史日空态。
+void test_yesterday_report()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    seedTodaySession(db, 3600);
+    seedYesterdaySession(db, 2 * 3600);
+
+    QTemporaryDir outDir;
+    assert(outDir.isValid());
+
+    AiClient ai(&db);
+    DailyReportManager daily(&db, &ai);
+    daily.setOutputDir(outDir.path());
+
+    const QDate yesterday = QDate::currentDate().addDays(-1);
+    const QString reportPath = daily.refreshDay(yesterday);
+    assert(!reportPath.isEmpty());
+    assert(reportPath.endsWith(QStringLiteral("日报-")
+        + yesterday.toString(QStringLiteral("yyyy-MM-dd"))
+        + QStringLiteral(".html")));
+
+    QFile file(reportPath);
+    assert(file.open(QIODevice::ReadOnly));
+    const QByteArray content = file.readAll();
+    file.close();
+    assert(content.contains("昨日使用报告"));
+    assert(content.contains("昨日总时长"));
+    assert(content.contains("2小时")); // 昨日总时长数值
+    assert(!content.contains("今日使用报告"));
+    // 无昨日锚点的 AI 缓存 → 历史日空态说明。
+    assert(content.contains("历史日报告以统计板块为准"));
+
+    // 今日报告不受影响。
+    const QByteArray todayContent = generateAndRead(daily, outDir.path());
+    assert(todayContent.contains("今日使用报告"));
+    std::cout << "test_yesterday_report PASS" << std::endl;
+}
+
 // 跨小时会话必须按占用分摊，不能整段落在起始小时。
 void test_session_hours_split_across_hour()
 {
@@ -171,14 +224,52 @@ void test_apply_report_text()
     std::cout << "test_apply_report_text PASS" << std::endl;
 }
 
+// 每次生成重读缓存：数据库里的 AI 缓存被外部更新后，刷新页面应立即采用最新文本。
+void test_refresh_reads_latest_ai_cache()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    seedTodaySession(db);
+
+    QTemporaryDir outDir;
+    assert(outDir.isValid());
+
+    AiClient ai(&db);
+    DailyReportManager daily(&db, &ai);
+    daily.setOutputDir(outDir.path());
+
+    daily.refreshToday();
+
+    // 模拟 AI 在别处完成并写库（saveCache 的写入内容）。
+    db.setSetting(QStringLiteral("ai_report_daily_text"),
+                  QStringLiteral("## 概览\n最新的外部分析。"));
+    db.setSetting(QStringLiteral("ai_report_daily_date"),
+                  QDate::currentDate().toString(Qt::ISODate));
+
+    const QString reportPath = daily.refreshToday();
+    QFile file(reportPath);
+    assert(file.open(QIODevice::ReadOnly));
+    const QByteArray content = file.readAll();
+    file.close();
+    assert(content.contains("最新的外部分析"));
+    assert(content.contains("AI 分析生成于"));
+    std::cout << "test_refresh_reads_latest_ai_cache PASS" << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
     test_generates_html();
     test_empty_day_still_generates();
     test_same_day_overwrites();
+    test_yesterday_report();
     test_session_hours_split_across_hour();
     test_apply_report_text();
+    test_refresh_reads_latest_ai_cache();
     std::cout << "All daily report tests passed!" << std::endl;
     return 0;
 }

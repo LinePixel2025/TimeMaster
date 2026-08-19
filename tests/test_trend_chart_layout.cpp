@@ -16,15 +16,21 @@ bool nearlyEqual(double left, double right)
     return std::abs(left - right) < 0.001;
 }
 
-void assertSquareCellsInsideGrid(const TrendChartLayout::HeatmapLayout &layout)
+void assertCellsFillGrid(const TrendChartLayout::HeatmapLayout &layout)
 {
-    assert(nearlyEqual(layout.cellWidth, layout.cellHeight));
     for (const TrendChartLayout::HeatCell &cell : layout.cells) {
         assert(cell.rect.left() >= layout.gridRect.left() - 0.001);
         assert(cell.rect.top() >= layout.gridRect.top() - 0.001);
         assert(cell.rect.right() <= layout.gridRect.right() + 0.001);
         assert(cell.rect.bottom() <= layout.gridRect.bottom() + 0.001);
     }
+    // 网格铺满整个格子区域，不留下居中留白。
+    assert(nearlyEqual(layout.gridRect.width(), layout.columns * layout.cellWidth
+        + qMax(0, layout.columns - 1) * layout.horizontalGap));
+    assert(nearlyEqual(layout.gridRect.height(), layout.rows * layout.cellHeight
+        + qMax(0, layout.rows - 1) * layout.verticalGap));
+    assert(nearlyEqual(layout.cells.first().rect.left(), layout.gridRect.left()));
+    assert(nearlyEqual(layout.cells.first().rect.top(), layout.gridRect.top()));
 }
 
 void test_normal_slots_cover_the_chart()
@@ -47,61 +53,96 @@ void test_normal_slots_cover_the_chart()
 void test_week_heatmap_has_fixed_monday_to_sunday_columns()
 {
     const QDate monday(2026, 8, 17);
-    const auto layout = TrendChartLayout::makeWeekHeatmapLayout(QSizeF(700, 180), monday);
+    const auto layout = TrendChartLayout::makeWeekHeatmapLayout(QSizeF(900, 260), monday);
 
     assert(!layout.isMonth);
     assert(layout.columns == 7);
     assert(layout.rows == 1);
     assert(layout.cells.size() == 7);
     assert(layout.monthInfoRect.isEmpty());
-    assertSquareCellsInsideGrid(layout);
+    assertCellsFillGrid(layout);
     for (int index = 0; index < layout.cells.size(); ++index) {
-        assert(layout.cells[index].isCurrentMonth);
         assert(layout.cells[index].date == monday.addDays(index));
         assert(TrendChartLayout::heatCellAt(layout, layout.cells[index].rect.center()) == index);
     }
     std::cout << "test_week_heatmap_has_fixed_monday_to_sunday_columns PASS" << std::endl;
 }
 
-void test_month_heatmap_aligns_first_day_and_pads_last_week()
+void test_month_heatmap_uses_continuous_date_matrix()
 {
-    // 2026-08-01 是周六：月初应有周一至周五五个占位格。
-    const auto layout = TrendChartLayout::makeMonthHeatmapLayout(QSizeF(700, 260), QDate(2026, 8, 1));
+    const auto layout = TrendChartLayout::makeMonthHeatmapLayout(
+        QSizeF(900, 300), QDate(2026, 8, 1));
 
     assert(layout.isMonth);
-    assert(layout.columns == 7);
-    assert(layout.rows == 6);
-    assert(layout.cells.size() == 42);
+    assert(layout.columns == 8);
+    assert(layout.rows == 4);
+    assert(layout.cells.size() == 31);
     assert(!layout.monthInfoRect.isEmpty());
-    assert(layout.monthInfoRect.bottom() <= layout.gridRect.top());
-    assert(layout.gridRect.bottom() <= layout.legendRect.top());
-    assertSquareCellsInsideGrid(layout);
-    for (int index = 0; index < 5; ++index) {
-        assert(!layout.cells[index].isCurrentMonth);
-        assert(!layout.cells[index].date.isValid());
-        assert(TrendChartLayout::heatCellAt(layout, layout.cells[index].rect.center()) == -1);
+    assertCellsFillGrid(layout);
+    for (int index = 0; index < layout.cells.size(); ++index) {
+        assert(layout.cells[index].date == QDate(2026, 8, index + 1));
+        assert(TrendChartLayout::heatCellAt(layout, layout.cells[index].rect.center()) == index);
     }
-    assert(layout.cells[5].date == QDate(2026, 8, 1));
-    assert(nearlyEqual(layout.cells[5].rect.left(), layout.gridRect.left()
-        + 5 * (layout.cellWidth + layout.gap)));
-    assert(layout.cells[35].date == QDate(2026, 8, 31));
-    for (int index = 36; index < layout.cells.size(); ++index) {
-        assert(!layout.cells[index].isCurrentMonth);
-        assert(TrendChartLayout::heatCellAt(layout, layout.cells[index].rect.center()) == -1);
-    }
-    std::cout << "test_month_heatmap_aligns_first_day_and_pads_last_week PASS" << std::endl;
+    assert(nearlyEqual(layout.cells.first().rect.left(), layout.gridRect.left()));
+    assert(nearlyEqual(layout.cells[8].rect.top(), layout.gridRect.top()
+        + layout.cellHeight + layout.verticalGap));
+    std::cout << "test_month_heatmap_uses_continuous_date_matrix PASS" << std::endl;
 }
 
-void test_month_heatmap_uses_square_cells_for_five_and_six_rows()
+void test_month_heatmap_uses_four_rows()
 {
-    const auto sixRows = TrendChartLayout::makeMonthHeatmapLayout(QSizeF(420, 240), QDate(2026, 8, 1));
-    const auto fiveRows = TrendChartLayout::makeMonthHeatmapLayout(QSizeF(420, 240), QDate(2026, 6, 1));
-    assert(TrendChartLayout::monthRowCount(QDate(2026, 8, 1)) == 6);
-    assert(TrendChartLayout::monthRowCount(QDate(2026, 6, 1)) == 5);
-    assertSquareCellsInsideGrid(sixRows);
-    assertSquareCellsInsideGrid(fiveRows);
-    assert(fiveRows.cellWidth >= sixRows.cellWidth);
-    std::cout << "test_month_heatmap_uses_square_cells_for_five_and_six_rows PASS" << std::endl;
+    const auto thirtyOneDays = TrendChartLayout::makeMonthHeatmapLayout(
+        QSizeF(700, 260), QDate(2026, 8, 1));
+    const auto twentyEightDays = TrendChartLayout::makeMonthHeatmapLayout(
+        QSizeF(700, 260), QDate(2026, 2, 1));
+    assert(TrendChartLayout::monthRowCount(QDate(2026, 8, 1)) == 4);
+    assert(TrendChartLayout::monthRowCount(QDate(2026, 2, 1)) == 4);
+    assert(thirtyOneDays.columns == 8);
+    assert(twentyEightDays.columns == 7);
+    // 矩形格各自铺满宽高，不再强制正方形。
+    assert(thirtyOneDays.cellWidth > thirtyOneDays.cellHeight);
+    assertCellsFillGrid(thirtyOneDays);
+    assertCellsFillGrid(twentyEightDays);
+    std::cout << "test_month_heatmap_uses_four_rows PASS" << std::endl;
+}
+
+void test_wide_heatmap_fills_stage_with_insight_panel()
+{
+    const QSizeF size(900, 300);
+    const auto layout = TrendChartLayout::makeMonthHeatmapLayout(size, QDate(2026, 8, 1));
+
+    assert(!layout.compactInsight);
+    assert(nearlyEqual(layout.contentRect.left(), 12.0));
+    assert(nearlyEqual(layout.contentRect.right(), size.width() - 12.0));
+    assert(nearlyEqual(layout.contentRect.top(), 12.0));
+    assert(nearlyEqual(layout.contentRect.bottom(), size.height() - 12.0));
+    // 舞台内边距 12：矩阵与概览不贴舞台边。
+    assert(nearlyEqual(layout.matrixRect.left(), layout.contentRect.left() + 12.0));
+    assert(nearlyEqual(layout.matrixRect.top(), layout.contentRect.top() + 12.0));
+    assert(nearlyEqual(layout.insightRect.right(), layout.contentRect.right() - 12.0));
+    assert(layout.matrixRect.right() < layout.insightRect.left());
+    assert(nearlyEqual(layout.matrixRect.top(), layout.insightRect.top()));
+    assert(nearlyEqual(layout.matrixRect.bottom(), layout.insightRect.bottom()));
+    assert(layout.legendRect.left() >= layout.insightRect.left());
+    assert(layout.legendRect.right() <= layout.insightRect.right() + 0.001);
+    assertCellsFillGrid(layout);
+    std::cout << "test_wide_heatmap_fills_stage_with_insight_panel PASS" << std::endl;
+}
+
+void test_compact_heatmap_stacks_summary_above_matrix()
+{
+    const QSizeF size(520, 320);
+    const auto layout = TrendChartLayout::makeMonthHeatmapLayout(size, QDate(2026, 8, 1));
+
+    assert(layout.compactInsight);
+    assert(layout.insightRect.bottom() < layout.matrixRect.top());
+    assert(nearlyEqual(layout.insightRect.left(), layout.contentRect.left() + 12.0));
+    assert(nearlyEqual(layout.insightRect.right(), layout.contentRect.right() - 12.0));
+    assert(nearlyEqual(layout.matrixRect.left(), layout.contentRect.left() + 12.0));
+    assert(nearlyEqual(layout.matrixRect.right(), layout.contentRect.right() - 12.0));
+    assert(layout.legendRect.left() >= layout.insightRect.left());
+    assertCellsFillGrid(layout);
+    std::cout << "test_compact_heatmap_stacks_summary_above_matrix PASS" << std::endl;
 }
 
 void test_month_heatmap_stays_valid_in_small_areas()
@@ -110,24 +151,13 @@ void test_month_heatmap_stays_valid_in_small_areas()
         const auto layout = TrendChartLayout::makeMonthHeatmapLayout(size, QDate(2026, 8, 1));
         assert(layout.cellWidth >= 0.0);
         assert(layout.cellHeight >= 0.0);
-        assert(layout.gridRect.left() >= 0.0);
-        assert(layout.gridRect.top() >= 0.0);
-        assert(layout.legendRect.top() >= layout.gridRect.bottom() - 0.001);
-        assert(layout.legendRect.bottom() <= size.height() + 0.001);
-        assertSquareCellsInsideGrid(layout);
+        assert(layout.contentRect.left() >= 0.0);
+        assert(layout.contentRect.top() >= 0.0);
+        assert(layout.contentRect.right() <= size.width() + 0.001);
+        assert(layout.contentRect.bottom() <= size.height() + 0.001);
+        assertCellsFillGrid(layout);
     }
     std::cout << "test_month_heatmap_stays_valid_in_small_areas PASS" << std::endl;
-}
-
-void test_preferred_month_height_is_width_and_row_aware()
-{
-    const int fiveRows = TrendChartLayout::preferredMonthHeatmapHeight(420, QDate(2026, 6, 1));
-    const int sixRows = TrendChartLayout::preferredMonthHeatmapHeight(420, QDate(2026, 8, 1));
-    const int wider = TrendChartLayout::preferredMonthHeatmapHeight(700, QDate(2026, 8, 1));
-    assert(sixRows > fiveRows);
-    assert(wider >= sixRows);
-    assert(wider <= TrendChartLayout::preferredMonthHeatmapHeight(1600, QDate(2026, 8, 1)));
-    std::cout << "test_preferred_month_height_is_width_and_row_aware PASS" << std::endl;
 }
 
 void test_readable_badge_text_has_high_contrast()
@@ -147,10 +177,11 @@ int main(int argc, char *argv[])
     QCoreApplication app(argc, argv);
     test_normal_slots_cover_the_chart();
     test_week_heatmap_has_fixed_monday_to_sunday_columns();
-    test_month_heatmap_aligns_first_day_and_pads_last_week();
-    test_month_heatmap_uses_square_cells_for_five_and_six_rows();
+    test_month_heatmap_uses_continuous_date_matrix();
+    test_month_heatmap_uses_four_rows();
+    test_wide_heatmap_fills_stage_with_insight_panel();
+    test_compact_heatmap_stacks_summary_above_matrix();
     test_month_heatmap_stays_valid_in_small_areas();
-    test_preferred_month_height_is_width_and_row_aware();
     test_readable_badge_text_has_high_contrast();
     std::cout << "All trend chart layout tests passed!" << std::endl;
     return 0;

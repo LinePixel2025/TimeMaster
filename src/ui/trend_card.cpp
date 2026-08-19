@@ -48,7 +48,7 @@ struct HeatCellData
 };
 
 constexpr int kCompactChartHeight = 138;
-constexpr int kTrendCardChromeHeight = 82;
+constexpr int kHeatmapCardMinHeight = 300;
 
 } // namespace
 
@@ -59,8 +59,8 @@ public:
         : QWidget(parent)
     {
         setObjectName(QStringLiteral("trendChartArea"));
-        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        updatePreferredHeight();
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        setMinimumHeight(kCompactChartHeight);
         setMouseTracking(true);
         connect(ThemeManager::instance(), &ThemeManager::themeChanged,
                 this, [this](ThemeManager::Theme) { update(); });
@@ -113,43 +113,25 @@ public:
         m_format = format;
         if (m_format != QLatin1String("heatmap"))
             m_period = QStringLiteral("week");
-        updatePreferredHeight();
+        if (parentWidget()) {
+            parentWidget()->setMinimumHeight(m_format == QLatin1String("heatmap")
+                ? kHeatmapCardMinHeight : DesignTokens::kTrendMinHeightNormal);
+        }
         rebuildActive();
     }
 
     void setPeriod(const QString &period)
     {
         m_period = period;
-        updatePreferredHeight();
         rebuildActive();
-    }
-
-    bool hasHeightForWidth() const override
-    {
-        return m_format == QLatin1String("heatmap")
-            && m_period == QLatin1String("month");
-    }
-
-    int heightForWidth(int width) const override
-    {
-        if (!hasHeightForWidth())
-            return kCompactChartHeight;
-        return TrendChartLayout::preferredMonthHeatmapHeight(width, QDate::currentDate());
     }
 
     QSize sizeHint() const override
     {
-        return QSize(420, heightForWidth(width() > 0 ? width() : 420));
+        return QSize(420, m_format == QLatin1String("heatmap") ? 218 : kCompactChartHeight);
     }
 
 protected:
-    void resizeEvent(QResizeEvent *event) override
-    {
-        QWidget::resizeEvent(event);
-        if (hasHeightForWidth())
-            updatePreferredHeight();
-    }
-
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
@@ -194,23 +176,6 @@ protected:
     }
 
 private:
-    void updatePreferredHeight()
-    {
-        const bool monthHeatmap = hasHeightForWidth();
-        const int preferredHeight = monthHeatmap
-            ? heightForWidth(width() > 0 ? width() : 420)
-            : kCompactChartHeight;
-        setMinimumHeight(preferredHeight);
-        setMaximumHeight(preferredHeight);
-        if (parentWidget()) {
-            parentWidget()->setMinimumHeight(monthHeatmap
-                ? kTrendCardChromeHeight + preferredHeight
-                : DesignTokens::kTrendMinHeightNormal);
-            parentWidget()->updateGeometry();
-        }
-        updateGeometry();
-    }
-
     void rebuildActive()
     {
         m_data = (m_period == QLatin1String("month")) ? m_monthData : m_weekData;
@@ -422,61 +387,80 @@ private:
     {
         const TrendChartLayout::HeatmapLayout layout = heatmapLayout();
         const double cellSide = qMin(layout.cellWidth, layout.cellHeight);
-        const double radius = qBound(2.0, cellSide * 0.14, 6.0);
-        const double borderWidth = qBound(1.0, cellSide * 0.08, 2.0);
+        const double radius = qBound(2.0, cellSide * 0.14, 10.0);
+        const double borderWidth = qBound(1.0, cellSide * 0.055, 2.0);
         const QString todayKey = QDate::currentDate().toString(Qt::ISODate);
         bool hasRecordedDay = false;
 
+        QColor stage = DesignTokens::kAccentLight();
+        stage.setAlpha(DesignTokens::isDarkTheme() ? 52 : 72);
+        painter.setPen(QPen(DesignTokens::kBorder(), 1.0));
+        painter.setBrush(stage);
+        painter.drawRoundedRect(layout.contentRect, 10.0, 10.0);
+
         if (layout.isMonth) {
             const QDate today = QDate::currentDate();
-            painter.setFont(DesignTokens::appFont(11, QFont::Medium));
+            painter.setFont(DesignTokens::appFont(11, QFont::DemiBold));
             painter.setPen(DesignTokens::kTextStrong());
-            painter.drawText(layout.monthInfoRect, Qt::AlignLeft | Qt::AlignVCenter,
-                             QString::fromUtf8("%1年%2月").arg(today.year()).arg(today.month()));
+            painter.drawText(layout.monthInfoRect.adjusted(2.0, 0.0, -2.0, 0.0),
+                             Qt::AlignLeft | Qt::AlignVCenter,
+                             QString::fromUtf8("%1年%2月 · 每日使用节律")
+                                 .arg(today.year()).arg(today.month()));
         }
 
         for (const TrendChartLayout::HeatCell &geometry : layout.cells) {
-            if (!geometry.isCurrentMonth) {
-                QColor placeholder = DesignTokens::kPlaceholderBg();
-                placeholder.setAlpha(placeholder.alpha() / 2);
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(placeholder);
-                painter.drawRoundedRect(geometry.rect, radius, radius);
-                continue;
-            }
-
             const HeatCellData cell = heatCellData(geometry);
             const bool isToday = geometry.date.toString(Qt::ISODate) == todayKey;
             hasRecordedDay = hasRecordedDay || (!cell.future && cell.value > 0);
             QColor fill = DesignTokens::heatLevel(cell.level);
-            if (cell.future)
-                fill.setAlpha(44);
-            painter.setPen(Qt::NoPen);
+            QColor outline = Qt::transparent;
+            if (cell.future) {
+                fill = DesignTokens::kSurface();
+                fill.setAlpha(DesignTokens::isDarkTheme() ? 22 : 74);
+                outline = DesignTokens::kBorder();
+                outline.setAlpha(DesignTokens::isDarkTheme() ? 70 : 90);
+            }
+
+            painter.setPen(outline.alpha() > 0 ? QPen(outline, 1.0) : Qt::NoPen);
             painter.setBrush(fill);
             painter.drawRoundedRect(geometry.rect, radius, radius);
 
             if (isToday) {
                 painter.setBrush(Qt::NoBrush);
+                painter.setPen(QPen(DesignTokens::kSurface(), borderWidth + 2.0));
+                painter.drawRoundedRect(geometry.rect.adjusted(1.5, 1.5, -1.5, -1.5),
+                                        radius - 1.0, radius - 1.0);
                 painter.setPen(QPen(DesignTokens::kAccent(), borderWidth));
-                painter.drawRoundedRect(geometry.rect.adjusted(borderWidth / 2.0, borderWidth / 2.0,
-                                                                -borderWidth / 2.0, -borderWidth / 2.0),
-                                        radius, radius);
+                painter.drawRoundedRect(geometry.rect.adjusted(2.5, 2.5, -2.5, -2.5),
+                                        radius - 2.0, radius - 2.0);
             }
 
             const bool lightFill = fill.lightness() > 150 && !cell.future;
-            painter.setPen(cell.future ? DesignTokens::kTextPlaceholder()
+            painter.setPen(cell.future ? DesignTokens::kTextFaint()
                           : (lightFill ? DesignTokens::kTextStrong() : QColor("#FFFFFF")));
-            painter.setFont(DesignTokens::appFont(qBound(8, static_cast<int>(cellSide * 0.32), 11),
+            painter.setFont(DesignTokens::appFont(qBound(9, static_cast<int>(cellSide * 0.25), 12),
                 isToday ? QFont::Bold : QFont::Medium));
-            painter.drawText(geometry.rect.adjusted(5.0, 2.0, -3.0, -2.0),
+            painter.drawText(geometry.rect.adjusted(7.0, 4.0, -5.0, -4.0),
                              Qt::AlignLeft | Qt::AlignTop,
                              QString::number(geometry.date.day()));
 
-            if (layout.isMonth && geometry.rect.width() >= 54.0 && geometry.rect.height() >= 34.0
+            // 高格（周视图热柱）在日期下补星期标注，避免中段空荡。
+            if (geometry.rect.height() >= 90.0) {
+                painter.setFont(DesignTokens::appFont(10, QFont::Medium));
+                painter.setPen(cell.future ? DesignTokens::kTextFaint()
+                               : (lightFill ? DesignTokens::kTextMute()
+                                  : QColor(255, 255, 255, 190)));
+                painter.drawText(geometry.rect.adjusted(7.0, 26.0, -5.0, -4.0),
+                                 Qt::AlignLeft | Qt::AlignTop,
+                                 kDayCn[geometry.date.dayOfWeek() - 1]);
+            }
+
+            if (geometry.rect.width() >= 50.0 && geometry.rect.height() >= 40.0
                 && !cell.future && cell.value > 0) {
-                painter.setFont(DesignTokens::monoFont(8));
+                painter.setFont(DesignTokens::monoFont(qBound(8,
+                    static_cast<int>(cellSide * 0.16), 10), QFont::DemiBold));
                 painter.setPen(lightFill ? DesignTokens::kTextMute() : QColor("#FFFFFF"));
-                painter.drawText(geometry.rect.adjusted(4.0, 13.0, -4.0, -3.0),
+                painter.drawText(geometry.rect.adjusted(5.0, 16.0, -6.0, -5.0),
                                  Qt::AlignRight | Qt::AlignBottom,
                                  UiUtils::formatCompact(cell.value));
             }
@@ -485,36 +469,130 @@ private:
         if (layout.isMonth && !hasRecordedDay) {
             painter.setFont(DesignTokens::appFont(9));
             painter.setPen(DesignTokens::kTextPlaceholder());
-            painter.drawText(layout.monthInfoRect, Qt::AlignRight | Qt::AlignVCenter,
+            painter.drawText(layout.monthInfoRect.adjusted(0.0, 0.0, -2.0, 0.0),
+                             Qt::AlignRight | Qt::AlignVCenter,
                              QString::fromUtf8("本月暂未记录使用时长"));
         }
-        paintLegend(painter, layout);
+        paintInsights(painter, layout);
     }
 
-    void paintLegend(QPainter &painter, const TrendChartLayout::HeatmapLayout &layout)
+    void paintInsights(QPainter &painter, const TrendChartLayout::HeatmapLayout &layout)
     {
-        const double block = qBound(5.0, qMin(layout.cellWidth, layout.cellHeight) * 0.38, 8.0);
-        constexpr double gap = 2.0;
-        const QString label = layout.isMonth ? QString::fromUtf8("本月相对时长")
-                                             : QString::fromUtf8("相对时长");
+        int total = 0;
+        int activeDays = 0;
+        int peakValue = 0;
+        QDate peakDate;
+        for (auto it = m_data.cbegin(); it != m_data.cend(); ++it) {
+            const QDate date = QDate::fromString(it.key(), Qt::ISODate);
+            if (!date.isValid() || date > QDate::currentDate())
+                continue;
+            total += it.value();
+            if (it.value() > 0)
+                ++activeDays;
+            if (it.value() > peakValue) {
+                peakValue = it.value();
+                peakDate = date;
+            }
+        }
+        const int average = activeDays > 0 ? total / activeDays : 0;
+        const QString totalText = UiUtils::formatDuration(total);
+        const QString peakText = peakDate.isValid()
+            ? QString::fromUtf8("%1日 · %2").arg(peakDate.day()).arg(UiUtils::formatCompact(peakValue))
+            : QString::fromUtf8("暂无记录");
+
+        if (layout.compactInsight) {
+            const QRectF statsRect = layout.insightRect.adjusted(2.0, 0.0,
+                                                                 -layout.legendRect.width() - 12.0, 0.0);
+            painter.setFont(DesignTokens::appFont(9, QFont::Medium));
+            painter.setPen(DesignTokens::kTextMute());
+            painter.drawText(statsRect, Qt::AlignLeft | Qt::AlignVCenter,
+                QString::fromUtf8("总计 %1   ·   活跃 %2 天   ·   日均 %3")
+                    .arg(totalText).arg(activeDays).arg(UiUtils::formatCompact(average)));
+            paintLegend(painter, layout.legendRect);
+            return;
+        }
+
+        painter.setPen(QPen(DesignTokens::kBorder(), 1.0));
+        painter.drawLine(layout.insightRect.topLeft(), layout.insightRect.bottomLeft());
+        const QRectF panel = layout.insightRect.adjusted(18.0, 2.0, -4.0, -2.0);
+
+        painter.setFont(DesignTokens::eyebrowFont(9));
+        painter.setPen(DesignTokens::kTextFaint());
+        painter.drawText(QRectF(panel.left(), panel.top(), panel.width(), 18.0),
+                         Qt::AlignLeft | Qt::AlignVCenter,
+                         layout.isMonth ? QString::fromUtf8("本月概览")
+                                        : QString::fromUtf8("本周概览"));
+
+        painter.setFont(DesignTokens::monoFont(18, QFont::DemiBold));
+        painter.setPen(DesignTokens::kTextStrong());
+        painter.drawText(QRectF(panel.left(), panel.top() + 22.0, panel.width(), 30.0),
+                         Qt::AlignLeft | Qt::AlignVCenter, totalText);
+        painter.setFont(DesignTokens::appFont(8));
+        painter.setPen(DesignTokens::kTextFaint());
+        painter.drawText(QRectF(panel.left(), panel.top() + 50.0, panel.width(), 18.0),
+                         Qt::AlignLeft | Qt::AlignVCenter,
+                         QString::fromUtf8("累计使用时长"));
+
+        const double statsTop = panel.top() + 78.0;
+        painter.setFont(DesignTokens::appFont(8));
+        painter.setPen(DesignTokens::kTextFaint());
+        painter.drawText(QRectF(panel.left(), statsTop, panel.width() * 0.48, 18.0),
+                         Qt::AlignLeft | Qt::AlignVCenter, QString::fromUtf8("活跃天数"));
+        painter.drawText(QRectF(panel.left() + panel.width() * 0.52, statsTop,
+                                panel.width() * 0.48, 18.0),
+                         Qt::AlignLeft | Qt::AlignVCenter, QString::fromUtf8("活跃日均"));
+        painter.setFont(DesignTokens::monoFont(11, QFont::DemiBold));
+        painter.setPen(DesignTokens::kText());
+        painter.drawText(QRectF(panel.left(), statsTop + 18.0, panel.width() * 0.48, 22.0),
+                         Qt::AlignLeft | Qt::AlignVCenter,
+                         QString::fromUtf8("%1 天").arg(activeDays));
+        painter.drawText(QRectF(panel.left() + panel.width() * 0.52, statsTop + 18.0,
+                                panel.width() * 0.48, 22.0),
+                         Qt::AlignLeft | Qt::AlignVCenter,
+                         UiUtils::formatCompact(average));
+
+        const double peakTop = statsTop + 52.0;
+        painter.setFont(DesignTokens::appFont(8));
+        painter.setPen(DesignTokens::kTextFaint());
+        painter.drawText(QRectF(panel.left(), peakTop, panel.width(), 18.0),
+                         Qt::AlignLeft | Qt::AlignVCenter, QString::fromUtf8("峰值日"));
+        painter.setFont(DesignTokens::monoFont(10, QFont::DemiBold));
+        painter.setPen(DesignTokens::kText());
+        painter.drawText(QRectF(panel.left(), peakTop + 18.0, panel.width(), 22.0),
+                         Qt::AlignLeft | Qt::AlignVCenter, peakText);
+
+        paintLegend(painter, layout.legendRect.adjusted(18.0, 0.0, -16.0, 0.0));
+    }
+
+    void paintLegend(QPainter &painter, const QRectF &rect)
+    {
+        if (rect.isEmpty())
+            return;
+        constexpr double block = 8.0;
+        constexpr double gap = 3.0;
+        const QString low = QString::fromUtf8("少");
+        const QString high = QString::fromUtf8("多");
         QFontMetrics metrics(DesignTokens::appFont(8));
-        const double labelWidth = metrics.horizontalAdvance(label);
-        const double swatchesWidth = 5.0 * block + 4.0 * gap;
-        const double totalWidth = labelWidth + 6.0 + swatchesWidth;
-        double x = layout.legendRect.right() - totalWidth;
-        const double y = layout.legendRect.center().y() - block / 2.0;
+        const double lowWidth = metrics.horizontalAdvance(low);
+        const double highWidth = metrics.horizontalAdvance(high);
+        const double totalWidth = lowWidth + highWidth + 12.0 + 5.0 * block + 4.0 * gap;
+        double x = qMax(rect.left(), rect.right() - totalWidth);
+        const double y = rect.center().y() - block / 2.0;
 
         painter.setFont(DesignTokens::appFont(8));
         painter.setPen(DesignTokens::kTextFaint());
-        painter.drawText(QRectF(x, layout.legendRect.top(), labelWidth, layout.legendRect.height()),
-                         Qt::AlignVCenter | Qt::AlignLeft, label);
-        x += labelWidth + 6.0;
+        painter.drawText(QRectF(x, rect.top(), lowWidth, rect.height()),
+                         Qt::AlignVCenter | Qt::AlignLeft, low);
+        x += lowWidth + 6.0;
         for (int level = 0; level < 5; ++level) {
             painter.setPen(Qt::NoPen);
             painter.setBrush(DesignTokens::heatLevel(level));
             painter.drawRoundedRect(QRectF(x, y, block, block), 2.0, 2.0);
             x += block + gap;
         }
+        painter.setPen(DesignTokens::kTextFaint());
+        painter.drawText(QRectF(x + 3.0, rect.top(), highWidth, rect.height()),
+                         Qt::AlignVCenter | Qt::AlignLeft, high);
     }
 
     QString normalTooltip(const QDate &date, int value) const
@@ -554,7 +632,7 @@ private:
 TrendCard::TrendCard(QWidget *parent)
     : CardFrame(QString::fromUtf8("\xe6\x9c\xac\xe5\x91\xa8\xe8\xb6\x8b\xe5\x8a\xbf"), parent)
 {
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     auto *header = new QHBoxLayout();
     header->setContentsMargins(0, 0, 0, 0);
@@ -642,7 +720,7 @@ TrendCard::TrendCard(QWidget *parent)
     contentLayout()->insertLayout(0, header);
 
     m_chartArea = new TrendChartArea(this);
-    contentLayout()->addWidget(m_chartArea);
+    contentLayout()->addWidget(m_chartArea, 1);
 
     setChartType(QStringLiteral("bar"));
     setDisplayFormat(QStringLiteral("normal"));
