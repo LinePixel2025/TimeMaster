@@ -35,6 +35,10 @@ public:
     bool updateSessionEnd(qint64 sessionId, const QDateTime &endTime,
                           int durationSeconds) override
     {
+        if (failNextUpdateEnd) {
+            failNextUpdateEnd = false;
+            return false;
+        }
         StoredSession *session = find(sessionId);
         if (!session)
             return false;
@@ -64,6 +68,8 @@ public:
 
     QVector<StoredSession> sessions;
     bool failNextInsert = false;
+    // 注入一次 updateSessionEnd 失败,验证收尾写库失败后的推迟-重试语义
+    bool failNextUpdateEnd = false;
     // updateSessionDuration 的调用次数,用于验证周期 flush 的写库频率
     int durationUpdates = 0;
     qint64 nextId = 1;
@@ -128,13 +134,16 @@ void test_disable_and_ignore_close_sessions()
     TrackingConfig config;
     const QDateTime start(QDate(2026, 8, 11), QTime(10, 0));
 
+    // 需连续两个采样点越过 settle-in 门槛后才会落库,与 1Hz 轮询的真实节奏一致
     engine.process(sample(start, 0), config);
+    engine.process(sample(start.addSecs(2), 2000), config);
     config.enabled = false;
     engine.process(sample(start.addSecs(10), 10000), config);
     assert(store.sessions[0].duration == 10);
 
     config.enabled = true;
     engine.process(sample(start.addSecs(20), 20000), config);
+    engine.process(sample(start.addSecs(22), 22000), config);
     config.ignoredProcessKeys.insert("chrome.exe");
     engine.process(sample(start.addSecs(25), 25000, "chrome.exe"), config);
     assert(store.sessions.size() == 2);
@@ -151,13 +160,17 @@ void test_idle_excludes_time_and_resumes_same_app()
     const QDateTime start(QDate(2026, 8, 11), QTime(10, 0));
 
     engine.process(sample(start, 0), config);
+    engine.process(sample(start.addSecs(2), 2000), config);
     engine.process(sample(start.addSecs(120), 120000, "code.exe", "File", 60000), config);
+    assert(store.sessions.size() == 1);
     assert(store.sessions[0].duration == 60);
     assert(store.sessions[0].end == start.addSecs(60));
 
     engine.process(sample(start.addSecs(121), 121000), config);
+    engine.process(sample(start.addSecs(123), 123000), config);
     engine.stop(start.addSecs(131), 131000);
     assert(store.sessions.size() == 2);
+    assert(store.sessions[1].start == start.addSecs(121));
     assert(store.sessions[1].duration == 10);
     std::cout << "test_idle_excludes_time_and_resumes_same_app PASS\n";
 }
@@ -170,6 +183,7 @@ void test_invalid_foreground_keeps_session()
     const QDateTime start(QDate(2026, 8, 11), QTime(10, 0));
 
     engine.process(sample(start, 0), config);
+    engine.process(sample(start.addSecs(2), 2000), config);
     engine.process(sample(start.addSecs(5), 5000, ""), config);
     engine.stop(start.addSecs(10), 10000);
     assert(store.sessions.size() == 1);
@@ -196,6 +210,7 @@ void test_midnight_split_and_wall_clock_rollback()
     TrackingEngine rollbackEngine(&rollbackStore);
     const QDateTime rollbackStart(QDate(2026, 8, 11), QTime(10, 0));
     rollbackEngine.process(sample(rollbackStart, 0), config);
+    rollbackEngine.process(sample(rollbackStart.addSecs(2), 2000), config);
     rollbackEngine.stop(rollbackStart.addSecs(-30), 10000);
     assert(rollbackStore.sessions[0].duration == 10);
     // 墙钟回拨时双时钟防护生效:end 由"开始锚点 + 单调增量"推算,
@@ -214,11 +229,15 @@ void test_insert_failure_retries()
 
     engine.process(sample(start, 0), config);
     assert(store.sessions.isEmpty());
+    // 越过 settle-in 门槛尝试激活,但 insert 失败,继续保持 Pending
     engine.process(sample(start.addSecs(1), 1000), config);
+    assert(store.sessions.isEmpty());
+    // 下一个采样点重试 insert:成功且 start 锚点仍取首个候选样本
+    engine.process(sample(start.addSecs(2), 2000), config);
     assert(store.sessions.size() == 1);
     assert(store.sessions[0].start == start);
-    engine.stop(start.addSecs(2), 2000);
-    assert(store.sessions[0].duration == 2);
+    engine.stop(start.addSecs(3), 3000);
+    assert(store.sessions[0].duration == 3);
     std::cout << "test_insert_failure_retries PASS\n";
 }
 
@@ -291,6 +310,110 @@ void test_extreme_midnight_split_bounded()
     std::cout << "test_extreme_midnight_split_bounded PASS\n";
 }
 
+void test_settle_in_discards_fleeting_windows()
+{
+    FakeStore store;
+    TrackingEngine engine(&store);
+    TrackingConfig config; // 默认 pollIntervalMs=1000, minTrackingMs=0
+    const QDateTime start(QDate(2026, 8, 11), QTime(10, 0));
+
+    // code.exe 只被采样一次(<1 个轮询周期)即被弹窗顶掉:整段丢弃不落库
+    engine.process(sample(start, 0), config);
+    engine.process(sample(start.addSecs(1), 1000, "chrome.exe", "Notification"), config);
+    assert(store.sessions.isEmpty());
+
+    // chrome 连续第二个采样点越过 settle 门槛后才落库,
+    // start 锚点仍是它的第一个候选样本(1s),时长不缩水
+    engine.process(sample(start.addSecs(2), 2000, "chrome.exe"), config);
+    assert(store.sessions.size() == 1);
+    assert(store.sessions[0].start == start.addSecs(1));
+    assert(store.sessions[0].duration == 1);
+
+    engine.stop(start.addSecs(5), 5000);
+    assert(store.sessions[0].duration == 4);
+    std::cout << "test_settle_in_discards_fleeting_windows PASS\n";
+}
+
+void test_midnight_finish_no_zero_tail()
+{
+    FakeStore store;
+    TrackingEngine engine(&store);
+    TrackingConfig config;
+    const QDateTime start(QDate(2026, 8, 11), QTime(23, 59, 50));
+
+    // 收尾时刻恰好落在午夜切分点:只闭合并保留第一段,不产生 0 秒尾段
+    engine.process(sample(start, 0), config);
+    engine.process(sample(start.addSecs(5), 5000), config);
+    engine.stop(start.addSecs(10), 10000);
+    assert(store.sessions.size() == 1);
+    assert(store.sessions[0].duration == 10);
+    assert(store.sessions[0].end == QDateTime(QDate(2026, 8, 12), QTime(0, 0)));
+
+    // 收尾越过午夜仍有剩余时长时,尾段正常建立
+    FakeStore crossStore;
+    TrackingEngine crossEngine(&crossStore);
+    crossEngine.process(sample(start, 0), config);
+    crossEngine.process(sample(start.addSecs(5), 5000), config);
+    crossEngine.stop(start.addSecs(25), 25000);
+    assert(crossStore.sessions.size() == 2);
+    assert(crossStore.sessions[0].duration == 10);
+    assert(crossStore.sessions[1].duration == 15);
+    std::cout << "test_midnight_finish_no_zero_tail PASS\n";
+}
+
+void test_finish_retry_on_update_end_failure()
+{
+    FakeStore store;
+    TrackingEngine engine(&store);
+    TrackingConfig config;
+    const QDateTime start(QDate(2026, 8, 11), QTime(10, 0));
+
+    engine.process(sample(start, 0), config);
+    engine.process(sample(start.addSecs(1), 1000), config);
+    assert(store.sessions.size() == 1);
+
+    // 切应用时收尾写库失败:本轮推迟切换,旧段保持打开状态等待重试
+    store.failNextUpdateEnd = true;
+    engine.process(sample(start.addSecs(2), 2000, "chrome.exe"), config);
+    assert(store.sessions.size() == 1);
+    assert(!store.sessions[0].end.isValid());
+
+    // 下一轮重试收尾成功:旧段以新时刻闭合(收尾时长不丢),切换完成
+    engine.process(sample(start.addSecs(3), 3000, "chrome.exe"), config);
+    assert(store.sessions[0].end == start.addSecs(3));
+    assert(store.sessions[0].duration == 3);
+
+    // 新应用照常走 settle-in,anchor 为切换成功后的首个样本
+    engine.process(sample(start.addSecs(4), 4000, "chrome.exe"), config);
+    engine.stop(start.addSecs(5), 5000);
+    assert(store.sessions.size() == 2);
+    assert(store.sessions[1].start == start.addSecs(3));
+    assert(store.sessions[1].duration == 2);
+    std::cout << "test_finish_retry_on_update_end_failure PASS\n";
+}
+
+void test_unattended_logon_screen_truncates()
+{
+    FakeStore store;
+    TrackingEngine engine(&store);
+    TrackingConfig config;
+    const QDateTime start(QDate(2026, 8, 11), QTime(10, 0));
+
+    engine.process(sample(start, 0), config);
+    engine.process(sample(start.addSecs(2), 2000), config);
+
+    // 锁屏:LogonUI 截断当前会话并进入 Idle,不为其新建会话
+    engine.process(sample(start.addSecs(5), 5000, "logonui.exe"), config);
+    assert(store.sessions.size() == 1);
+    assert(store.sessions[0].duration == 5);
+    assert(store.sessions[0].end == start.addSecs(5));
+    assert(engine.state() == TrackingEngine::State::Idle);
+
+    engine.stop(start.addSecs(600), 600000);
+    assert(store.sessions.size() == 1);
+    std::cout << "test_unattended_logon_screen_truncates PASS\n";
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -304,6 +427,10 @@ int main(int argc, char *argv[])
     test_periodic_persist();
     test_wall_clock_forward_jump_uses_monotonic();
     test_extreme_midnight_split_bounded();
+    test_settle_in_discards_fleeting_windows();
+    test_midnight_finish_no_zero_tail();
+    test_finish_retry_on_update_end_failure();
+    test_unattended_logon_screen_truncates();
     std::cout << "All tracking engine tests passed!\n";
     return 0;
 }

@@ -60,6 +60,25 @@ void mergeAppNameVariants(QVector<QVariantMap> &rows)
     rows.swap(merged);
 }
 
+// start_time 以定长前缀 ISO 文本存储(yyyy-MM-ddTHH:mm:ss[.zzz]),字典序
+// 与时间序一致,故 `start_time >= ? AND start_time < 次日` 的开区间与
+// `date(start_time) BETWEEN ...` 语义等价(混合毫秒后缀不影响边界比较),
+// 且能命中 idx_sessions_start。参数传入纯日期串("yyyy-MM-dd"),
+// 其字典序天然小于当天所有 "yyyy-MM-ddT..." 值,可直接作下界。
+QString dayEndExclusive(const QString &isoDate)
+{
+    const QDate end = QDate::fromString(isoDate, Qt::ISODate);
+    if (end.isValid())
+        return end.addDays(1).toString(Qt::ISODate);
+    // 非法日期兜底:附加一个大于任何可打印字符的界,不放大为全表
+    return isoDate + QLatin1Char('\x7f');
+}
+
+QString dayEndExclusive(const QDate &date)
+{
+    return date.addDays(1).toString(Qt::ISODate);
+}
+
 } // namespace
 
 DatabaseManager::DatabaseManager(const QString &dbPath)
@@ -77,6 +96,12 @@ DatabaseManager::DatabaseManager(const QString &dbPath)
         qFatal("Failed to open database: %s", qPrintable(m_db.lastError().text()));
     QSqlQuery pragma(m_db);
     pragma.exec("PRAGMA busy_timeout = 5000");
+    // WAL:追踪线程(独立连接)的写事务不再以回滚日志独占阻塞 GUI 线程的
+    // 统计读(现状最坏等满 busy_timeout 5s 表现为界面卡顿)。journal_mode
+    // 是库文件属性,多连接重复设置幂等;synchronous=NORMAL 配合 WAL 仅在
+    // 检查点落盘,崩溃最多丢最后一个已提交事务。
+    pragma.exec("PRAGMA journal_mode = WAL");
+    pragma.exec("PRAGMA synchronous = NORMAL");
     migrate();
 }
 
@@ -248,13 +273,15 @@ QVector<QVariantMap> DatabaseManager::getTodaySummary()
     QMutexLocker lock(&m_mutex);
 
     QSqlQuery q(m_db);
+    const QString dayStart = QDate::currentDate().toString(Qt::ISODate);
     q.prepare("SELECT app_name, SUM(duration_seconds) as total_seconds "
-              "FROM sessions WHERE date(start_time) = ? "
+              "FROM sessions WHERE start_time >= ? AND start_time < ? "
               "AND duration_seconds >= ? "
               "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
               "WHERE sessions.process_key = ia.process_name) "
               "GROUP BY app_name ORDER BY total_seconds DESC");
-    q.addBindValue(QDate::currentDate().toString(Qt::ISODate));
+    q.addBindValue(dayStart);
+    q.addBindValue(dayEndExclusive(dayStart));
     q.addBindValue(threshold);
     q.exec();
     QVector<QVariantMap> results;
@@ -280,12 +307,13 @@ int DatabaseManager::getTodayTotal()
 
     QSqlQuery q(m_db);
     q.prepare("SELECT COALESCE(SUM(duration_seconds), 0) as total "
-              "FROM sessions WHERE date(start_time) = ? "
+              "FROM sessions WHERE start_time >= ? AND start_time < ? "
               "AND duration_seconds >= ? "
               "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
               "WHERE sessions.process_key = ia.process_name)");
     QString todayStr = QDate::currentDate().toString(Qt::ISODate);
     q.addBindValue(todayStr);
+    q.addBindValue(dayEndExclusive(todayStr));
     q.addBindValue(threshold);
     q.exec();
     if (q.next())
@@ -300,11 +328,13 @@ int DatabaseManager::getYesterdayTotal()
 
     QSqlQuery q(m_db);
     q.prepare("SELECT COALESCE(SUM(duration_seconds), 0) as total "
-              "FROM sessions WHERE date(start_time) = ? "
+              "FROM sessions WHERE start_time >= ? AND start_time < ? "
               "AND duration_seconds >= ? "
               "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
               "WHERE sessions.process_key = ia.process_name)");
-    q.addBindValue(QDate::currentDate().addDays(-1).toString(Qt::ISODate));
+    const QDate yesterday = QDate::currentDate().addDays(-1);
+    q.addBindValue(yesterday.toString(Qt::ISODate));
+    q.addBindValue(dayEndExclusive(yesterday));
     q.addBindValue(threshold);
     q.exec();
     if (q.next())
@@ -320,14 +350,14 @@ QVector<QVariantMap> DatabaseManager::getWeekSummary()
     QDate monday = today.addDays(-today.dayOfWeek() + 1);
 
     QSqlQuery q(m_db);
-    q.prepare("SELECT date(start_time) as d, SUM(duration_seconds) as total_seconds "
-              "FROM sessions WHERE date(start_time) >= ? AND date(start_time) <= ? "
+    q.prepare("SELECT substr(start_time, 1, 10) as d, SUM(duration_seconds) as total_seconds "
+              "FROM sessions WHERE start_time >= ? AND start_time < ? "
               "AND duration_seconds >= ? "
               "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
               "WHERE sessions.process_key = ia.process_name) "
-              "GROUP BY date(start_time) ORDER BY d ASC");
+              "GROUP BY d ORDER BY d ASC");
     q.addBindValue(monday.toString(Qt::ISODate));
-    q.addBindValue(today.toString(Qt::ISODate));
+    q.addBindValue(dayEndExclusive(today));
     q.addBindValue(threshold);
     q.exec();
     QVector<QVariantMap> results;
@@ -348,14 +378,14 @@ QVector<QVariantMap> DatabaseManager::getMonthSummary()
     QDate monthStart(today.year(), today.month(), 1);
 
     QSqlQuery q(m_db);
-    q.prepare("SELECT date(start_time) as d, SUM(duration_seconds) as total_seconds "
-              "FROM sessions WHERE date(start_time) >= ? AND date(start_time) <= ? "
+    q.prepare("SELECT substr(start_time, 1, 10) as d, SUM(duration_seconds) as total_seconds "
+              "FROM sessions WHERE start_time >= ? AND start_time < ? "
               "AND duration_seconds >= ? "
               "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
               "WHERE sessions.process_key = ia.process_name) "
-              "GROUP BY date(start_time) ORDER BY d ASC");
+              "GROUP BY d ORDER BY d ASC");
     q.addBindValue(monthStart.toString(Qt::ISODate));
-    q.addBindValue(today.toString(Qt::ISODate));
+    q.addBindValue(dayEndExclusive(today));
     q.addBindValue(threshold);
     q.exec();
     QVector<QVariantMap> results;
@@ -376,12 +406,13 @@ QVector<QVariantMap> DatabaseManager::getAppRank(const QDate &targetDate)
     QSqlQuery q(m_db);
     q.prepare(
         "SELECT app_name, process_name, SUM(duration_seconds) as total_seconds "
-        "FROM sessions WHERE date(start_time) = ? "
+        "FROM sessions WHERE start_time >= ? AND start_time < ? "
         "AND duration_seconds >= ? "
         "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
         "WHERE sessions.process_key = ia.process_name) "
         "GROUP BY app_name, process_name");
     q.addBindValue(targetDate.toString(Qt::ISODate));
+    q.addBindValue(dayEndExclusive(targetDate));
     q.addBindValue(threshold);
     q.exec();
     QVector<QVariantMap> results;
@@ -408,13 +439,13 @@ QVector<QVariantMap> DatabaseManager::getAllSessions(const QString &startDate, c
 
     QSqlQuery q(m_db);
     if (!startDate.isEmpty() && !endDate.isEmpty()) {
-        q.prepare("SELECT * FROM sessions WHERE date(start_time) >= ? AND date(start_time) <= ? "
+        q.prepare("SELECT * FROM sessions WHERE start_time >= ? AND start_time < ? "
                   "AND duration_seconds >= ? "
                   "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
                   "WHERE sessions.process_key = ia.process_name) "
                   "ORDER BY start_time ASC");
         q.addBindValue(startDate);
-        q.addBindValue(endDate);
+        q.addBindValue(dayEndExclusive(endDate));
         q.addBindValue(threshold);
     } else {
         q.prepare("SELECT * FROM sessions "
@@ -447,17 +478,17 @@ QVector<QVariantMap> DatabaseManager::getDailySummaries(const QString &startDate
 
     QSqlQuery q(m_db);
     if (!startDate.isEmpty() && !endDate.isEmpty()) {
-        q.prepare("SELECT date(start_time) as d, app_name, SUM(duration_seconds) as total_seconds "
-                  "FROM sessions WHERE date(start_time) >= ? AND date(start_time) <= ? "
+        q.prepare("SELECT substr(start_time, 1, 10) as d, app_name, SUM(duration_seconds) as total_seconds "
+                  "FROM sessions WHERE start_time >= ? AND start_time < ? "
                   "AND duration_seconds >= ? "
                   "AND NOT EXISTS (SELECT 1 FROM ignored_apps ia "
                   "WHERE sessions.process_key = ia.process_name) "
                   "GROUP BY d, app_name ORDER BY d ASC, total_seconds DESC");
         q.addBindValue(startDate);
-        q.addBindValue(endDate);
+        q.addBindValue(dayEndExclusive(endDate));
         q.addBindValue(threshold);
     } else {
-        q.prepare("SELECT date(start_time) as d, app_name, SUM(duration_seconds) as total_seconds "
+        q.prepare("SELECT substr(start_time, 1, 10) as d, app_name, SUM(duration_seconds) as total_seconds "
                   "FROM sessions WHERE NOT EXISTS (SELECT 1 FROM ignored_apps ia "
                   "WHERE sessions.process_key = ia.process_name) "
                   "AND duration_seconds >= ? "

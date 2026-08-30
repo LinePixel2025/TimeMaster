@@ -190,40 +190,74 @@ void WindowTracker::run()
             m_waitCondition.wait(&m_settingsMutex, config.pollIntervalMs);
     }
 
-    engine.stop(QDateTime::currentDateTime(), monotonicClock.elapsed());
+    // 收尾写库失败(busy 超时等)时短暂等待后重试一次;仍失败则接受丢失,
+    // 与"崩溃最多丢一个 flush 周期"的既有语义一致
+    if (!engine.stop(QDateTime::currentDateTime(), monotonicClock.elapsed())) {
+        QThread::msleep(100);
+        engine.stop(QDateTime::currentDateTime(), monotonicClock.elapsed());
+    }
+}
+
+QString WindowTracker::readWindowTitle(void *hwndPointer)
+{
+    wchar_t title[512] = {0};
+    DWORD_PTR result = 0;
+    // 用 SendMessageTimeout 而非 GetWindowTextW:两者底层同为 WM_GETTEXT 跨进程
+    // 读取,但后者会无限等待目标消息循环——前台程序未响应时会卡死整个轮询线程,
+    // 导致会话无法收尾、状态芯片冻结。超时/挂起按空标题处理,由调用方兜底。
+    if (SendMessageTimeoutW(static_cast<HWND>(hwndPointer), WM_GETTEXT, 512,
+                           reinterpret_cast<LPARAM>(title),
+                           SMTO_ABORTIFHUNG, 150, &result) == 0)
+        return {};
+    return QString::fromWCharArray(title);
 }
 
 WindowTracker::WindowInfo WindowTracker::getForegroundWindowInfo()
 {
     const HWND hwnd = GetForegroundWindow();
-    if (hwnd == nullptr)
-        return {0, "", "", "", ""};
-
     DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == 0)
+    if (hwnd != nullptr)
+        GetWindowThreadProcessId(hwnd, &pid);
+    if (hwnd == nullptr || pid == 0) {
+        m_lastHwnd = nullptr;
+        m_lastPid = 0;
         return {0, "", "", "", ""};
-
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    QString processName;
-    if (hProcess) {
-        wchar_t exePath[32768] = {0};
-        DWORD size = 32768;
-        if (QueryFullProcessImageNameW(hProcess, 0, exePath, &size))
-            processName = QString::fromWCharArray(exePath, static_cast<qsizetype>(size));
-        CloseHandle(hProcess);
     }
-    if (processName.isEmpty())
-        processName = QString("pid_%1").arg(pid);
 
-    wchar_t title[512] = {0};
-    GetWindowTextW(hwnd, title, 512);
-    QString windowTitle = QString::fromWCharArray(title);
+    // (hwnd, pid) 同时相同 → 同一活进程的同一窗口,复用上轮进程身份
+    QString processName;
+    QString processKey;
+    QString appName;
+    if (hwnd == m_lastHwnd && pid == m_lastPid) {
+        processName = m_lastProcessName;
+        processKey = m_lastProcessKey;
+        appName = m_lastAppName;
+    } else {
+        HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (hProcess) {
+            wchar_t exePath[32768] = {0};
+            DWORD size = 32768;
+            if (QueryFullProcessImageNameW(hProcess, 0, exePath, &size))
+                processName = QString::fromWCharArray(exePath, static_cast<qsizetype>(size));
+            CloseHandle(hProcess);
+        }
+        if (processName.isEmpty())
+            processName = QString("pid_%1").arg(pid);
+
+        processKey = ProcessIdentity::normalizeKey(processName);
+        appName = classifyApp(processName);
+        m_lastHwnd = hwnd;
+        m_lastPid = pid;
+        m_lastProcessName = processName;
+        m_lastProcessKey = processKey;
+        m_lastAppName = appName;
+    }
+
+    QString windowTitle = readWindowTitle(hwnd);
     if (windowTitle.isEmpty())
         windowTitle = processName;
 
-    const QString processKey = ProcessIdentity::normalizeKey(processName);
-    return {pid, processName, processKey, windowTitle, classifyApp(processName)};
+    return {pid, processName, processKey, windowTitle, appName};
 }
 
 qint64 WindowTracker::getIdleMilliseconds() const

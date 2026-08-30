@@ -38,9 +38,19 @@ private:
         QString appName;
     };
     WindowInfo getForegroundWindowInfo();
+    /// 带超时保护的前台窗口标题读取(参数为 HWND,以 void* 出现避免头文件依赖 windows.h)
+    static QString readWindowTitle(void *hwnd);
     qint64 getIdleMilliseconds() const;
 
     DatabaseManager *m_db;
+    // 上一轮前台窗口的 HWND(以 void* 存储)与 pid:两者同时相同即可判定
+    // 为同一活进程的同一窗口,复用其进程名/进程键/应用分类,跳过
+    // OpenProcess、路径查询与文件 I/O。仅轮询线程访问,无需加锁。
+    void *m_lastHwnd = nullptr;
+    unsigned long m_lastPid = 0;
+    QString m_lastProcessName;
+    QString m_lastProcessKey;
+    QString m_lastAppName;
     // QAtomicInt 默认构造不置零,而 run() 用 testAndSetOrdered(0,1) 抢占运行权,必须显式初始化为 0
     QAtomicInt m_running = 0;
     TrackingConfig m_config;

@@ -383,6 +383,42 @@ void test_legacy_database_migration()
     std::cout << "test_legacy_database_migration PASS" << std::endl;
 }
 
+void test_day_range_boundary()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    db.setSetting("min_record_threshold", "0");
+    const QDate today = QDate::currentDate();
+    // 当日最后一秒带毫秒、次日最初 100 毫秒:范围谓词
+    // (start_time >= "今日" AND start_time < "次日")应分别归属今日/次日,
+    // 与旧 date(start_time) 语义等价(定长前缀保证字典序=时间序)
+    const QDateTime lateToday(today, QTime(23, 59, 59, 500));
+    const QDateTime earlyTomorrow(today.addDays(1), QTime(0, 0, 0, 100));
+    db.insertSession("a.exe", "A", "A", lateToday, lateToday, 10);
+    db.insertSession("b.exe", "B", "B", earlyTomorrow, earlyTomorrow, 20);
+
+    assert(db.getTodayTotal() == 10);
+    const QVector<QVariantMap> rank = db.getAppRank(today);
+    assert(rank.size() == 1);
+    assert(rank[0]["app_name"].toString() == "A");
+    assert(db.getAppRank(today.addDays(1)).size() == 1);
+
+    const QVector<QVariantMap> sessions = db.getAllSessions(
+        today.toString(Qt::ISODate), today.toString(Qt::ISODate));
+    assert(sessions.size() == 1);
+    assert(sessions[0]["app_name"].toString() == "A");
+
+    const QVector<QVariantMap> daily = db.getDailySummaries(
+        today.toString(Qt::ISODate), today.toString(Qt::ISODate));
+    assert(daily.size() == 1);
+    assert(daily[0]["d"].toString() == today.toString(Qt::ISODate));
+    std::cout << "test_day_range_boundary PASS" << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -402,6 +438,7 @@ int main(int argc, char *argv[])
     test_get_all_known_process_names();
     test_process_identity_normalization();
     test_legacy_database_migration();
+    test_day_range_boundary();
     std::cout << "All database tests passed!" << std::endl;
     return 0;
 }
