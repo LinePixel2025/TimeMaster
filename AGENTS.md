@@ -96,8 +96,9 @@ src/
 third_party/miniz/          内置 miniz ZIP 实现，以 miniz_all.cpp 编译
 resources/                  应用图标和 Qt resources.qrc
 tests/                      test_database、test_exporter、test_lineweb_pusher、test_cloud_sync、test_ai_client、test_reminder_scheduler、test_weekly_report、test_daily_report、test_window_tracker、test_trend_chart_layout、test_trend_card_geometry、test_dashboard_layout、test_period_distribution_layout、test_rank_layout
-docs/                       LineWeb 健康 API 文档（health-api.md）与 superpowers/ 下的设计规格
-.superpowers/sdd/           任务简报、审查差异和报告
+docs/                       LineWeb 健康 API 文档（health-api.md）
+docs/superpowers/           设计规格（仅本地保留，不入库）
+.superpowers/sdd/           任务简报、审查差异和报告（仅本地，不入库）
 ```
 
 根 CMakeLists 开启 `CMAKE_AUTOMOC` 和 `CMAKE_AUTORCC`，查找 Qt6 `Widgets Sql Svg Network Test`。主程序为 `WIN32` 子系统，不显示控制台，并链接 `dwmapi`、`shell32` 和 `gdi32`。
@@ -170,7 +171,7 @@ int DatabaseManager::getTodayTotal()
 
 ## SDD 与 Git
 
-- 处理较大功能前先查看 `.superpowers/sdd/` 和 `docs/superpowers/` 中相关规格；规格可能描述历史实现，若与当前代码冲突，以当前代码和用户任务为准。
+- 处理较大功能前可先查看本地（未入库）的 `.superpowers/sdd/` 和 `docs/superpowers/` 中相关规格；规格可能描述历史实现，若与当前代码冲突，以当前代码和用户任务为准。
 - 不要回滚或覆盖用户已有的未提交修改。开始编辑前检查 `git status`，完成后再次检查只包含任务相关变更。
 - 提交使用约定式提交，例如 `feat:`、`fix:`、`refactor:`、`chore:`。除非用户要求，不要自动创建提交、分支或修改发布产物。
 - 项目目前没有 lint、格式化、静态类型检查或 CI/CD 流水线；验证以构建、CTest、独立测试和必要的手动 UI 检查为主。

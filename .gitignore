@@ -20,3 +20,9 @@ package_installer.ps1
 .superpowers/
 .claude/
 .codegraph/
+docs/superpowers/
+CLAUDE.md
+.zcode/
+Testing/
+*.dll
+Time Master.pro
