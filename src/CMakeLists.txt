@@ -10,6 +10,7 @@ set(SOURCES
     ui/theme_manager.cpp
     ui/tray_manager.cpp
     ui/card_frame.cpp
+    ui/title_bar.cpp
     ui/hero_card.cpp
     ui/trend_chart_layout.cpp
     ui/trend_card.cpp
@@ -43,6 +44,7 @@ set(HEADERS
     ui/period_distribution_layout.h
     ui/ui_utils.h
     ui/card_frame.h
+    ui/title_bar.h
     ui/hero_card.h
     ui/trend_chart_layout.h
     ui/trend_card.h
