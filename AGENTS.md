@@ -1,6 +1,6 @@
 # AGENTS.md - Time Master
 
-Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 5.6.1。
+Windows 桌面时间追踪应用。项目使用 C++17、Qt 6 Widgets/Sql/Network/Svg、CMake 和 Ninja，当前版本为 5.6.2。
 
 ## 语言与环境
 
@@ -59,9 +59,9 @@ ctest --test-dir build-tests --output-on-failure
 
 - 主程序构建产物：`build\src\TimeMaster.exe`。
 - 当前仓库没有 `package_installer.ps1`；不要在文档或脚本中假设该文件存在。
-- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-5.6.1.exe`。
+- `installer.iss` 使用 Inno Setup 6，从 `dist\TimeMaster` 复制文件并生成 `dist\TimeMaster-Setup-5.6.2.exe`。
 - 发布前手动准备 `dist\TimeMaster`：复制主程序，执行 `windeployqt --no-translations --no-compiler-runtime --release`，再放入 MinGW 的 `libgcc_s_seh-1.dll`、`libstdc++-6.dll` 和 `libwinpthread-1.dll`。
-- 安装目标默认为 `C:\Program Files\Time Master`；数据库保存在 `%LOCALAPPDATA%\TimeMaster\data.db`，不应写入安装目录。
+- 安装目标默认为 `C:\Program Files\Time Master`；数据库路径来自 `QStandardPaths::AppDataLocation`，Windows 实际为 `%APPDATA%\TimeMaster\Time Master\data.db`（Roaming，非 LOCALAPPDATA），不应写入安装目录。
 - 生成安装包需要 Inno Setup 6，默认编译器路径通常为 `C:\Users\22798\AppData\Local\Programs\Inno Setup 6\ISCC.exe`。
 - 根目录当前可能存在未跟踪的 `Time Master.pro` 和 MinGW DLL。CMake 是正式构建入口，除非用户明确要求，不要擅自删除或纳入提交。
 
@@ -105,8 +105,8 @@ docs/                       LineWeb 健康 API 文档（health-api.md）与 supe
 ## 功能与数据约定
 
 - 程序启动后默认隐藏到系统托盘；通过托盘菜单显示主窗口或退出。验证主窗口时需要临时调用 `window.show()`，验证结束后恢复。
-- `WindowTracker` 轮询当前前台窗口，支持进程别名、忽略应用、追踪开关、轮询间隔、空闲阈值和最短追踪时长。轮询间隔使用数据库设置的 `poll_interval`，不能恢复成硬编码常量。4.0 起追踪逻辑抽为 `TrackingEngine` 状态机（Pending/Active/Idle），通过 `TrackingStore` 接口持久化，`WindowTracker` 只负责采集和线程管理。活跃会话按 `persistIntervalMs`（默认 30 秒）周期落库而非每秒写库，崩溃最多丢一个周期；时长以单调时钟为权威，墙钟偏差超过 5 秒时按"开始锚点 + 单调增量"推算（`sanitizeWallTime`），跨午夜会话自动切分且有段数上限（`kMaxMidnightSplits`）。
-- `MainWindow` 每 10 秒刷新数据，当前仪表盘固定包含 `HeroCard`（含昨日对比与四时段使用分布）、`TrendCard`、`RankCard` 和 `AiReportCard`。昨日对比已并入 Hero，不要重新引入 `CompareCard`。不要重新引入已删除的 `StatsWidget`、`AppRankWidget`、`DashboardCard`、`ReportDetailDialog`（每日报告详情弹窗）或旧的动态网格编辑器，除非任务明确要求。顶栏只保留主题、更多菜单（导出 / 云同步 / 刷新）和设置；状态芯片显示「追踪中 · 应用」/「空闲」/「已暂停」，由 `WindowTracker::activeWindowChanged` 队列连接更新。窄窗口（&lt; 1000px）改为单列。时段数据来自 `getAllSessions` + `SessionHours::addToDayHours`，禁止 `strftime('%H', start_time)` 分组。
+- `WindowTracker` 轮询当前前台窗口，支持进程别名、忽略应用、追踪开关、轮询间隔、空闲阈值和最短追踪时长。轮询间隔使用数据库设置的 `poll_interval`，不能恢复成硬编码常量。4.0 起追踪逻辑抽为 `TrackingEngine` 状态机（Pending/Active/Idle），通过 `TrackingStore` 接口持久化，`WindowTracker` 只负责采集和线程管理。活跃会话按 `persistIntervalMs`（默认 30 秒）周期落库而非每秒写库，崩溃最多丢一个周期；时长以单调时钟为权威，墙钟偏差超过 5 秒时按"开始锚点 + 单调增量"推算（`sanitizeWallTime`），跨午夜会话自动切分且有段数上限（`kMaxMidnightSplits`）。5.6.2 起：标题读取用 `SendMessageTimeoutW(SMTO_ABORTIFHUNG, 150ms)`，挂起的前台进程不再卡死轮询线程；(hwnd, pid) 与上一轮相同时复用进程名/键/分类结果，不重复 OpenProcess 与文件 I/O；settle-in 防抖——同一前台需连续两个采样点（间隔 ≥ 一个轮询周期）才由 Pending 激活落库（激活门槛 `max(minTrackingMs, pollIntervalMs)`），存活不足一个周期的瞬时窗口静默丢弃、start 锚点仍取首个样本，因此 `min_tracking_seconds=0` 也不再产生 0~1 秒碎行；锁屏进程（`logonui.exe`/`winlogon.exe`，引擎内置 `kUnattendedProcessKeys`）截断会话进入 Idle 不计时；收尾写库失败时 `finishActive` 返回 false、本轮推迟切换/停用并下轮重试（正常退出路径 `stop()` 失败重试一次后接受丢失）；恰好跨午夜收尾不再产生 0 秒尾段。
+- `MainWindow` 每 10 秒刷新数据，当前仪表盘固定包含 `HeroCard`（含昨日对比与四时段使用分布）、`TrendCard`、`RankCard` 和 `AiReportCard`。昨日对比已并入 Hero，不要重新引入 `CompareCard`。不要重新引入已删除的 `StatsWidget`、`AppRankWidget`、`DashboardCard`、`ReportDetailDialog`（每日报告详情弹窗）或旧的动态网格编辑器，除非任务明确要求。顶栏只保留主题、更多菜单（导出 / 云同步 / 刷新）和设置；状态芯片显示「追踪中 · 应用」/「空闲」/「已暂停」，由 `WindowTracker::activeWindowChanged` 队列连接更新（settle-in 防抖使新应用的「追踪中」显示最多延迟约一个轮询周期）。窄窗口（&lt; 1000px）改为单列。时段数据来自 `getAllSessions` + `SessionHours::addToDayHours`，禁止 `strftime('%H', start_time)` 分组。
 - AI 智能模块：`AiClient` 通过 OpenAI 兼容 `POST {endpoint}/chat/completions` 生成报告（`Authorization: Bearer <key>`，解析 `choices[0].message.content`），支持 daily/weekly 两个周期。报告文本与锚点日期缓存于 `ai_report_{daily,weekly}_{text,date}` 设置，跨天/跨周后由 `AiReportCard` 判定过期。主页卡片点击「生成分析」→ `MainWindow::aiReportRequested` → `AiClient::generateReport`，结果经 `reportReady/reportFailed` 回填卡片并联动日报网页；`refreshData` 不触发 AI 请求。
 - 每日报告网页：`DailyReportManager` 把今日统计（小时分布、时段、应用 Top5、会话洞察、目标完成度）+ AI 缓存文本生成为 `Documents/TimeMaster/日报-yyyy-MM-dd.html`（同日覆盖，纯 SVG/CSS 离线可用，样式与周报同款液态玻璃）。AI 未配置或无缓存时统计板块仍完整，AI 区显示引导空态。卡片「今日报告」经 `dailyReportOpenRequested` 由 main 调 `refreshToday()` 后 `openUrl` 打开；「生成分析」完成后经 `applyReportText` 自动更新并打开。报告 HTML 片段统一走 `src/report/report_html_builder`，周报与日报不得各自维护样式副本。小时切分与主页日晷共用 `src/report/session_hours.h`。
 - 定时提醒：`ReminderScheduler` 用 30 秒 QTimer 轮询，`reminder_times` 为逗号分隔的 "HH:mm" 列表；到点以「日期|HH:mm」去重（同分钟一次、跨天自然失效），每次命中写 `reminder_last_fired` 触发记录（设置界面「上次触发」据此展示）。今日无数据时不发真实提醒，但弹一条说明"今日暂无使用记录"，避免配置了却不响。内容优先 `AiClient::generateReminderMessage`（`max_tokens: 200`，经 `reminderReady/reminderFailed` 按 tag 回填，不写缓存），AI 未配置或失败时回退 `buildLocalMessage` 本地统计模板（含今日时长、距目标差、主力应用）。托盘气泡由 `TrayManager::showNotification` 发出（底层 `Shell_NotifyIcon` 经典气泡；勿扰模式、系统通知被关闭等会导致不显示，非代码问题）。
@@ -117,6 +117,8 @@ docs/                       LineWeb 健康 API 文档（health-api.md）与 supe
 - 设置界面管理以下设置：`tracking_enabled`、`poll_interval`、`idle_threshold`、`min_tracking_seconds`、`min_record_threshold`、`auto_start`、`theme`、`daily_goal`、`lineweb_enabled`、`lineweb_endpoint`、`lineweb_token`、`lineweb_interval`、`lineweb_last_push`、`lineweb_last_fetch`、`lineweb_pending_push`、`ai_enabled`、`ai_api_endpoint`、`ai_api_key`、`ai_model`、`ai_report_daily_text`、`ai_report_daily_date`、`ai_report_weekly_text`、`ai_report_weekly_date`、`reminder_enabled`、`reminder_times`、`reminder_last_fired`、`reminder_interval_enabled`、`reminder_interval_minutes`、`weekly_report_enabled`、`weekly_report_day`、`weekly_report_time`、`weekly_report_last_generated`、`weekly_report_path`、`trend_display_format`、`trend_heatmap_period`。新增设置沿用 `settings` 表的 key/value 形式并提供默认值。
 - 数据库构造时自动创建/迁移 `sessions`、`settings`、`ignored_apps`、`app_aliases` 表，迁移使用 `CREATE ... IF NOT EXISTS`，没有版本号迁移框架。
 - 统计查询会应用最短记录阈值 `min_record_threshold` 和忽略应用过滤；修改查询时要保持这两个行为一致。
+- 按日统计一律用 `start_time >= ? AND start_time < 次日` 的定长 ISO 文本开区间（辅助 `dayEndExclusive`），分组键用 `substr(start_time,1,10)`；禁止改回 `date(start_time)` 包裹写法——函数会使 `idx_sessions_start` 失效，退化为全表扫描。
+- SQLite 连接默认启用 WAL + `synchronous=NORMAL`（`DatabaseManager` 构造时设置），排障与备份时不应假设回滚日志模式；用户数据库目录会因此出现 `data.db-wal`/`data.db-shm` 伴生文件，属正常现象。
 - LineWeb 推送请求发送到 `<endpoint>/api/health/push`，JSON 字段为 `totalSeconds`、`date`，认证头为 `X-Screen-Time-Token`。5.0 起 `LineWebPusher` 支持云端同步：主页「云端同步」按钮（`MainWindow::cloudSyncRequested` → `LineWebPusher::syncNow`）立即补推并拉取 `GET <endpoint>/api/health/daily-goal/data` 的云端每日目标（响应字段 `goal`，写回 `daily_goal` 设置），拉取时间记入 `lineweb_last_fetch`；失败/未配置时弹 `QMessageBox` 提示，不影响其他功能。云端协议细节以 `docs/health-api.md` 为准。设置变更后必须让 `LineWebPusher`、`WindowTracker` 和 `AiClient` 重新加载配置。
 
 ## 数据库线程安全
@@ -159,6 +161,7 @@ int DatabaseManager::getTodayTotal()
 | 运行测试没有 `QT_PLUGIN_PATH` | 找不到 QSQLITE 驱动或 `0xc0000135` | 设置 Qt plugins 路径和完整 MinGW/Qt PATH |
 | 运行中的 `TimeMaster.exe` 占用输出文件 | linker permission denied | 构建前退出程序；必要时使用 `taskkill /f /im TimeMaster.exe` |
 | `WindowTracker` 使用硬编码轮询间隔 | 用户设置不生效 | 使用 `TrackingConfig::pollIntervalMs`，并在 reload 时读取 `poll_interval` |
+| 统计查询用 `date(start_time)` 包裹 | `idx_sessions_start` 失效，仪表盘刷新全表扫描变慢 | 改用定长 ISO 文本开区间 `start_time >= ? AND < 次日`（`dayEndExclusive`） |
 | 追踪线程共享 GUI 线程的 `QSqlDatabase` | 跨线程 SQLite 竞态/崩溃 | 在 `run()` 内用 `m_db->databasePath()` 创建独立 `DatabaseManager` |
 | `DatabaseManager::close()` 重复调用 | 移除无效连接或退出异常 | 保留并使用 `m_closed` 防重入 |
 | 忽略应用重复添加 | 返回 0 或重复项 | 先查询已有 ID，再插入 |
