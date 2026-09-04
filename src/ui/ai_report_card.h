@@ -2,6 +2,7 @@
 
 #include "ui/card_frame.h"
 
+#include <QColor>
 #include <QString>
 
 class AiClient;
@@ -29,9 +30,9 @@ public slots:
     void showError(const QString &error);
 
 signals:
-    /// 用户点击「生成分析」。
+    /// 融合按钮分流：AI 已配置且报告非今日最新时先生成。
     void generateRequested();
-    /// 用户点击「今日报告」：请求在浏览器打开今日报告网页。
+    /// 融合按钮分流：报告已最新或未配置 AI 时，请求在浏览器打开今日报告网页。
     void dailyReportOpenRequested();
     /// 用户点击「昨日报告」：请求在浏览器打开昨日报告网页。
     void yesterdayReportOpenRequested();
@@ -46,6 +47,10 @@ private:
     void showWeeklyMenu();
     void refreshContent();
     void updateSummaryCard();
+    /// 把状态信息文本（日期/生成态）显示在标题「AI 使用报告」右侧。
+    void setHeaderStatus(const QString &text, const QColor &color);
+    /// 今日 AI 日报缓存是否新鲜（缓存锚点日期等于今天）。
+    bool isCacheFreshToday() const;
     /// 提取「【总结】」/「总结：」后的短语；超长按字符截断。
     QString summaryPhrase() const;
     /// 短语统一截断：超过 24 字截为前 24 字 + 省略号。
@@ -61,5 +66,6 @@ private:
     bool m_loading = false;
 
     SummaryCard *m_summaryCard = nullptr;
+    QLabel *m_statusLabel = nullptr;
     QString m_weeklyReportPath;
 };

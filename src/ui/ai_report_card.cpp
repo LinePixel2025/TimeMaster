@@ -29,7 +29,8 @@ QString weekdayCn(int dayOfWeek)
 
 } // namespace
 
-/// AI 洞察条：左侧仅保留状态与结论，右侧收纳主次操作。
+/// AI 洞察条：左侧只保留大字结论（状态信息已上移至卡片标题行），
+/// 右侧收纳融合后的主操作与昨日/周报次入口。
 class SummaryCard : public QWidget
 {
     Q_OBJECT
@@ -49,11 +50,6 @@ public:
         insightLayout->setContentsMargins(0, 0, 0, 0);
         insightLayout->setSpacing(DesignTokens::kCompactGap);
 
-        m_statusLabel = new QLabel(m_insightArea);
-        m_statusLabel->setObjectName(QStringLiteral("aiInsightStatus"));
-        m_statusLabel->setFont(DesignTokens::eyebrowFont(11));
-        insightLayout->addWidget(m_statusLabel);
-
         m_phraseLabel = new QLabel(m_insightArea);
         m_phraseLabel->setObjectName(QStringLiteral("aiInsightPhrase"));
         m_phraseLabel->setWordWrap(true);
@@ -65,21 +61,14 @@ public:
         m_actionsLayout->setContentsMargins(0, 0, 0, 0);
         m_actionsLayout->setSpacing(DesignTokens::kControlGap);
 
-        m_generateBtn = new QPushButton(QStringLiteral("生成分析"), m_actionArea);
-        m_generateBtn->setObjectName(QStringLiteral("aiGenerateButton"));
-        m_generateBtn->setCursor(Qt::PointingHandCursor);
-        m_generateBtn->setMinimumHeight(DesignTokens::kActionButtonMinHeight);
-        connect(m_generateBtn, &QPushButton::clicked,
-                this, &SummaryCard::refreshRequested);
-        m_actionsLayout->addWidget(m_generateBtn);
-
-        m_detailBtn = new QPushButton(QStringLiteral("今日报告"), m_actionArea);
-        m_detailBtn->setObjectName(QStringLiteral("aiDailyReportButton"));
-        m_detailBtn->setCursor(Qt::PointingHandCursor);
-        m_detailBtn->setMinimumHeight(DesignTokens::kActionButtonMinHeight);
-        connect(m_detailBtn, &QPushButton::clicked,
-                this, &SummaryCard::detailClicked);
-        m_actionsLayout->addWidget(m_detailBtn);
+        // 融合后的主按钮：由外层按状态设定「生成分析」/「今日报告」等文案。
+        m_primaryBtn = new QPushButton(QStringLiteral("生成分析"), m_actionArea);
+        m_primaryBtn->setObjectName(QStringLiteral("aiPrimaryReportButton"));
+        m_primaryBtn->setCursor(Qt::PointingHandCursor);
+        m_primaryBtn->setMinimumHeight(DesignTokens::kActionButtonMinHeight);
+        connect(m_primaryBtn, &QPushButton::clicked,
+                this, &SummaryCard::primaryClicked);
+        m_actionsLayout->addWidget(m_primaryBtn);
 
         m_yesterdayBtn = new QPushButton(QStringLiteral("昨日报告"), m_actionArea);
         m_yesterdayBtn->setObjectName(QStringLiteral("aiYesterdayReportButton"));
@@ -137,42 +126,23 @@ public:
                  DesignTokens::kProgressBg().name(),
                  DesignTokens::kTextMute().name())
             + UiUtils::focusBorderRule();
-        m_generateBtn->setStyleSheet(primary);
-        m_detailBtn->setStyleSheet(secondary);
+        m_primaryBtn->setStyleSheet(primary);
         m_yesterdayBtn->setStyleSheet(secondary);
         m_weeklyBtn->setStyleSheet(secondary);
     }
 
-    void setStatus(const QString &text, const QColor &color)
-    {
-        m_statusLabel->setText(text);
-        m_statusLabel->setStyleSheet(
-            QStringLiteral("color: %1; background: transparent;").arg(color.name()));
-    }
-
     void setPhrase(const QString &phrase) { m_phraseLabel->setText(phrase); }
 
-    /// 生成是主操作；今日/昨日报告始终为次操作；周报以轻量菜单入口保留。
-    void setButtonsVisible(bool generate, bool detail, bool weekly)
+    /// 融合主按钮的文案与可用状态，由外层按当前报告状态设定。
+    void setPrimaryButton(const QString &text, bool enabled)
     {
-        m_generateBtn->setVisible(generate);
-        m_detailBtn->setVisible(detail);
-        m_yesterdayBtn->setVisible(detail);
-        m_weeklyBtn->setVisible(weekly);
-    }
-
-    void setGenerateLoading(bool loading, bool retry = false)
-    {
-        m_generateBtn->setText(loading ? QStringLiteral("正在生成…")
-                                       : (retry ? QStringLiteral("重新生成")
-                                                : QStringLiteral("生成分析")));
-        m_generateBtn->setEnabled(!loading);
+        m_primaryBtn->setText(text);
+        m_primaryBtn->setEnabled(enabled);
     }
 
 signals:
-    void detailClicked();
+    void primaryClicked();
     void yesterdayClicked();
-    void refreshRequested();
     void weeklyClicked();
 
 protected:
@@ -200,11 +170,9 @@ private:
     QBoxLayout *m_actionsLayout = nullptr;
     QWidget *m_insightArea = nullptr;
     QWidget *m_actionArea = nullptr;
-    QLabel *m_statusLabel = nullptr;
     QLabel *m_phraseLabel = nullptr;
-    QPushButton *m_generateBtn = nullptr;
+    QPushButton *m_primaryBtn = nullptr;
     QPushButton *m_weeklyBtn = nullptr;
-    QPushButton *m_detailBtn = nullptr;
     QPushButton *m_yesterdayBtn = nullptr;
 };
 
@@ -220,15 +188,33 @@ AiReportCard::AiReportCard(AiClient *ai, QWidget *parent)
                                         DesignTokens::kSpacingLg);
     contentLayout()->setSpacing(DesignTokens::kControlGap);
 
+    // 状态信息（日期/生成态）移到标题右侧，仿 TrendCard 的标题行模式。
+    auto *header = new QHBoxLayout();
+    header->setContentsMargins(0, 0, 0, 0);
+    header->setSpacing(DesignTokens::kControlGap);
+    QLabel *title = titleLabel();
+    contentLayout()->removeWidget(title);
+    header->addWidget(title);
+    header->addStretch();
+    m_statusLabel = new QLabel(this);
+    m_statusLabel->setObjectName(QStringLiteral("aiReportCardStatus"));
+    m_statusLabel->setFont(DesignTokens::eyebrowFont(11));
+    header->addWidget(m_statusLabel, 0, Qt::AlignVCenter);
+    contentLayout()->insertLayout(0, header);
+
     m_summaryCard = new SummaryCard(this);
-    connect(m_summaryCard, &SummaryCard::detailClicked,
-            this, &AiReportCard::dailyReportOpenRequested);
+    connect(m_summaryCard, &SummaryCard::primaryClicked, this, [this]() {
+        // 融合按钮统一分流：已配置且缓存非今日 → 先生成（完成后由 main 自动
+        // 打开日报网页）；否则（已最新 / 未配置）直接打开今日报告。
+        if (m_ai->isConfigured() && !isCacheFreshToday()) {
+            setLoading(true);
+            emit generateRequested();
+        } else {
+            emit dailyReportOpenRequested();
+        }
+    });
     connect(m_summaryCard, &SummaryCard::yesterdayClicked,
             this, &AiReportCard::yesterdayReportOpenRequested);
-    connect(m_summaryCard, &SummaryCard::refreshRequested, this, [this]() {
-        setLoading(true);
-        emit generateRequested();
-    });
     connect(m_summaryCard, &SummaryCard::weeklyClicked,
             this, &AiReportCard::showWeeklyMenu);
     contentLayout()->addWidget(m_summaryCard);
@@ -303,52 +289,68 @@ void AiReportCard::showWeeklyMenu()
     menu.exec(m_summaryCard->mapToGlobal(m_summaryCard->rect().bottomRight()));
 }
 
+bool AiReportCard::isCacheFreshToday() const
+{
+    return m_ai->cachedReportDate(AiPeriod::daily())
+        == QDate::currentDate().toString(Qt::ISODate);
+}
+
+void AiReportCard::setHeaderStatus(const QString &text, const QColor &color)
+{
+    m_statusLabel->setText(text);
+    m_statusLabel->setStyleSheet(
+        QStringLiteral("color: %1; background: transparent;").arg(color.name()));
+}
+
 void AiReportCard::refreshContent()
 {
     const bool hasReport = !m_reportText.isEmpty();
-    m_summaryCard->setGenerateLoading(m_loading, !m_error.isEmpty());
 
     if (m_loading) {
-        m_summaryCard->setStatus(QStringLiteral("今日洞察 · 正在生成"),
-                                 DesignTokens::kAccent());
+        m_summaryCard->setPrimaryButton(QStringLiteral("正在生成…"), false);
+        setHeaderStatus(QStringLiteral("今日洞察 · 正在生成"),
+                        DesignTokens::kAccent());
         m_summaryCard->setPhrase(QStringLiteral("正在分析今日使用数据"));
-        m_summaryCard->setButtonsVisible(true, true, true);
         return;
     }
 
     if (!m_error.isEmpty()) {
-        m_summaryCard->setStatus(QStringLiteral("今日洞察 · 生成失败"),
-                                 DesignTokens::kError());
+        m_summaryCard->setPrimaryButton(QStringLiteral("重新生成"), true);
+        setHeaderStatus(QStringLiteral("今日洞察 · 生成失败"),
+                        DesignTokens::kError());
         m_summaryCard->setPhrase(QStringLiteral("生成失败，可以重试"));
-        m_summaryCard->setButtonsVisible(true, true, true);
         return;
     }
 
     if (!m_ai->isConfigured()) {
         m_reportText.clear();
-        m_summaryCard->setStatus(QStringLiteral("AI 尚未配置"),
-                                 DesignTokens::kTextMute());
+        // 未配置时点击融合按钮直接打开统计版日报网页。
+        m_summaryCard->setPrimaryButton(QStringLiteral("今日报告"), true);
+        setHeaderStatus(QStringLiteral("AI 尚未配置"),
+                        DesignTokens::kTextMute());
         m_summaryCard->setPhrase(QStringLiteral("今日统计已经准备好"));
-        m_summaryCard->setButtonsVisible(false, true, true);
         return;
     }
 
     if (hasReport) {
+        const bool fresh = isCacheFreshToday();
+        m_summaryCard->setPrimaryButton(
+            fresh ? QStringLiteral("今日报告")
+                  : QStringLiteral("生成分析"),
+            true);
         const QString cachedDate = m_ai->cachedReportDate(AiPeriod::daily());
-        const bool fresh = (cachedDate == QDate::currentDate().toString(Qt::ISODate));
-        m_summaryCard->setStatus(
+        setHeaderStatus(
             fresh ? QStringLiteral("%1 · 已更新").arg(todayText())
                   : QStringLiteral("缓存于 %1 · 可重新生成").arg(cachedDate),
             DesignTokens::kTextMute());
         updateSummaryCard();
-        m_summaryCard->setButtonsVisible(true, true, true);
         return;
     }
 
-    m_summaryCard->setStatus(QStringLiteral("今日洞察 · 尚未生成"),
-                             DesignTokens::kTextMute());
+    m_summaryCard->setPrimaryButton(QStringLiteral("生成分析"), true);
+    setHeaderStatus(QStringLiteral("今日洞察 · 尚未生成"),
+                    DesignTokens::kTextMute());
     m_summaryCard->setPhrase(QStringLiteral("生成一份基于今日记录的使用分析"));
-    m_summaryCard->setButtonsVisible(true, true, true);
 }
 
 void AiReportCard::updateSummaryCard()
