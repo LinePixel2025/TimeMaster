@@ -4,11 +4,10 @@
 #include <QTimer>
 
 class DatabaseManager;
-class QPushButton;
-class QLabel;
 class QGridLayout;
 class QScrollArea;
 class QVBoxLayout;
+class TitleBar;
 
 class HeroCard;
 class TrendCard;
@@ -69,12 +68,7 @@ private:
 
     DatabaseManager *m_db = nullptr;
     QTimer *m_refreshTimer = nullptr;
-    QPushButton *m_themeBtn = nullptr;
-    QPushButton *m_moreBtn = nullptr;
-    QPushButton *m_settingsBtn = nullptr;
-    QLabel *m_titleLabel = nullptr;
-    QLabel *m_dateLabel = nullptr;
-    QLabel *m_statusChip = nullptr;
+    TitleBar *m_titleBar = nullptr;
     QVBoxLayout *m_rootLayout = nullptr;
     QScrollArea *m_dashboardScroll = nullptr;
     QWidget *m_dashboardContent = nullptr;
@@ -82,7 +76,6 @@ private:
     bool m_narrowLayout = true;
     bool m_trackingPaused = false;
     QString m_activeApp;
-    QString m_statusText;
     HeroCard *m_heroCard = nullptr;
     TrendCard *m_trendCard = nullptr;
     RankCard *m_rankCard = nullptr;

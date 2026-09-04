@@ -2,9 +2,9 @@
 #include "database/database_manager.h"
 #include "ai/ai_client.h"
 #include "ui/settings_dialog.h"
-#include "ui/settings_icons.h"
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
+#include "ui/title_bar.h"
 #include "ui/dashboard_layout.h"
 #include "ui/ui_utils.h"
 #include "ui/hero_card.h"
@@ -18,19 +18,17 @@
 #include <QShowEvent>
 #include <QResizeEvent>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
 #include <QLayout>
 #include <QGridLayout>
-#include <QPushButton>
 #include <QInputDialog>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QMenu>
 #include <QWidget>
 #include <QApplication>
-#include <QLabel>
 #include <QScreen>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QGuiApplication>
 #include <QDate>
 #include <QDateTime>
@@ -78,57 +76,13 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     setCentralWidget(central);
 
     m_rootLayout = new QVBoxLayout(central);
+    // 顶部 margin 置 0：让滚动区满血顶到 central 顶部，内容可滚动到标题栏下方。
+    // 标题栏是独立 overlay（见下文 m_titleBar），不再占用根布局的一行。
     m_rootLayout->setContentsMargins(DesignTokens::kOuterMargin,
-                                     DesignTokens::kWindowTopMargin,
+                                     0,
                                      DesignTokens::kOuterMargin,
                                      DesignTokens::kWindowBottomMargin);
-    m_rootLayout->setSpacing(DesignTokens::kSectionSpacing);
-
-    auto *headerLayout = new QHBoxLayout();
-    headerLayout->setSpacing(DesignTokens::kHeaderSpacing);
-
-    auto *titleColumn = new QVBoxLayout();
-    titleColumn->setSpacing(DesignTokens::kTitleStackSpacing);
-    m_titleLabel = new QLabel("Time Master", central);
-    m_titleLabel->setFont(DesignTokens::appFont(20, QFont::DemiBold));
-    titleColumn->addWidget(m_titleLabel);
-    m_dateLabel = new QLabel(dateText(), central);
-    m_dateLabel->setFont(DesignTokens::appFont(11));
-    titleColumn->addWidget(m_dateLabel);
-    headerLayout->addLayout(titleColumn);
-    headerLayout->addStretch();
-
-    m_statusChip = new QLabel(QStringLiteral("空闲"), central);
-    m_statusChip->setObjectName(QStringLiteral("statusChip"));
-    m_statusChip->setFont(DesignTokens::appFont(11, QFont::Medium));
-    m_statusChip->setAlignment(Qt::AlignVCenter);
-    m_statusChip->setMaximumWidth(DesignTokens::kStatusChipMaxWidth);
-    m_statusChip->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-    headerLayout->addWidget(m_statusChip);
-
-    m_themeBtn = new QPushButton(central);
-    m_themeBtn->setFixedSize(DesignTokens::kIconButtonSize, DesignTokens::kIconButtonSize);
-    m_themeBtn->setCursor(Qt::PointingHandCursor);
-    connect(m_themeBtn, &QPushButton::clicked, this, []() {
-        ThemeManager::instance()->toggle();
-    });
-    headerLayout->addWidget(m_themeBtn);
-
-    m_moreBtn = new QPushButton(central);
-    m_moreBtn->setFixedSize(DesignTokens::kIconButtonSize, DesignTokens::kIconButtonSize);
-    m_moreBtn->setCursor(Qt::PointingHandCursor);
-    m_moreBtn->setToolTip(QStringLiteral("更多"));
-    connect(m_moreBtn, &QPushButton::clicked, this, &MainWindow::onMoreMenu);
-    headerLayout->addWidget(m_moreBtn);
-
-    m_settingsBtn = new QPushButton(central);
-    m_settingsBtn->setFixedSize(DesignTokens::kIconButtonSize, DesignTokens::kIconButtonSize);
-    m_settingsBtn->setCursor(Qt::PointingHandCursor);
-    m_settingsBtn->setToolTip(QStringLiteral("设置"));
-    connect(m_settingsBtn, &QPushButton::clicked, this, &MainWindow::onSettings);
-    headerLayout->addWidget(m_settingsBtn);
-
-    m_rootLayout->addLayout(headerLayout);
+    m_rootLayout->setSpacing(0);
 
     m_dashboardScroll = new QScrollArea(central);
     m_dashboardScroll->setObjectName(QStringLiteral("dashboardScroll"));
@@ -144,7 +98,11 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     m_dashboardContent->setObjectName(QStringLiteral("dashboardContent"));
     m_dashboardContent->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
     auto *dashboardLayout = new QVBoxLayout(m_dashboardContent);
-    dashboardLayout->setContentsMargins(0, 0, 0, 0);
+    // 顶部留出标题栏高度 + 一节间距：滚动到顶时首张卡片停在标题栏下方；
+    // 向下滚动时卡片滑入标题栏底部被磨砂渐变吞没。
+    dashboardLayout->setContentsMargins(0, TitleBar::desiredHeight()
+                                            + DesignTokens::kSectionSpacing,
+                                        0, 0);
     dashboardLayout->setSpacing(0);
     dashboardLayout->setSizeConstraint(QLayout::SetMinimumSize);
 
@@ -177,6 +135,23 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
     dashboardLayout->addStretch(1);
     m_dashboardScroll->setWidget(m_dashboardContent);
     m_rootLayout->addWidget(m_dashboardScroll, 1);
+
+    // 磨砂标题栏 overlay：作为 central 的子部件覆盖在滚动区上方，不占用根布局行。
+    // 初始几何在首次 resizeEvent 中定位；先用一个合理占位，避免首帧无标题栏。
+    m_titleBar = new TitleBar(m_dashboardScroll, central);
+    m_titleBar->setGeometry(0, 0, width(), TitleBar::desiredHeight());
+    connect(m_titleBar, &TitleBar::themeButtonClicked, this, []() {
+        ThemeManager::instance()->toggle();
+    });
+    connect(m_titleBar, &TitleBar::moreButtonClicked, this, &MainWindow::onMoreMenu);
+    connect(m_titleBar, &TitleBar::settingsButtonClicked, this, &MainWindow::onSettings);
+    m_titleBar->raise();
+
+    // 滚动/内容变化时让标题栏重新抓取磨砂底。
+    connect(m_dashboardScroll->verticalScrollBar(), &QScrollBar::valueChanged,
+            m_titleBar, &TitleBar::invalidateBackdrop);
+    connect(m_dashboardScroll->verticalScrollBar(), &QScrollBar::rangeChanged,
+            m_titleBar, &TitleBar::invalidateBackdrop);
 
     connect(m_aiCard, &AiReportCard::generateRequested, this, [this]() {
         emit aiReportRequested(AiPeriod::daily());
@@ -220,6 +195,9 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
                              theme == ThemeManager::Dark);
     });
 
+    if (m_titleBar)
+        m_titleBar->setDateText(dateText());
+
     applyTheme();
     updateStatusChip();
     applyResponsiveLayout();
@@ -261,36 +239,8 @@ void MainWindow::applyTheme()
     m_dashboardScroll->viewport()->setStyleSheet(
         QStringLiteral("#dashboardViewport { background: transparent; }"));
 
-    m_titleLabel->setStyleSheet(QString("color: %1; background: transparent;")
-        .arg(DesignTokens::kTextStrong().name()));
-    m_dateLabel->setStyleSheet(QString("color: %1; background: transparent;")
-        .arg(DesignTokens::kTextMute().name()));
-
-    const QString iconStyle = QString(
-        "QPushButton { background: transparent; color: %1; border: 1px solid transparent;"
-        " border-radius: %2px; font-size: 16px; padding: 0; }"
-        "QPushButton:hover { background: %3; border-color: %4; }")
-        .arg(DesignTokens::kTextMute().name(),
-             QString::number(DesignTokens::kRadiusBtn),
-             DesignTokens::kButtonHoverBg().name(),
-             DesignTokens::kBorder().name())
-        + UiUtils::focusBorderRule();
-    m_themeBtn->setStyleSheet(iconStyle);
-    m_moreBtn->setStyleSheet(iconStyle);
-    m_settingsBtn->setStyleSheet(iconStyle);
-
-    const bool dark = ThemeManager::instance()->isDark();
-    m_themeBtn->setIcon(SettingsIcons::icon(
-        dark ? SettingsIcons::Sun : SettingsIcons::Moon, 18, DesignTokens::kTextMute()));
-    m_themeBtn->setIconSize(QSize(18, 18));
-    m_themeBtn->setToolTip(dark ? QStringLiteral("切换到浅色模式")
-                                : QStringLiteral("切换到暗色模式"));
-    m_moreBtn->setIcon(SettingsIcons::icon(
-        SettingsIcons::More, 18, DesignTokens::kTextMute()));
-    m_moreBtn->setIconSize(QSize(18, 18));
-    m_settingsBtn->setIcon(SettingsIcons::icon(
-        SettingsIcons::Gear, 18, DesignTokens::kTextMute()));
-    m_settingsBtn->setIconSize(QSize(18, 18));
+    if (m_titleBar)
+        m_titleBar->applyTheme();
 
     updateStatusChip();
 }
@@ -314,30 +264,16 @@ void MainWindow::updateStatusChip()
         text = QStringLiteral("追踪中 · %1").arg(m_activeApp);
     }
 
-    m_statusText = text;
-    m_statusChip->setToolTip(m_statusText);
-    m_statusChip->setStyleSheet(
-        QStringLiteral("QLabel { color: %1; background: %2; border-radius: %3px;"
-                       " padding: %4px %5px; }")
-            .arg(fg.name(), bg.name(QColor::HexArgb),
-                 QString::number(DesignTokens::kRadiusChip),
-                 QString::number(DesignTokens::kStatusChipPaddingV),
-                 QString::number(DesignTokens::kStatusChipPaddingH)));
-    updateStatusChipText();
+    if (m_titleBar) {
+        m_titleBar->setStatus(text, fg, bg);
+        m_titleBar->refreshStatus();
+    }
 }
 
 void MainWindow::updateStatusChipText()
 {
-    if (!m_statusChip)
-        return;
-
-    // 按固定最大宽度上限省略：若按当前 contentsRect 省略，芯片会因
-    // sizeHint 收缩陷入「越省越窄」的死循环，最终只剩「追…」。
-    const int available = DesignTokens::kStatusChipMaxWidth
-        - 2 * DesignTokens::kStatusChipPaddingH;
-    const QString displayText = QFontMetrics(m_statusChip->font()).elidedText(
-        m_statusText, Qt::ElideRight, available);
-    m_statusChip->setText(displayText);
+    if (m_titleBar)
+        m_titleBar->refreshStatus();
 }
 
 void MainWindow::applyResponsiveLayout()
@@ -389,11 +325,18 @@ void MainWindow::showEvent(QShowEvent *event)
     applyDwmTitleBar(reinterpret_cast<HWND>(winId()),
                      ThemeManager::instance()->isDark());
     updateStatusChipText();
+    if (m_titleBar)
+        m_titleBar->invalidateBackdrop();
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
+    if (m_titleBar) {
+        m_titleBar->setGeometry(0, 0, width(), m_titleBar->height());
+        m_titleBar->raise();
+        m_titleBar->invalidateBackdrop();
+    }
     applyResponsiveLayout();
     updateStatusChipText();
 }
@@ -426,7 +369,10 @@ void MainWindow::refreshData()
     }
 
     m_rankCard->refresh(m_db->getAppRank());
-    m_dateLabel->setText(dateText());
+    if (m_titleBar) {
+        m_titleBar->setDateText(dateText());
+        m_titleBar->invalidateBackdrop();
+    }
     updateStatusChip();
 }
 
@@ -459,7 +405,7 @@ void MainWindow::onMoreMenu()
     QAction *exportAct = menu.addAction(QStringLiteral("导出记录"));
     QAction *syncAct = menu.addAction(QStringLiteral("云端同步"));
     QAction *refreshAct = menu.addAction(QStringLiteral("刷新"));
-    QAction *chosen = menu.exec(m_moreBtn->mapToGlobal(QPoint(0, m_moreBtn->height())));
+    QAction *chosen = menu.exec(m_titleBar->moreButtonGlobalPos());
     if (chosen == exportAct)
         onExport();
     else if (chosen == syncAct)
