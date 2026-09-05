@@ -42,6 +42,37 @@ void test_disabled_no_request()
     std::cout << "test_disabled_no_request PASS" << std::endl;
 }
 
+void test_identify_app_short_circuit()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    db.setSetting("ai_enabled", "false");
+    db.setSetting("ai_api_key", "sk-test");
+    db.setSetting("ai_api_endpoint", "http://127.0.0.1:1");
+
+    AiClient ai(&db);
+    ai.reloadSettings();
+    QSignalSpy readySpy(&ai, &AiClient::identifyReady);
+    QSignalSpy failSpy(&ai, &AiClient::identifyFailed);
+
+    // 未启用：不发起请求。
+    assert(!ai.identifyApp({QStringLiteral("OBS Studio")}, QStringLiteral("pid_1")));
+
+    // 已配置但标题全是 pid_ 兜底：过滤后为空，同样不发请求。
+    db.setSetting("ai_enabled", "true");
+    ai.reloadSettings();
+    assert(ai.isConfigured());
+    assert(!ai.identifyApp({QStringLiteral("pid_12345"), QStringLiteral(" pid_x ")},
+                           QStringLiteral("pid_12345")));
+    assert(readySpy.count() == 0);
+    assert(failSpy.count() == 0);
+    std::cout << "test_identify_app_short_circuit PASS" << std::endl;
+}
+
 void test_missing_config_no_request()
 {
     QTemporaryFile tmpFile;
@@ -162,6 +193,7 @@ int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
     test_disabled_no_request();
+    test_identify_app_short_circuit();
     test_missing_config_no_request();
     test_no_data_no_request();
     test_invalid_endpoint_fails();

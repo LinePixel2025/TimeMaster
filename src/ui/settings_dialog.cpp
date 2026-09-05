@@ -7,6 +7,7 @@
 #include "ui/design_tokens.h"
 #include "ui/ui_utils.h"
 #include "ui/settings_icons.h"
+#include "ui/toggle_switch.h"
 #include "ui/update_dialog.h"
 #include "utility/process_identity.h"
 #include "push/lineweb_pusher.h"
@@ -166,14 +167,7 @@ QString settingsStyle()
         "QSpinBox::up-arrow:disabled, QSpinBox::down-arrow:disabled { border-bottom-color: %8; }"
         "QSpinBox::down-arrow:disabled { border-top-color: %8; }"
 
-        "QCheckBox { color: %4; spacing: 12px; padding: 8px 0; }"
-        "QCheckBox:disabled { color: %8; }"
-        "QCheckBox::indicator { width: 36px; height: 20px; border-radius: 10px; }"
-        "QCheckBox::indicator:unchecked { background: %13; border: 1px solid %3; }"
-        "QCheckBox::indicator:unchecked:hover { border-color: %6; }"
-        "QCheckBox::indicator:checked { background: %6; border: 1px solid %6; }"
-        "QCheckBox::indicator:checked:hover { background: %10; border-color: %10; }"
-        "QCheckBox::indicator:disabled { background: %13; border-color: %3; }"
+        // 开关统一用 ToggleSwitch 自绘（QSS 画不出滑动圆钮），不再配 QCheckBox 规则。
 
         "QListWidget, QTableWidget { color: %4; background: %2; border: 1px solid %3;"
         " border-radius: 8px; alternate-background-color: %13; outline: 0; }"
@@ -218,8 +212,8 @@ QString settingsStyle()
 } // namespace
 
 SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
-                               QWidget *parent)
-    : QDialog(parent), m_db(db), m_updater(updater)
+                               AiClient *ai, QWidget *parent)
+    : QDialog(parent), m_db(db), m_ai(ai), m_updater(updater)
 {
     setWindowTitle(QString::fromUtf8("设置"));
     resize(980, 640);
@@ -345,7 +339,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
     // 独立 QWidget（src/ui/app_manage_page）：列表 + 属性面板的交互较重，
     // 内联到本构造函数里会让其进一步膨胀。
     {
-        m_appManagePage = new AppManagePage(m_db, this);
+        m_appManagePage = new AppManagePage(m_db, m_ai, this);
         connect(m_appManagePage, &AppManagePage::appsChanged,
                 this, &SettingsDialog::settingsChanged);
         m_stack->addWidget(m_appManagePage);
@@ -358,7 +352,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         QVBoxLayout *switchCardLayout = nullptr;
         addSectionCard(pageLayout, QString::fromUtf8("追踪开关"),
                        this, &switchCardLayout, 0);
-        m_trackingEnabled = new QCheckBox(
+        m_trackingEnabled = new ToggleSwitch(
             QString::fromUtf8("启用追踪"), this);
         m_trackingEnabled->setFont(DesignTokens::appFont(13));
         m_trackingEnabled->setToolTip(
@@ -417,7 +411,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         QVBoxLayout *appearanceCardLayout = nullptr;
         addSectionCard(pageLayout, QString::fromUtf8("外观"),
                        this, &appearanceCardLayout, 0);
-        m_darkMode = new QCheckBox(
+        m_darkMode = new ToggleSwitch(
             QString::fromUtf8("暗色模式"), this);
         m_darkMode->setFont(DesignTokens::appFont(13));
         m_darkMode->setToolTip(
@@ -487,7 +481,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         QVBoxLayout *startCardLayout = nullptr;
         addSectionCard(pageLayout, QString::fromUtf8("启动与目标"),
                        this, &startCardLayout, 0);
-        m_autoStart = new QCheckBox(
+        m_autoStart = new ToggleSwitch(
             QString::fromUtf8("开机自启"), this);
         m_autoStart->setFont(DesignTokens::appFont(13));
         m_autoStart->setToolTip(
@@ -513,7 +507,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         addSectionCard(pageLayout, QString::fromUtf8("定时提醒"),
                        this, &remindCardLayout, 1);
 
-        m_reminderEnabled = new QCheckBox(
+        m_reminderEnabled = new ToggleSwitch(
             QString::fromUtf8("启用定时提醒"), this);
         m_reminderEnabled->setFont(DesignTokens::appFont(13));
         m_reminderEnabled->setToolTip(
@@ -580,7 +574,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         addSectionCard(pageLayout, QString::fromUtf8("间隔提醒"),
                        this, &intervalCardLayout, 0);
 
-        m_intervalReminderEnabled = new QCheckBox(
+        m_intervalReminderEnabled = new ToggleSwitch(
             QString::fromUtf8("启用间隔提醒"), this);
         m_intervalReminderEnabled->setFont(DesignTokens::appFont(13));
         m_intervalReminderEnabled->setToolTip(
@@ -615,7 +609,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         addSectionCard(pageLayout, QString::fromUtf8("每周周报"),
                        this, &weeklyCardLayout, 0);
 
-        m_weeklyReportEnabled = new QCheckBox(
+        m_weeklyReportEnabled = new ToggleSwitch(
             QString::fromUtf8("每周自动生成周使用日报"), this);
         m_weeklyReportEnabled->setFont(DesignTokens::appFont(13));
         m_weeklyReportEnabled->setToolTip(
@@ -663,7 +657,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         addSectionCard(pageLayout, QString::fromUtf8("推送配置"),
                        this, &configCardLayout, 0);
 
-        m_linewebEnabled = new QCheckBox(
+        m_linewebEnabled = new ToggleSwitch(
             QString::fromUtf8("启用推送"), this);
         m_linewebEnabled->setFont(DesignTokens::appFont(13));
         m_linewebEnabled->setToolTip(
@@ -785,7 +779,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         addSectionCard(pageLayout, QString::fromUtf8("AI 配置"),
                        this, &configCardLayout, 0);
 
-        m_aiEnabled = new QCheckBox(
+        m_aiEnabled = new ToggleSwitch(
             QString::fromUtf8("启用 AI 报告"), this);
         m_aiEnabled->setFont(DesignTokens::appFont(13));
         m_aiEnabled->setToolTip(

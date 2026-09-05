@@ -12,6 +12,7 @@
 #include <QVector>
 #include <QVariantMap>
 #include "database/database_manager.h"
+#include "ui/group_icons.h"
 
 namespace {
 
@@ -61,6 +62,11 @@ void test_preset_groups_seeded_once()
     assert(groups[0]["name"].toString() == QString::fromUtf8("开发效率"));
     assert(groups[0]["members"].toInt() == 0);
     assert(groups[0]["builtin"].toBool());
+    // 预设组别带固定图标（emoji），非空且与预设表一致。
+    assert(groups[0]["icon"].toString() == QString::fromUtf8("💻"));
+    for (const QVariantMap &row : groups)
+        assert(row["icon"].toString() == GroupIcons::presetIconFor(row["name"].toString())
+               && !row["icon"].toString().isEmpty());
 
     // 删掉一个预设后重新打开数据库，不应被重新播种。
     db->removeGroup(groups[0]["id"].toInt());
@@ -102,6 +108,51 @@ void test_group_crud()
         assert(row["id"].toInt() != custom);
 
     std::cout << "test_group_crud PASS" << std::endl;
+}
+
+void test_group_icons()
+{
+    QString path;
+    QScopedPointer<DatabaseManager> db(makeDb(&path));
+
+    // 新建组别可指定 emoji 图标。
+    const int fitness = db->addGroup(QString::fromUtf8("运动健身"), QString::fromUtf8("🏃"));
+    assert(fitness > 0);
+    bool found = false;
+    for (const QVariantMap &row : db->getGroups()) {
+        if (row["id"].toInt() == fitness) {
+            assert(row["icon"].toString() == QString::fromUtf8("🏃"));
+            found = true;
+        }
+    }
+    assert(found);
+
+    // 不传图标时按名称自动分配非空回退图标（跨进程稳定）。
+    const int reading = db->addGroup(QString::fromUtf8("阅读学习"));
+    QString readingIcon;
+    for (const QVariantMap &row : db->getGroups())
+        if (row["id"].toInt() == reading)
+            readingIcon = row["icon"].toString();
+    assert(readingIcon == GroupIcons::fallbackIcon(QString::fromUtf8("阅读学习")));
+    assert(!readingIcon.isEmpty());
+
+    // 图标可单独更换。
+    db->setGroupIcon(fitness, QString::fromUtf8("🎯"));
+    for (const QVariantMap &row : db->getGroups())
+        if (row["id"].toInt() == fitness)
+            assert(row["icon"].toString() == QString::fromUtf8("🎯"));
+
+    // 置空行重开数据库后由迁移按名称回填；非空图标不受影响。
+    db->setGroupIcon(fitness, QString());
+    db->close();
+    DatabaseManager reopened(path);
+    for (const QVariantMap &row : reopened.getGroups()) {
+        assert(!row["icon"].toString().isEmpty());
+        if (row["id"].toInt() == reading)
+            assert(row["icon"].toString() == readingIcon);
+    }
+
+    std::cout << "test_group_icons PASS" << std::endl;
 }
 
 void test_group_membership_and_ungrouped_fallback()
@@ -302,6 +353,7 @@ void test_managed_apps_reports_metadata()
 
     addSession(db.data(), kCode, QStringLiteral("VS Code"), 300);
     addSession(db.data(), kCode, QStringLiteral("VS Code"), 120);
+    addSession(db.data(), kChrome, QStringLiteral("Chrome"), 600);
 
     int devGroup = -1;
     for (const QVariantMap &row : db->getGroups()) {
@@ -312,17 +364,46 @@ void test_managed_apps_reports_metadata()
     db->setAppAlias(kCode, QStringLiteral("Visual Studio Code"));
 
     QVector<AppEntry> apps = db->getManagedApps();
-    assert(apps.size() == 1);
-    assert(apps[0].processKey == QStringLiteral("code.exe"));
+    assert(apps.size() == 2);
+    // 按累计时长降序：Chrome 600s > code 420s。
+    assert(apps[0].processKey == QStringLiteral("chrome.exe"));
+    assert(apps[0].totalSeconds == 600);
+    assert(apps[1].processKey == QStringLiteral("code.exe"));
     // 别名优先于会话里固化的 app_name。
-    assert(apps[0].displayName == QStringLiteral("Visual Studio Code"));
-    assert(apps[0].groupId == devGroup);
-    assert(apps[0].mergedInto.isEmpty());
-    assert(apps[0].totalSeconds == 420);
-    assert(apps[0].sessionCount == 2);
-    assert(!apps[0].ignored);
+    assert(apps[1].displayName == QStringLiteral("Visual Studio Code"));
+    assert(apps[1].groupId == devGroup);
+    assert(apps[1].mergedInto.isEmpty());
+    assert(apps[1].totalSeconds == 420);
+    assert(apps[1].sessionCount == 2);
+    assert(!apps[1].ignored);
 
     std::cout << "test_managed_apps_reports_metadata PASS" << std::endl;
+}
+
+void test_recent_window_titles()
+{
+    QScopedPointer<DatabaseManager> db(makeDb());
+    const QDateTime base = QDateTime::currentDateTime().addSecs(-3600);
+    auto add = [&](const QString &process, const QString &title, int offsetSecs) {
+        const QDateTime start = base.addSecs(offsetSecs);
+        db->insertSession(process, title, QStringLiteral("app"),
+                          start, start.addSecs(60), 60);
+    };
+    add(QStringLiteral("pid_12345"), QStringLiteral("OBS Studio"), 0);
+    add(QStringLiteral("pid_12345"), QStringLiteral("OBS Studio"), 600); // 重复标题去重
+    add(QStringLiteral("pid_12345"), QString(), 900);                    // 空标题不参与
+    add(QStringLiteral("pid_12345"), QStringLiteral("Premiere Pro"), 1200);
+    add(QStringLiteral("code.exe"), QStringLiteral("window"), 0);
+
+    const QStringList titles = db->getRecentWindowTitles(QStringLiteral("pid_12345"), 10);
+    assert(titles.size() == 2);
+    assert(titles[0] == QStringLiteral("Premiere Pro")); // 按最近出现时间降序
+    assert(titles[1] == QStringLiteral("OBS Studio"));
+    assert(db->getRecentWindowTitles(QStringLiteral("chrome.exe"), 10).isEmpty());
+    // limit 生效
+    assert(db->getRecentWindowTitles(QStringLiteral("pid_12345"), 1).size() == 1);
+
+    std::cout << "test_recent_window_titles PASS" << std::endl;
 }
 
 void test_group_rank_respects_min_record_threshold()
@@ -395,12 +476,14 @@ int main(int argc, char *argv[])
 
     test_preset_groups_seeded_once();
     test_group_crud();
+    test_group_icons();
     test_group_membership_and_ungrouped_fallback();
     test_removing_group_clears_members();
     test_merge_accumulates_and_is_reversible();
     test_merge_rejects_invalid_targets();
     test_ignored_affects_group_rank();
     test_managed_apps_reports_metadata();
+    test_recent_window_titles();
     test_group_rank_respects_min_record_threshold();
     test_group_rank_range_query();
 

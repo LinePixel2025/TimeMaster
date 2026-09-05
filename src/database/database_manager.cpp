@@ -5,6 +5,7 @@
 #include <QStandardPaths>
 #include <QUuid>
 #include <algorithm>
+#include "ui/group_icons.h"
 #include "utility/process_identity.h"
 
 namespace {
@@ -193,8 +194,21 @@ void DatabaseManager::migrate()
         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
         "name TEXT NOT NULL UNIQUE, "
         "sort_order INTEGER NOT NULL DEFAULT 0, "
-        "builtin INTEGER NOT NULL DEFAULT 0)"
+        "builtin INTEGER NOT NULL DEFAULT 0, "
+        "icon TEXT NOT NULL DEFAULT '')"
     );
+
+    // 组别图标列（emoji 文本）：老库 ALTER 补列，随后按名称回填。
+    bool hasGroupIcon = false;
+    q.exec("PRAGMA table_info(app_groups)");
+    while (q.next()) {
+        if (q.value("name").toString() == "icon") {
+            hasGroupIcon = true;
+            break;
+        }
+    }
+    if (!hasGroupIcon)
+        q.exec("ALTER TABLE app_groups ADD COLUMN icon TEXT NOT NULL DEFAULT ''");
 
     q.exec(
         "CREATE TABLE IF NOT EXISTS app_group_members ("
@@ -225,15 +239,37 @@ void DatabaseManager::migrate()
         };
         QSqlQuery insertGroup(m_db);
         insertGroup.prepare(
-            "INSERT OR IGNORE INTO app_groups (name, sort_order, builtin) "
-            "VALUES (?, ?, 1)");
+            "INSERT OR IGNORE INTO app_groups (name, sort_order, builtin, icon) "
+            "VALUES (?, ?, 1, ?)");
         for (int i = 0; i < int(sizeof(presetNames) / sizeof(presetNames[0])); ++i) {
-            insertGroup.bindValue(0, QString::fromUtf8(presetNames[i]));
+            const QString name = QString::fromUtf8(presetNames[i]);
+            insertGroup.bindValue(0, name);
             insertGroup.bindValue(1, i);
+            insertGroup.bindValue(2, GroupIcons::presetIconFor(name));
             if (!insertGroup.exec())
                 qWarning() << "Failed to seed preset group:" << insertGroup.lastError();
         }
         q.exec("INSERT OR IGNORE INTO settings (key, value) VALUES ('app_groups_seeded', '1')");
+    }
+
+    // 图标回填（在播种之后，老库升级时预设组也能拿到固定图标）：只处理
+    // icon 为空的行——预设名取固定图标，其余按名称哈希从色板取，用户已
+    // 挑选过的图标永不被覆盖。
+    {
+        QVector<QPair<int, QString>> iconless;
+        q.exec("SELECT id, name FROM app_groups WHERE icon IS NULL OR icon = ''");
+        while (q.next())
+            iconless.append({q.value("id").toInt(), q.value("name").toString()});
+        QSqlQuery updateIcon(m_db);
+        updateIcon.prepare("UPDATE app_groups SET icon = ? WHERE id = ?");
+        for (const auto &row : iconless) {
+            const QString preset = GroupIcons::presetIconFor(row.second);
+            updateIcon.bindValue(0, preset.isEmpty() ? GroupIcons::fallbackIcon(row.second)
+                                                     : preset);
+            updateIcon.bindValue(1, row.first);
+            if (!updateIcon.exec())
+                qWarning() << "Failed to backfill group icon:" << updateIcon.lastError();
+        }
     }
 
     q.exec("INSERT OR IGNORE INTO settings (key, value) VALUES ('tracking_enabled', 'true')");
@@ -728,7 +764,7 @@ QVector<QVariantMap> DatabaseManager::getGroups()
     QVector<QVariantMap> result;
     QSqlQuery q(m_db);
     // 成员数用相关子查询统计，避免 JOIN 把空组别从结果里过滤掉。
-    q.exec("SELECT g.id, g.name, g.builtin, "
+    q.exec("SELECT g.id, g.name, g.builtin, g.icon, "
            "(SELECT COUNT(*) FROM app_group_members m WHERE m.group_id = g.id) AS members "
            "FROM app_groups g ORDER BY g.sort_order ASC, g.id ASC");
     while (q.next()) {
@@ -736,13 +772,15 @@ QVector<QVariantMap> DatabaseManager::getGroups()
         row[QStringLiteral("id")] = q.value("id");
         row[QStringLiteral("name")] = q.value("name");
         row[QStringLiteral("builtin")] = q.value("builtin").toInt() != 0;
+        row[QStringLiteral("icon")] = GroupIcons::displayIcon(
+            q.value("icon").toString(), q.value("name").toString());
         row[QStringLiteral("members")] = q.value("members");
         result.append(row);
     }
     return result;
 }
 
-int DatabaseManager::addGroup(const QString &name)
+int DatabaseManager::addGroup(const QString &name, const QString &icon)
 {
     QMutexLocker lock(&m_mutex);
     const QString trimmed = name.trimmed();
@@ -759,14 +797,33 @@ int DatabaseManager::addGroup(const QString &name)
     int nextOrder = 1;
     if (q.next())
         nextOrder = q.value(0).toInt();
-    q.prepare("INSERT INTO app_groups (name, sort_order, builtin) VALUES (?, ?, 0)");
+    QString trimmedIcon = icon.trimmed();
+    if (trimmedIcon.isEmpty()) {
+        const QString preset = GroupIcons::presetIconFor(trimmed);
+        trimmedIcon = preset.isEmpty() ? GroupIcons::fallbackIcon(trimmed) : preset;
+    }
+    q.prepare("INSERT INTO app_groups (name, sort_order, builtin, icon) VALUES (?, ?, 0, ?)");
     q.addBindValue(trimmed);
     q.addBindValue(nextOrder);
+    q.addBindValue(trimmedIcon);
     if (!q.exec()) {
         qWarning() << "addGroup failed:" << q.lastError();
         return -1;
     }
     return q.lastInsertId().toInt();
+}
+
+void DatabaseManager::setGroupIcon(int id, const QString &icon)
+{
+    QMutexLocker lock(&m_mutex);
+    if (id <= 0)
+        return;
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE app_groups SET icon = ? WHERE id = ?");
+    q.addBindValue(icon.trimmed());
+    q.addBindValue(id);
+    if (!q.exec())
+        qWarning() << "setGroupIcon failed:" << q.lastError();
 }
 
 void DatabaseManager::renameGroup(int id, const QString &name)
@@ -1149,9 +1206,31 @@ QVector<AppEntry> DatabaseManager::getManagedApps()
     }
     std::sort(result.begin(), result.end(),
               [](const AppEntry &a, const AppEntry &b) {
+                  if (a.totalSeconds != b.totalSeconds)
+                      return a.totalSeconds > b.totalSeconds;
                   return a.displayName.localeAwareCompare(b.displayName) < 0;
               });
     return result;
+}
+
+QStringList DatabaseManager::getRecentWindowTitles(const QString &processKey, int limit)
+{
+    QMutexLocker lock(&m_mutex);
+    QStringList titles;
+    QSqlQuery q(m_db);
+    // 按标题去重、以最近一次出现时间降序：AI 识别优先拿到最新的窗口语境。
+    q.prepare("SELECT window_title FROM sessions "
+              "WHERE process_key = ? AND window_title <> '' "
+              "GROUP BY window_title ORDER BY MAX(start_time) DESC LIMIT ?");
+    q.addBindValue(ProcessIdentity::normalizeKey(processKey));
+    q.addBindValue(limit);
+    if (q.exec()) {
+        while (q.next())
+            titles << q.value(0).toString();
+    } else {
+        qWarning() << "getRecentWindowTitles failed:" << q.lastError();
+    }
+    return titles;
 }
 
 QVector<QVariantMap> DatabaseManager::groupRankLocked(const QString &startIso,

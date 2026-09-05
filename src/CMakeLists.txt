@@ -39,6 +39,8 @@ set(HEADERS
     ui/main_window.h
     ui/settings_dialog.h
     ui/settings_icons.h
+    ui/group_icons.h
+    ui/toggle_switch.h
     ui/app_manage_page.h
     ui/theme_manager.h
     ui/tray_manager.h

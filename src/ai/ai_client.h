@@ -4,6 +4,7 @@
 #include <QDate>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 class QNetworkAccessManager;
 class DatabaseManager;
@@ -49,6 +50,12 @@ public:
     /// 未启用、未配置或该周无数据时返回 false（不发起任何请求）。
     bool generateWeekReport(const QDate &monday, const QString &tag);
 
+    /// 根据某个应用记录到的窗口标题推断其名称（供应用管理页识别 PID 形式
+    /// 记录的进程）。以 "pid_" 开头的兜底标题无信息量，会被过滤；过滤后为
+    /// 空、未启用或未配置时返回 false。结果经 identifyReady/identifyFailed
+    /// 按 tag（调用方传进程键）原样回传，用于区分并发请求归属；不写缓存。
+    bool identifyApp(const QStringList &windowTitles, const QString &tag);
+
     /// 把 token 用量格式化为「本次 AI 消耗 tokens：输入 X · 输出 Y · 合计 Z」；
     /// 接口未返回 usage（totalTokens < 0）时返回空串，调用方据此跳过展示。
     static QString formatUsageText(int promptTokens, int completionTokens,
@@ -70,6 +77,10 @@ signals:
                          int promptTokens, int completionTokens, int totalTokens);
     /// 指定周周报分析文案生成失败（调用方回退本地小结）。
     void weekReportFailed(const QString &tag, const QString &error);
+    /// 应用识别成功：name 为清洗后的应用名（不自动落库，由调用方确认）。
+    void identifyReady(const QString &tag, const QString &name);
+    /// 应用识别失败（调用方提示用户，可回退手动改名）。
+    void identifyFailed(const QString &tag, const QString &error);
 
 private:
     QString buildPrompt(const QString &period) const;
@@ -79,6 +90,9 @@ private:
     void sendChat(const QString &period, const QString &prompt);
     void sendReminderChat(const QString &tag, const QString &prompt);
     void sendWeekChat(const QString &tag, const QString &prompt);
+    void sendIdentifyChat(const QString &tag, const QString &prompt);
+    /// 清洗模型返回的应用名：去引号/反引号/书名号与首行截断；无有效内容返回空串。
+    static QString sanitizeAppName(const QString &raw);
     void saveCache(const QString &period, const QString &text);
     bool hasDataForPeriod(const QString &period) const;
     static QString formatDuration(int seconds);

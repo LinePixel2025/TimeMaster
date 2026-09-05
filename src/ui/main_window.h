@@ -71,6 +71,7 @@ private:
     QString dateText() const;
 
     DatabaseManager *m_db = nullptr;
+    AiClient *m_ai = nullptr;
     UpdateChecker *m_updater = nullptr;
     QTimer *m_refreshTimer = nullptr;
     QPushButton *m_themeBtn = nullptr;

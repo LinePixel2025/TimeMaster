@@ -531,6 +531,138 @@ void AiClient::sendWeekChat(const QString &tag, const QString &prompt)
     });
 }
 
+bool AiClient::identifyApp(const QStringList &windowTitles, const QString &tag)
+{
+    if (!isConfigured())
+        return false;
+    QStringList usable;
+    for (const QString &title : windowTitles) {
+        // 取不到窗口标题时追踪层用进程名兜底（pid_xxx），对识别无信息量。
+        const QString trimmed = title.trimmed();
+        if (trimmed.isEmpty()
+            || trimmed.startsWith(QLatin1String("pid_"), Qt::CaseInsensitive))
+            continue;
+        usable << trimmed;
+        if (usable.size() >= 12)
+            break;
+    }
+    if (usable.isEmpty())
+        return false;
+
+    const QString prompt = QStringLiteral(
+        "以下是同一个 Windows 应用记录到的窗口标题（该应用的可执行文件路径"
+        "无法获取）。请根据这些标题推断它是什么应用。\n\n窗口标题（按时间从近到远）：\n%1\n\n"
+        "只输出应用名称本身（优先常用中文名，没有则用通用英文名），不超过 12 个字，"
+        "不要解释、引号、标点或 Markdown。若确实无法判断，输出「未知」。")
+        .arg(usable.join(QChar('\n')));
+    sendIdentifyChat(tag, prompt);
+    return true;
+}
+
+QString AiClient::sanitizeAppName(const QString &raw)
+{
+    QString name = raw.trimmed();
+    // 只取首行：不少模型会在名称后追加解释文字。
+    const int nl = name.indexOf(QChar('\n'));
+    if (nl >= 0)
+        name = name.left(nl).trimmed();
+    static const struct { QChar open; QChar close; } kPairs[] = {
+        {QChar(u'"'), QChar(u'"')},   {QChar(u'\''), QChar(u'\'')},
+        {QChar(u'`'), QChar(u'`')},   {QChar(u'「'), QChar(u'」')},
+        {QChar(u'『'), QChar(u'』')},  {QChar(u'《'), QChar(u'》')},
+        {QChar(u'“'), QChar(u'”')},
+    };
+    bool stripped = true;
+    while (stripped && name.size() >= 2) {
+        stripped = false;
+        for (const auto &pair : kPairs) {
+            if (name.startsWith(pair.open) && name.endsWith(pair.close)) {
+                name = name.mid(1, name.size() - 2).trimmed();
+                stripped = true;
+            }
+        }
+        // 去掉模型爱带的结尾句读。
+        while (!name.isEmpty()
+               && (name.endsWith(QChar(u'.')) || name.endsWith(QChar(u'。'))
+                   || name.endsWith(QChar(u':')) || name.endsWith(QChar(u'：')))) {
+            name.chop(1);
+            stripped = true;
+        }
+    }
+    if (name.size() > 24)
+        name = name.left(24);
+    return name;
+}
+
+void AiClient::sendIdentifyChat(const QString &tag, const QString &prompt)
+{
+    QJsonObject sysMsg;
+    sysMsg[QStringLiteral("role")] = QStringLiteral("system");
+    sysMsg[QStringLiteral("content")] =
+        QStringLiteral("你是 Windows 应用识别助手，擅长根据窗口标题判断应用，只输出应用名称本身。");
+
+    QJsonObject userMsg;
+    userMsg[QStringLiteral("role")] = QStringLiteral("user");
+    userMsg[QStringLiteral("content")] = prompt;
+
+    QJsonArray messages;
+    messages.append(sysMsg);
+    messages.append(userMsg);
+
+    QJsonObject body;
+    body[QStringLiteral("model")] = m_model;
+    body[QStringLiteral("messages")] = messages;
+    // 思考型模型的推理同样消耗 max_tokens，留出足够预算。
+    body[QStringLiteral("max_tokens")] = 2048;
+
+    QString endpoint = m_endpoint.trimmed();
+    while (endpoint.endsWith(QLatin1Char('/')))
+        endpoint.chop(1);
+
+    QNetworkRequest req(QUrl(endpoint + QStringLiteral("/chat/completions")));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    req.setRawHeader("Authorization", ("Bearer " + m_apiKey).toUtf8());
+    req.setTransferTimeout(30000);
+
+    QNetworkReply *reply = m_nam->post(req, QJsonDocument(body).toJson());
+    connect(reply, &QNetworkReply::finished, this, [this, reply, tag]() {
+        QString name;
+        if (reply->error() == QNetworkReply::NoError) {
+            const QJsonObject obj =
+                QJsonDocument::fromJson(reply->readAll()).object();
+            const QJsonArray choices =
+                obj[QStringLiteral("choices")].toArray();
+            if (!choices.isEmpty()) {
+                const QJsonObject msg =
+                    choices.first().toObject()[QStringLiteral("message")].toObject();
+                name = sanitizeAppName(msg[QStringLiteral("content")].toString());
+            }
+        }
+        // 模型明确表示判断不了时按失败处理，避免把「未知」写进别名。
+        if (name == QString::fromUtf8("未知") || name == QString::fromUtf8("无法确定")
+            || name == QString::fromUtf8("不清楚"))
+            name.clear();
+
+        if (!name.isEmpty()) {
+            emit identifyReady(tag, name);
+        } else {
+            QString err = reply->errorString();
+            const QJsonObject obj =
+                QJsonDocument::fromJson(reply->readAll()).object();
+            const QJsonObject errObj =
+                obj[QStringLiteral("error")].toObject();
+            if (!errObj.isEmpty() &&
+                errObj.contains(QStringLiteral("message")))
+                err = errObj[QStringLiteral("message")].toString();
+            if (err.isEmpty())
+                err = QString::fromUtf8("未能从窗口标题中识别出应用");
+            qWarning() << "[AI] 应用识别失败:" << tag << err;
+            emit identifyFailed(tag, err);
+        }
+        reply->deleteLater();
+    });
+}
+
 void AiClient::saveCache(const QString &period, const QString &text)
 {
     if (period == AiPeriod::daily()) {

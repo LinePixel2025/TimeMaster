@@ -39,7 +39,7 @@
 
 MainWindow::MainWindow(DatabaseManager *db, AiClient *ai,
                        UpdateChecker *updater, QWidget *parent)
-    : QMainWindow(parent), m_db(db), m_updater(updater)
+    : QMainWindow(parent), m_db(db), m_ai(ai), m_updater(updater)
 {
     setWindowTitle("Time Master");
     setMinimumSize(840, 640);
@@ -499,7 +499,7 @@ void MainWindow::onExport()
 
 void MainWindow::onSettings()
 {
-    SettingsDialog dialog(m_db, m_updater, this);
+    SettingsDialog dialog(m_db, m_updater, m_ai, this);
     if (dialog.exec() == QDialog::Accepted) {
         refreshData();
         emit settingsChanged();

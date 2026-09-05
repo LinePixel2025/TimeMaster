@@ -82,9 +82,13 @@ public:
 
     // ---- 应用管理：组别 / 合并 / 应用清单 ----
 
-    /// 组别行 id / 名称 / 成员数，按 sort_order、id 排序。
+    /// 组别行 id / 名称 / 图标 / 成员数 / builtin，按 sort_order、id 排序。
+    /// icon 已做兜底解析（空值按名称推导），恒为非空 emoji。
     QVector<QVariantMap> getGroups();
-    int addGroup(const QString &name);
+    /// 新建组别；icon 为空时按名称自动分配回退图标。
+    int addGroup(const QString &name, const QString &icon = QString());
+    /// 设置组别图标（emoji 文本）；传空串清除，下次启动迁移会按名称回填。
+    void setGroupIcon(int id, const QString &icon);
     void renameGroup(int id, const QString &name);
     /// 删除组别并清空其成员（成员自动回落「未分组」）。
     void removeGroup(int id);
@@ -99,8 +103,12 @@ public:
 
     /// 已追踪过的应用清单（含从未产生会话的屏蔽项），供应用管理界面使用。
     /// 时长为全期累计，不受 min_record_threshold 与屏蔽过滤影响——管理界面
-    /// 需要看到被屏蔽和极短的应用本身。
+    /// 需要看到被屏蔽和极短的应用本身。按累计时长降序、同值按显示名升序。
     QVector<AppEntry> getManagedApps();
+
+    /// 指定进程键最近的去重窗口标题（按最近出现时间降序，最多 limit 条），
+    /// 供「AI 识别应用」推断应用名。
+    QStringList getRecentWindowTitles(const QString &processKey, int limit = 20);
 
     /// 组别排行：未归入任何组别的应用自动汇入「未分组」，全期无数据。
     QVector<QVariantMap> getGroupRank(const QDate &targetDate = QDate::currentDate());

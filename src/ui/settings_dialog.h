@@ -17,6 +17,7 @@
 
 class DatabaseManager;
 class UpdateChecker;
+class AiClient;
 struct UpdateInfo;
 
 class SettingsDialog : public QDialog
@@ -24,7 +25,7 @@ class SettingsDialog : public QDialog
     Q_OBJECT
 public:
     explicit SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
-                            QWidget *parent = nullptr);
+                            AiClient *ai, QWidget *parent = nullptr);
 
     /// 取消/Esc 关闭时还原未保存的主题色预览。
     void reject() override;
@@ -54,6 +55,7 @@ private:
     void refreshUpdateStatus();
 
     DatabaseManager *m_db;
+    AiClient *m_ai = nullptr;
 
     QStackedWidget *m_stack = nullptr;
     QList<QPushButton *> m_navButtons;
