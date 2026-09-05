@@ -5,6 +5,7 @@
 #include <QObject>
 
 class DatabaseManager;
+class QWidget;
 
 class ThemeManager : public QObject
 {
@@ -29,6 +30,11 @@ public:
     void setAccentColor(const QColor &color, bool persist = true);
     /// 预览结束后确认落库：把当前内存主题色写入设置表。
     void commitAccent();
+
+    /// 把 Windows 标题栏（DWM 非客户区）刷成当前主题的窗口底色：
+    /// 深浅模式标志 + DWMWA_CAPTION_COLOR = DesignTokens::kBg()。
+    /// 所有顶层窗口应在首次 show 与主题切换时调用，保持标题栏与客户区同色。
+    static void applyToWindow(QWidget *window);
 
 signals:
     void themeChanged(Theme theme);

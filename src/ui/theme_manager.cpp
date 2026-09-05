@@ -2,9 +2,23 @@
 #include "database/database_manager.h"
 #include "ui/design_tokens.h"
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <dwmapi.h>
+
 #include <QApplication>
 #include <QPalette>
 #include <QRegularExpression>
+#include <QWidget>
+
+// MinGW 的 dwmapi.h 可能未提供这两个较新的 DWM 属性编号，与 main_window.cpp 原实现一致。
+static const DWORD kDwmwaUseImmersiveDarkMode = 20;
+static const DWORD kDwmwaCaptionColor = 35;
 
 ThemeManager *ThemeManager::instance()
 {
@@ -102,6 +116,20 @@ void ThemeManager::saveAccentToDb()
                          m_accent.isValid() ? m_accent.name()
                                             : QStringLiteral("default"));
     }
+}
+
+void ThemeManager::applyToWindow(QWidget *window)
+{
+    if (!window)
+        return;
+    // QPalette 只影响客户区，Windows 标题栏由 DWM 决定，需单独设置，
+    // 否则对话框标题栏回落系统默认色，与主题化后的内容区割裂。
+    HWND hwnd = reinterpret_cast<HWND>(window->winId());
+    const BOOL dark = instance()->isDark() ? TRUE : FALSE;
+    DwmSetWindowAttribute(hwnd, kDwmwaUseImmersiveDarkMode, &dark, sizeof(dark));
+    const QColor bg = DesignTokens::kBg();
+    const COLORREF color = RGB(bg.red(), bg.green(), bg.blue());
+    DwmSetWindowAttribute(hwnd, kDwmwaCaptionColor, &color, sizeof(color));
 }
 
 void ThemeManager::applyToApplication()

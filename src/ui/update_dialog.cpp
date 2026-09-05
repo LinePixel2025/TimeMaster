@@ -239,9 +239,19 @@ UpdateDialog::UpdateDialog(const UpdateInfo &info, QWidget *parent)
 
     applyTheme();
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, [this](ThemeManager::Theme) { applyTheme(); });
+            this, [this](ThemeManager::Theme) {
+        applyTheme();
+        if (isVisible())
+            ThemeManager::applyToWindow(this);
+    });
     connect(ThemeManager::instance(), &ThemeManager::accentChanged,
             this, [this]() { applyTheme(); });
+}
+
+void UpdateDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+    ThemeManager::applyToWindow(this);
 }
 
 void UpdateDialog::applyTheme()

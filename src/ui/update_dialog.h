@@ -17,6 +17,10 @@ class UpdateDialog : public QDialog
 public:
     explicit UpdateDialog(const UpdateInfo &info, QWidget *parent = nullptr);
 
+protected:
+    /// 首次显示时把 Windows 标题栏刷成当前主题底色（winId 此时才有效）。
+    void showEvent(QShowEvent *event) override;
+
 private:
     void applyTheme();
     void openDownload();

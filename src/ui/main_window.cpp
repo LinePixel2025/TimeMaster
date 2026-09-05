@@ -37,22 +37,6 @@
 
 #include <array>
 
-#include <windows.h>
-#include <dwmapi.h>
-#pragma comment(lib, "dwmapi.lib")
-
-static const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-static const DWORD DWMWA_CAPTION_COLOR = 35;
-
-static void applyDwmTitleBar(HWND hwnd, bool dark)
-{
-    BOOL dwmDark = dark ? TRUE : FALSE;
-    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dwmDark, sizeof(dwmDark));
-    QColor bg = DesignTokens::kBg();
-    COLORREF color = RGB(bg.red(), bg.green(), bg.blue());
-    DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, &color, sizeof(color));
-}
-
 MainWindow::MainWindow(DatabaseManager *db, AiClient *ai,
                        UpdateChecker *updater, QWidget *parent)
     : QMainWindow(parent), m_db(db), m_updater(updater)
@@ -214,11 +198,10 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai,
     m_refreshTimer->start();
 
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, [this](ThemeManager::Theme theme) {
+            this, [this](ThemeManager::Theme) {
         applyTheme();
         if (isVisible())
-            applyDwmTitleBar(reinterpret_cast<HWND>(winId()),
-                             theme == ThemeManager::Dark);
+            ThemeManager::applyToWindow(this);
     });
     // 主题色变化只影响 token 颜色，标题栏背景（kBg）不变，无需重设 DWM。
     connect(ThemeManager::instance(), &ThemeManager::accentChanged,
@@ -390,8 +373,7 @@ void MainWindow::applyResponsiveLayout()
 void MainWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
-    applyDwmTitleBar(reinterpret_cast<HWND>(winId()),
-                     ThemeManager::instance()->isDark());
+    ThemeManager::applyToWindow(this);
     updateStatusChipText();
 }
 

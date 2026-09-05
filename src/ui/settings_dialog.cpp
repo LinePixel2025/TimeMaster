@@ -1133,7 +1133,11 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
     showPage(0);
 
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, [this](ThemeManager::Theme) { applyTheme(); });
+            this, [this](ThemeManager::Theme) {
+        applyTheme();
+        if (isVisible())
+            ThemeManager::applyToWindow(this);
+    });
     connect(ThemeManager::instance(), &ThemeManager::accentChanged,
             this, [this]() { applyTheme(); });
 
@@ -1355,6 +1359,12 @@ void SettingsDialog::reject()
     QDialog::reject();
 }
 
+void SettingsDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+    ThemeManager::applyToWindow(this);
+}
+
 void SettingsDialog::fetchGoalFromCloud(const QString &endpoint, const QString &token)
 {
     QUrl url(normalizeLineWebEndpoint(endpoint) + "/api/health/daily-goal/data");
@@ -1572,6 +1582,7 @@ bool SettingsDialog::promptAlias(const QString &title, QString *processName,
     connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     layout->addWidget(buttons);
 
+    ThemeManager::applyToWindow(&dlg);
     if (dlg.exec() != QDialog::Accepted)
         return false;
     *processName = processEdit->text().trimmed();

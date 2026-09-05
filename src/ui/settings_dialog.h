@@ -28,6 +28,10 @@ public:
     /// 取消/Esc 关闭时还原未保存的主题色预览。
     void reject() override;
 
+protected:
+    /// 首次显示时把 Windows 标题栏刷成当前主题底色（winId 此时才有效）。
+    void showEvent(QShowEvent *event) override;
+
 signals:
     void settingsChanged();
 

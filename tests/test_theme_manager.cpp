@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QTemporaryDir>
+#include <QWidget>
 #include <QtGlobal>
 
 #include <cassert>
@@ -76,6 +77,11 @@ int main(int argc, char *argv[])
     tm->loadFromDb(&db);
     assert(!tm->hasCustomAccent());
     assert(DesignTokens::kAccent() == defaultAccent);
+
+    // applyToWindow 冒烟：对未显示的顶层窗口设置 DWM 标题栏属性不应崩溃。
+    QWidget window;
+    ThemeManager::applyToWindow(&window);
+    ThemeManager::applyToWindow(nullptr);
 
     return 0;
 }

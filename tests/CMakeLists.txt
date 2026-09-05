@@ -164,7 +164,8 @@ if(BUILD_TESTING)
         ${CMAKE_SOURCE_DIR}/src/ui/theme_manager.cpp
     )
     target_include_directories(test_theme_manager PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_theme_manager PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql)
+    # theme_manager.cpp 的标题栏工具使用 DwmSetWindowAttribute。
+    target_link_libraries(test_theme_manager PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql dwmapi)
     target_compile_options(test_theme_manager PRIVATE
         $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
