@@ -1060,6 +1060,9 @@ void SettingsDialog::showPage(int index)
 {
     if (m_stack)
         m_stack->setCurrentIndex(index);
+    // 应用管理页是独立 QWidget，切回时重新拉取以反映最新的追踪/屏蔽/组别状态。
+    if (m_appManagePage && index == 0)
+        m_appManagePage->reload();
     for (int i = 0; i < m_navButtons.size(); ++i) {
         const bool selected = (i == index);
         m_navButtons[i]->setChecked(selected);

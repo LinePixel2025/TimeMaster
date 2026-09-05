@@ -40,6 +40,7 @@ private slots:
     void onAddGroup();
     void onRenameGroup();
     void onRemoveGroup();
+    void onHidePlaceholderToggled(bool checked);
 
 private:
     /// 页内 QSS：只作用于本页控件，避免污染对话框其它页面。
@@ -58,6 +59,7 @@ private:
 
     QLineEdit *m_search = nullptr;
     QListWidget *m_appList = nullptr;
+    QCheckBox *m_hidePlaceholder = nullptr;
     QLabel *m_detailTitle = nullptr;
     QLabel *m_detailStats = nullptr;
     QLabel *m_detailHint = nullptr;
@@ -71,7 +73,5 @@ private:
 
     QVector<AppEntry> m_apps;
     QVector<QVariantMap> m_groups;
-    /// 屏蔽列表 id -> 进程键，切换开关时需要按 id 删除。
-    QMap<QString, int> m_ignoredIds;
     bool m_updating = false; // 回显填充控件期间抑制槽函数写库
 };
