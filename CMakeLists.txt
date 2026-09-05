@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(TimeMaster VERSION 5.6.7 LANGUAGES CXX)
+project(TimeMaster VERSION 5.7.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
