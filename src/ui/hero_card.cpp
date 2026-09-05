@@ -22,6 +22,8 @@ public:
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         connect(ThemeManager::instance(), &ThemeManager::themeChanged,
                 this, [this](ThemeManager::Theme) { update(); });
+        connect(ThemeManager::instance(), &ThemeManager::accentChanged,
+                this, [this]() { update(); });
     }
 
     void setHours(const std::array<int, 24> &hours)
@@ -160,6 +162,11 @@ HeroCard::HeroCard(QWidget *parent)
     applyLabelColors();
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, [this](ThemeManager::Theme) {
+                applyLabelColors();
+                updateDisplay();
+            });
+    connect(ThemeManager::instance(), &ThemeManager::accentChanged,
+            this, [this]() {
                 applyLabelColors();
                 updateDisplay();
             });

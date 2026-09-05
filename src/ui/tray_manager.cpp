@@ -25,6 +25,8 @@ TrayManager::TrayManager(const QString &appName, QObject *parent)
     applyMenuTheme();
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, [this]() { applyMenuTheme(); });
+    connect(ThemeManager::instance(), &ThemeManager::accentChanged,
+            this, [this]() { applyMenuTheme(); });
 
     m_tray->setContextMenu(m_menu);
     connect(m_tray, &QSystemTrayIcon::activated, this, &TrayManager::onActivated);

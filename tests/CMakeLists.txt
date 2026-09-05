@@ -81,10 +81,11 @@ if(BUILD_TESTING)
         ${CMAKE_SOURCE_DIR}/src/database/database_manager.cpp
         ${CMAKE_SOURCE_DIR}/src/ai/ai_client.cpp
         ${CMAKE_SOURCE_DIR}/src/report/report_html_builder.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/theme_manager.cpp
         ${CMAKE_SOURCE_DIR}/src/reminder/weekly_report_manager.cpp
     )
     target_include_directories(test_weekly_report PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_weekly_report PRIVATE Qt6::Core Qt6::Sql Qt6::Network Qt6::Test)
+    target_link_libraries(test_weekly_report PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Network Qt6::Test)
     target_compile_options(test_weekly_report PRIVATE
         $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
@@ -95,10 +96,11 @@ if(BUILD_TESTING)
         ${CMAKE_SOURCE_DIR}/src/database/database_manager.cpp
         ${CMAKE_SOURCE_DIR}/src/ai/ai_client.cpp
         ${CMAKE_SOURCE_DIR}/src/report/report_html_builder.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/theme_manager.cpp
         ${CMAKE_SOURCE_DIR}/src/report/daily_report_manager.cpp
     )
     target_include_directories(test_daily_report PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_daily_report PRIVATE Qt6::Core Qt6::Sql Qt6::Network Qt6::Test)
+    target_link_libraries(test_daily_report PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Network Qt6::Test)
     target_compile_options(test_daily_report PRIVATE
         $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
@@ -156,6 +158,18 @@ if(BUILD_TESTING)
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
     add_test(NAME test_rank_layout COMMAND test_rank_layout)
 
+    add_executable(test_theme_manager
+        test_theme_manager.cpp
+        ${CMAKE_SOURCE_DIR}/src/database/database_manager.cpp
+        ${CMAKE_SOURCE_DIR}/src/ui/theme_manager.cpp
+    )
+    target_include_directories(test_theme_manager PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_theme_manager PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql)
+    target_compile_options(test_theme_manager PRIVATE
+        $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
+    add_test(NAME test_theme_manager COMMAND test_theme_manager)
+
     add_executable(test_trend_card_geometry
         test_trend_card_geometry.cpp
         ${CMAKE_SOURCE_DIR}/src/database/database_manager.cpp
@@ -174,7 +188,7 @@ if(BUILD_TESTING)
     get_filename_component(QT_INSTALL_ROOT "${Qt6_DIR}/../../.." ABSOLUTE)
     get_filename_component(COMPILER_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
     set_tests_properties(
-        test_database test_exporter test_lineweb_pusher test_cloud_sync test_ai_client test_reminder_scheduler test_weekly_report test_daily_report test_window_tracker test_trend_chart_layout test_dashboard_layout test_period_distribution_layout test_rank_layout test_trend_card_geometry
+        test_database test_exporter test_lineweb_pusher test_cloud_sync test_ai_client test_reminder_scheduler test_weekly_report test_daily_report test_window_tracker test_trend_chart_layout test_dashboard_layout test_period_distribution_layout test_rank_layout test_trend_card_geometry test_theme_manager
         PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         ENVIRONMENT_MODIFICATION

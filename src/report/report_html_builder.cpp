@@ -1,5 +1,7 @@
 #include "report/report_html_builder.h"
 
+#include "ui/design_tokens.h"
+
 #include <QRegularExpression>
 
 #include <algorithm>
@@ -9,15 +11,16 @@ namespace ReportHtml {
 namespace {
 
 // 报告页样式：液态玻璃卡片 + 渐变模糊色斑背景 + 深浅色自适应（纯 CSS，离线可用）。
+// accent 系列变量以 __L_/__D_ 前缀的 marker 占位，由 style() 按应用主题色填充。
 const char kReportStyle[] = R"CSS(:root{--text-strong:#111827;--text:#374151;--text-mute:#6B7280;
---accent:#0B7A66;--accent-light:#35B99A;--chip:rgba(11,122,102,.10);--track:rgba(10,70,58,.08);
---grid-line:rgba(10,70,58,.10);--h0:#E4ECE9;--h1:#CDE9E0;--h2:#7FD4BE;--h3:#35B99A;--h4:#0B7A66;
---p0:#66CDB4;--p1:#35B99A;--p2:#15977B;--p3:#0B7A66;
+--accent:__L_ACCENT__;--accent-light:__L_ACCENT_LIGHT__;--chip:__L_CHIP__;--track:rgba(10,70,58,.08);
+--grid-line:rgba(10,70,58,.10);--h0:__L_H0__;--h1:__L_H1__;--h2:__L_H2__;--h3:__L_H3__;--h4:__L_H4__;
+--p0:__L_P0__;--p1:__L_P1__;--p2:__L_P2__;--p3:__L_P3__;
 --glass-bg:rgba(255,255,255,.60);--glass-border:rgba(255,255,255,.70);--glass-inner:rgba(255,255,255,.75)}
 @media (prefers-color-scheme:dark){:root{--text-strong:#F1F5F3;--text:#C5D0CB;--text-mute:#8A9993;
---accent:#3DCFB0;--accent-light:#5FDBBF;--chip:rgba(61,207,176,.14);--track:rgba(255,255,255,.08);
---grid-line:rgba(255,255,255,.10);--h0:#24302C;--h1:#16352E;--h2:#0B7A66;--h3:#15977B;--h4:#3DCFB0;
---p0:#5FDBBF;--p1:#3DCFB0;--p2:#15977B;--p3:#0B7A66;
+--accent:__D_ACCENT__;--accent-light:__D_ACCENT_LIGHT__;--chip:__D_CHIP__;--track:rgba(255,255,255,.08);
+--grid-line:rgba(255,255,255,.10);--h0:__D_H0__;--h1:__D_H1__;--h2:__D_H2__;--h3:__D_H3__;--h4:__D_H4__;
+--p0:__D_P0__;--p1:__D_P1__;--p2:__D_P2__;--p3:__D_P3__;
 --glass-bg:rgba(16,22,20,.62);--glass-border:rgba(255,255,255,.12);--glass-inner:rgba(255,255,255,.08)}}
 *{box-sizing:border-box}
 body{margin:0;padding:44px 16px 36px;font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;
@@ -27,8 +30,8 @@ background-attachment:fixed;-webkit-font-smoothing:antialiased}
 background-attachment:fixed}}
 .blob{position:fixed;border-radius:50%;filter:blur(90px);z-index:-1;pointer-events:none;
 animation:drift 28s ease-in-out infinite alternate}
-.blob-a{width:560px;height:560px;left:-170px;top:-130px;background:radial-gradient(circle,rgba(8,127,107,.34),transparent 66%)}
-.blob-b{width:520px;height:520px;right:-150px;top:30%;background:radial-gradient(circle,rgba(53,185,154,.28),transparent 66%);
+.blob-a{width:560px;height:560px;left:-170px;top:-130px;background:radial-gradient(circle,__L_BLOB_A__,transparent 66%)}
+.blob-b{width:520px;height:520px;right:-150px;top:30%;background:radial-gradient(circle,__L_BLOB_B__,transparent 66%);
 animation-delay:-9s;animation-duration:34s}
 .blob-c{width:480px;height:480px;left:22%;bottom:-190px;background:radial-gradient(circle,rgba(124,139,254,.20),transparent 66%);
 animation-delay:-18s;animation-duration:40s}
@@ -106,7 +109,70 @@ text-overflow:ellipsis;white-space:nowrap}
 
 QString style()
 {
-    return QString::fromLatin1(kReportStyle);
+    // accent 系列变量跟随应用主题色；亮/暗两套都由 brand 色派生，
+    // 页面内由浏览器 prefers-color-scheme 选择，与应用当前主题无关。
+    const QColor deep = DesignTokens::accentFor(false);
+    const QColor bright = DesignTokens::accentFor(true);
+    const QColor lightGrad = DesignTokens::accentLightFor(false);
+    const QColor darkGrad = DesignTokens::accentLightFor(true);
+
+    auto rgba = [](const QColor &c, qreal alpha) {
+        return QStringLiteral("rgba(%1,%2,%3,%4)")
+            .arg(c.red()).arg(c.green()).arg(c.blue())
+            .arg(alpha, 0, 'f', 2);
+    };
+    auto periodColor = [deep, bright, lightGrad](bool dark, int i) {
+        if (dark) {
+            switch (i) {
+            case 0:  return DesignTokens::shiftedLightness(bright, 0.09);
+            case 1:  return bright;
+            case 2:  return DesignTokens::shiftedLightness(deep, 0.08);
+            default: return deep;
+            }
+        }
+        switch (i) {
+        case 0:  return DesignTokens::scaledSaturation(
+                     DesignTokens::shiftedLightness(deep, 0.34), 0.4);
+        case 1:  return lightGrad;
+        case 2:  return DesignTokens::shiftedLightness(deep, 0.08);
+        default: return deep;
+        }
+    };
+
+    const auto heat = [](bool dark, int level) {
+        return DesignTokens::heatLevelFor(dark, level).name();
+    };
+
+    QString css = QString::fromLatin1(kReportStyle);
+    struct Replacement { const char *marker; QString value; };
+    // 先替换长 marker，避免短 marker 破坏长 marker 的匹配。
+    const Replacement replacements[] = {
+        { "__L_ACCENT_LIGHT__", lightGrad.name() },
+        { "__D_ACCENT_LIGHT__", darkGrad.name() },
+        { "__L_ACCENT__",  deep.name()   },
+        { "__D_ACCENT__",  bright.name() },
+        { "__L_CHIP__",  rgba(deep, 0.10)   },
+        { "__D_CHIP__",  rgba(bright, 0.14) },
+        { "__L_H0__", heat(false, 0) }, { "__L_H1__", heat(false, 1) },
+        { "__L_H2__", heat(false, 2) }, { "__L_H3__", heat(false, 3) },
+        { "__L_H4__", heat(false, 4) },
+        { "__D_H0__", heat(true, 0) }, { "__D_H1__", heat(true, 1) },
+        { "__D_H2__", heat(true, 2) }, { "__D_H3__", heat(true, 3) },
+        { "__D_H4__", heat(true, 4) },
+        { "__L_P0__", periodColor(false, 0).name() },
+        { "__L_P1__", periodColor(false, 1).name() },
+        { "__L_P2__", periodColor(false, 2).name() },
+        { "__L_P3__", periodColor(false, 3).name() },
+        { "__D_P0__", periodColor(true, 0).name() },
+        { "__D_P1__", periodColor(true, 1).name() },
+        { "__D_P2__", periodColor(true, 2).name() },
+        { "__D_P3__", periodColor(true, 3).name() },
+        { "__L_BLOB_A__", rgba(deep, 0.34) },
+        { "__L_BLOB_B__", rgba(lightGrad, 0.28) },
+    };
+    for (const Replacement &r : replacements)
+        css.replace(QLatin1String(r.marker), r.value);
+    return css;
 }
 
 QString wrapCard(const QString &title, const QString &body)

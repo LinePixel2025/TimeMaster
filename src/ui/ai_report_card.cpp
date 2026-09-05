@@ -224,6 +224,11 @@ AiReportCard::AiReportCard(AiClient *ai, QWidget *parent)
         m_summaryCard->applyTheme();
         refreshContent();
     });
+    connect(ThemeManager::instance(), &ThemeManager::accentChanged,
+            this, [this]() {
+        m_summaryCard->applyTheme();
+        refreshContent();
+    });
 
     m_summaryCard->applyTheme();
     reloadState();

@@ -13,6 +13,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
+#include <QColorDialog>
 #include <QHeaderView>
 #include <QShortcut>
 #include <QFrame>
@@ -48,6 +49,30 @@ const QList<NavDef> kNavDefs = {
     { SettingsIcons::Info,    QString::fromUtf8("关于"),     QString::fromUtf8("应用名称、版本与简介") },
 };
 
+// 主题色预设：hex 为空串表示内置默认玉色（accent_color 存空串）。
+struct AccentPreset {
+    const char *name;
+    const char *hex;
+};
+
+const QList<AccentPreset> kAccentPresets = {
+    { "默认玉绿", ""        },
+    { "海蓝",     "#1565C0" },
+    { "靛紫",     "#5E35B1" },
+    { "玫红",     "#C2185B" },
+    { "珊瑚",     "#D84315" },
+    { "琥珀",     "#B26A00" },
+    { "青碧",     "#00838F" },
+    { "石墨",     "#455A64" },
+};
+
+/// 预设色块的展示色：默认玉绿固定显示内置 brand 色。
+QString accentPresetHex(const AccentPreset &preset)
+{
+    return *preset.hex ? QString::fromLatin1(preset.hex)
+                       : ThemeManager::defaultAccent().name();
+}
+
 // 对话框全局样式。所有颜色取自 DesignTokens，主题切换时整体重设，
 // 避免逐控件 setStyleSheet 造成旧主题颜色残留。
 QString settingsStyle()
@@ -66,6 +91,14 @@ QString settingsStyle()
     const QString accentPress = DesignTokens::kAccentPressed().name(QColor::HexArgb);
     const QString accentLight = DesignTokens::kAccentLight().name(QColor::HexArgb);
     const QString hoverBg     = DesignTokens::kButtonHoverBg().name(QColor::HexArgb);
+
+    // 圆形主题色块的底色无法用单一 QSS 表达，按 swatchHex 属性逐预设生成规则。
+    QString swatchRules;
+    for (const AccentPreset &preset : kAccentPresets) {
+        const QString hex = accentPresetHex(preset);
+        swatchRules += QStringLiteral(
+            "QPushButton#accentSwatch[swatchHex=\"%1\"] { background: %1; }").arg(hex);
+    }
 
     return QStringLiteral(
         "QDialog { background: %1; }"
@@ -154,7 +187,11 @@ QString settingsStyle()
         "QScrollBar::handle:horizontal { background: %8; border-radius: 5px; min-width: 24px; }"
         "QScrollBar::handle:horizontal:hover { background: %7; }"
         "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }"
-        "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }")
+        "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
+
+        "QPushButton#accentSwatch { border: 2px solid transparent; border-radius: 11px; }"
+        "QPushButton#accentSwatch:hover { border-color: %7; }"
+        "QPushButton#accentSwatch:checked { border-color: %5; }")
         .arg(bg)
         .arg(surface)
         .arg(border)
@@ -168,7 +205,8 @@ QString settingsStyle()
         .arg(accentLight)
         .arg(hoverBg)
         .arg(focus)
-        .arg(onAccent);
+        .arg(onAccent)
+        + swatchRules;
 }
 
 } // namespace
@@ -494,6 +532,56 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         m_darkMode->setToolTip(
             QString::fromUtf8("切换应用整体配色为暗色或亮色"));
         appearanceCardLayout->addWidget(m_darkMode);
+
+        // 主题色：预设色块 + 自定义取色。点击即时预览（不落库），
+        // 保存时 commitAccent 落库，取消/Esc 由 reject() 还原。
+        auto *accentRow = new QHBoxLayout();
+        accentRow->setSpacing(8);
+        auto *accentLabel = new QLabel(QString::fromUtf8("主题色:"), this);
+        accentLabel->setFont(DesignTokens::appFont(13));
+        accentLabel->setToolTip(
+            QString::fromUtf8("主界面与报告的强调色；支持预设与自定义取色"));
+        accentRow->addWidget(accentLabel);
+
+        for (int i = 0; i < kAccentPresets.size(); ++i) {
+            const AccentPreset &preset = kAccentPresets[i];
+            auto *swatch = new QPushButton(this);
+            swatch->setObjectName(QStringLiteral("accentSwatch"));
+            swatch->setCheckable(true);
+            swatch->setFixedSize(22, 22);
+            swatch->setCursor(Qt::PointingHandCursor);
+            swatch->setToolTip(QString::fromUtf8(preset.name));
+            swatch->setProperty("swatchHex", accentPresetHex(preset));
+            connect(swatch, &QPushButton::clicked, this, [this, i]() {
+                const char *hex = kAccentPresets[i].hex;
+                ThemeManager::instance()->setAccentColor(
+                    *hex ? QColor(QString::fromLatin1(hex)) : QColor(), false);
+                updateAccentSwatches();
+            });
+            accentRow->addWidget(swatch);
+            m_accentSwatches.append(swatch);
+        }
+
+        auto *accentCustomBtn = new QPushButton(
+            QString::fromUtf8("自定义…"), this);
+        accentCustomBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        accentCustomBtn->setCursor(Qt::PointingHandCursor);
+        accentCustomBtn->setToolTip(
+            QString::fromUtf8("从调色板中选取任意主题色"));
+        connect(accentCustomBtn, &QPushButton::clicked, this, [this]() {
+            const QColor initial = ThemeManager::instance()->hasCustomAccent()
+                ? ThemeManager::instance()->accentColor()
+                : ThemeManager::defaultAccent();
+            const QColor picked = QColorDialog::getColor(
+                initial, this, QString::fromUtf8("自定义主题色"));
+            if (!picked.isValid())
+                return;
+            ThemeManager::instance()->setAccentColor(picked, false);
+            updateAccentSwatches();
+        });
+        accentRow->addWidget(accentCustomBtn);
+        accentRow->addStretch();
+        appearanceCardLayout->addLayout(accentRow);
 
         const QString trendTip =
             QString::fromUtf8("主页「本周趋势」的展示形式；热力图可切换周/月");
@@ -1011,6 +1099,8 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
 
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, [this](ThemeManager::Theme) { applyTheme(); });
+    connect(ThemeManager::instance(), &ThemeManager::accentChanged,
+            this, [this]() { applyTheme(); });
 
     // 状态标签每 5 秒重读一次数据库，实时反映推送/拉取/提醒结果。
     m_linewebStatusTimer = new QTimer(this);
@@ -1070,6 +1160,8 @@ void SettingsDialog::loadSettings()
         m_db->getSetting("min_record_threshold", "40").toInt());
     m_autoStart->setChecked(m_db->getSetting("auto_start", "false") == "true");
     m_darkMode->setChecked(ThemeManager::instance()->isDark());
+    m_initialAccent = ThemeManager::instance()->accentColor();
+    updateAccentSwatches();
     m_trendFormat->setCurrentIndex(
         m_db->getSetting("trend_display_format", "normal") == "heatmap" ? 1 : 0);
 
@@ -1139,12 +1231,36 @@ void SettingsDialog::updateCloudStatus()
 void SettingsDialog::updateReminderStatus()
 {
     const QString lastFired = m_db->getSetting("reminder_last_fired", "");
-    if (lastFired.isEmpty())
-        m_reminderStatus->setText(
-            QString::fromUtf8("⚙ 尚未触发过提醒，请确认已启用并添加时间点"));
-    else
+    if (!lastFired.isEmpty())
         m_reminderStatus->setText(
             QString::fromUtf8("⏳ 最近触发：") + lastFired);
+    else
+        m_reminderStatus->setText(
+            QString::fromUtf8("⚙ 尚未触发过提醒，请确认已启用并添加时间点"));
+}
+
+void SettingsDialog::updateAccentSwatches()
+{
+    const ThemeManager *tm = ThemeManager::instance();
+    const bool custom = tm->hasCustomAccent();
+    const QString current = custom ? tm->accentColor().name() : QString();
+    const QString defaultHex = ThemeManager::defaultAccent().name();
+    for (int i = 0; i < kAccentPresets.size() && i < m_accentSwatches.size(); ++i) {
+        const AccentPreset &preset = kAccentPresets[i];
+        const QString hex = accentPresetHex(preset);
+        const bool checked = *preset.hex
+            ? (custom && current.compare(hex, Qt::CaseInsensitive) == 0)
+            : (!custom || current.compare(defaultHex, Qt::CaseInsensitive) == 0);
+        m_accentSwatches[i]->setChecked(checked);
+    }
+}
+
+void SettingsDialog::reject()
+{
+    // 未保存的主题色只是预览态，关闭对话框时还原为打开前的颜色。
+    if (ThemeManager::instance()->accentColor() != m_initialAccent)
+        ThemeManager::instance()->setAccentColor(m_initialAccent, false);
+    QDialog::reject();
 }
 
 void SettingsDialog::fetchGoalFromCloud(const QString &endpoint, const QString &token)
@@ -1191,6 +1307,10 @@ void SettingsDialog::saveSettings()
     if (m_darkMode->isChecked() != ThemeManager::instance()->isDark())
         ThemeManager::instance()->setTheme(
             m_darkMode->isChecked() ? ThemeManager::Dark : ThemeManager::Light);
+
+    // 主题色已即时预览，保存时仅在变化后落库。
+    if (ThemeManager::instance()->accentColor() != m_initialAccent)
+        ThemeManager::instance()->commitAccent();
 
     m_db->setSetting("trend_display_format",
                      m_trendFormat->currentIndex() == 1 ? "heatmap" : "normal");

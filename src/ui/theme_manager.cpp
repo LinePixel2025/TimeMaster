@@ -47,6 +47,10 @@ void ThemeManager::loadFromDb(DatabaseManager *db)
     m_db = db;
     QString saved = db->getSetting("theme", "light");
     m_theme = (saved == "dark") ? Dark : Light;
+    // settings 表 value 列有 NOT NULL 约束，恢复默认时以哨兵值 "default" 落库。
+    const QString accent = db->getSetting("accent_color");
+    m_accent = (accent.isEmpty() || accent == QStringLiteral("default"))
+        ? QColor() : QColor(accent);
     applyToApplication();
 }
 
@@ -54,6 +58,49 @@ void ThemeManager::saveToDb(Theme theme)
 {
     if (m_db) {
         m_db->setSetting("theme", theme == Dark ? "dark" : "light");
+    }
+}
+
+QColor ThemeManager::defaultAccent()
+{
+    return QColor("#0B7A66");
+}
+
+QColor ThemeManager::accentColor() const
+{
+    return m_accent;
+}
+
+bool ThemeManager::hasCustomAccent() const
+{
+    return m_accent.isValid();
+}
+
+void ThemeManager::setAccentColor(const QColor &color, bool persist)
+{
+    // name() 规范化为 #rrggbb，主题色不携带 alpha。
+    const QColor next = color.isValid() ? QColor(color.name()) : QColor();
+    if (next.isValid() == m_accent.isValid()
+        && (!next.isValid() || next == m_accent))
+        return;
+    m_accent = next;
+    applyToApplication();
+    if (persist)
+        saveAccentToDb();
+    emit accentChanged();
+}
+
+void ThemeManager::commitAccent()
+{
+    saveAccentToDb();
+}
+
+void ThemeManager::saveAccentToDb()
+{
+    if (m_db) {
+        m_db->setSetting("accent_color",
+                         m_accent.isValid() ? m_accent.name()
+                                            : QStringLiteral("default"));
     }
 }
 

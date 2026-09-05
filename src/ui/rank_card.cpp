@@ -150,6 +150,8 @@ RankCard::RankCard(QWidget *parent)
                             "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }")
                         .arg(DesignTokens::kTextFaint().name()));
     });
+    connect(ThemeManager::instance(), &ThemeManager::accentChanged,
+            this, [this]() { update(); });
 }
 
 void RankCard::refresh(const QVector<QVariantMap> &rankData)

@@ -64,6 +64,8 @@ public:
         setMouseTracking(true);
         connect(ThemeManager::instance(), &ThemeManager::themeChanged,
                 this, [this](ThemeManager::Theme) { update(); });
+        connect(ThemeManager::instance(), &ThemeManager::accentChanged,
+                this, [this]() { update(); });
     }
 
     void setData(const QVector<QVariantMap> &weekData)
@@ -727,6 +729,15 @@ TrendCard::TrendCard(QWidget *parent)
 
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, [this](ThemeManager::Theme) {
+                const QString format = displayFormat().isEmpty()
+                    ? QStringLiteral("normal") : displayFormat();
+                const bool override = property("displayFormatOverride").toBool();
+                setProperty("displayFormatOverride", false);
+                setDisplayFormat(format);
+                setProperty("displayFormatOverride", override);
+            });
+    connect(ThemeManager::instance(), &ThemeManager::accentChanged,
+            this, [this]() {
                 const QString format = displayFormat().isEmpty()
                     ? QStringLiteral("normal") : displayFormat();
                 const bool override = property("displayFormatOverride").toBool();

@@ -35,6 +35,15 @@ CardFrame::CardFrame(const QString &title, QWidget *parent)
                     .arg(DesignTokens::kTextStrong().name()));
         }
     });
+    connect(ThemeManager::instance(), &ThemeManager::accentChanged,
+            this, [this]() {
+        update();
+        if (m_titleLabel) {
+            m_titleLabel->setStyleSheet(
+                QString("color: %1; background: transparent;")
+                    .arg(DesignTokens::kTextStrong().name()));
+        }
+    });
 }
 
 CardFrame::CardFrame(QWidget *parent)

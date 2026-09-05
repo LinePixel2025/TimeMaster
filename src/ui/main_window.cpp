@@ -219,6 +219,9 @@ MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
             applyDwmTitleBar(reinterpret_cast<HWND>(winId()),
                              theme == ThemeManager::Dark);
     });
+    // 主题色变化只影响 token 颜色，标题栏背景（kBg）不变，无需重设 DWM。
+    connect(ThemeManager::instance(), &ThemeManager::accentChanged,
+            this, [this]() { applyTheme(); });
 
     applyTheme();
     updateStatusChip();

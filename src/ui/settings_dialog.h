@@ -5,6 +5,7 @@
 #include <QListWidget>
 #include <QTableWidget>
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
 #include <QSpinBox>
 #include <QPushButton>
@@ -20,6 +21,9 @@ class SettingsDialog : public QDialog
     Q_OBJECT
 public:
     explicit SettingsDialog(DatabaseManager *db, QWidget *parent = nullptr);
+
+    /// 取消/Esc 关闭时还原未保存的主题色预览。
+    void reject() override;
 
 signals:
     void settingsChanged();
@@ -40,6 +44,7 @@ private:
     void saveSettings();
     void updateCloudStatus();
     void updateReminderStatus();
+    void updateAccentSwatches();
     void fetchGoalFromCloud(const QString &endpoint, const QString &token);
     void refreshKnownAppsList();
     void refreshIgnoredList();
@@ -62,6 +67,8 @@ private:
     QSpinBox *m_minRecordThreshold = nullptr;
     QCheckBox *m_autoStart = nullptr;
     QCheckBox *m_darkMode = nullptr;
+    QList<QPushButton *> m_accentSwatches;
+    QColor m_initialAccent; // 打开对话框时的主题色，取消时据此还原
     QComboBox *m_trendFormat = nullptr;
     QSpinBox *m_dailyGoal = nullptr;
     QLineEdit *m_knownSearch = nullptr;
