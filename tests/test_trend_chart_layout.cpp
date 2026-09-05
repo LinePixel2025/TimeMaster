@@ -112,14 +112,15 @@ void test_wide_heatmap_fills_stage_with_insight_panel()
     const auto layout = TrendChartLayout::makeMonthHeatmapLayout(size, QDate(2026, 8, 1));
 
     assert(!layout.compactInsight);
-    assert(nearlyEqual(layout.contentRect.left(), 12.0));
-    assert(nearlyEqual(layout.contentRect.right(), size.width() - 12.0));
-    assert(nearlyEqual(layout.contentRect.top(), 12.0));
-    assert(nearlyEqual(layout.contentRect.bottom(), size.height() - 12.0));
-    // 舞台内边距 12：矩阵与概览不贴舞台边。
-    assert(nearlyEqual(layout.matrixRect.left(), layout.contentRect.left() + 12.0));
-    assert(nearlyEqual(layout.matrixRect.top(), layout.contentRect.top() + 12.0));
-    assert(nearlyEqual(layout.insightRect.right(), layout.contentRect.right() - 12.0));
+    // 无内嵌舞台：contentRect 即整个图表区域。
+    assert(nearlyEqual(layout.contentRect.left(), 0.0));
+    assert(nearlyEqual(layout.contentRect.right(), size.width()));
+    assert(nearlyEqual(layout.contentRect.top(), 0.0));
+    assert(nearlyEqual(layout.contentRect.bottom(), size.height()));
+    // 内容内边距 8：矩阵与概览不贴卡片内容区边缘。
+    assert(nearlyEqual(layout.matrixRect.left(), layout.contentRect.left() + 8.0));
+    assert(nearlyEqual(layout.matrixRect.top(), layout.contentRect.top() + 8.0));
+    assert(nearlyEqual(layout.insightRect.right(), layout.contentRect.right() - 8.0));
     assert(layout.matrixRect.right() < layout.insightRect.left());
     assert(nearlyEqual(layout.matrixRect.top(), layout.insightRect.top()));
     assert(nearlyEqual(layout.matrixRect.bottom(), layout.insightRect.bottom()));
@@ -136,10 +137,10 @@ void test_compact_heatmap_stacks_summary_above_matrix()
 
     assert(layout.compactInsight);
     assert(layout.insightRect.bottom() < layout.matrixRect.top());
-    assert(nearlyEqual(layout.insightRect.left(), layout.contentRect.left() + 12.0));
-    assert(nearlyEqual(layout.insightRect.right(), layout.contentRect.right() - 12.0));
-    assert(nearlyEqual(layout.matrixRect.left(), layout.contentRect.left() + 12.0));
-    assert(nearlyEqual(layout.matrixRect.right(), layout.contentRect.right() - 12.0));
+    assert(nearlyEqual(layout.insightRect.left(), layout.contentRect.left() + 8.0));
+    assert(nearlyEqual(layout.insightRect.right(), layout.contentRect.right() - 8.0));
+    assert(nearlyEqual(layout.matrixRect.left(), layout.contentRect.left() + 8.0));
+    assert(nearlyEqual(layout.matrixRect.right(), layout.contentRect.right() - 8.0));
     assert(layout.legendRect.left() >= layout.insightRect.left());
     assertCellsFillGrid(layout);
     std::cout << "test_compact_heatmap_stacks_summary_above_matrix PASS" << std::endl;

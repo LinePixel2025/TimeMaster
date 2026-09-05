@@ -19,6 +19,7 @@
 #include <QHeaderView>
 #include <QShortcut>
 #include <QFrame>
+#include <QScrollArea>
 #include <QButtonGroup>
 #include <QDate>
 #include <QJsonArray>
@@ -106,6 +107,8 @@ QString settingsStyle()
         "QDialog { background: %1; }"
         "QFrame#sidebar { background: %2; border-right: 1px solid %3; }"
         "QFrame#sectionCard { background: %2; border: 1px solid %3; border-radius: 8px; }"
+        "QScrollArea#pageScroll, QScrollArea#pageScroll > QWidget,"
+        " QScrollArea#pageScroll > QWidget > QWidget { background: transparent; border: none; }"
         "QLabel#sideTitle { color: %5; background: transparent; }"
 
         "QLabel#pageTitle { color: %5; font-size: 17px; font-weight: 600; background: transparent; }"
@@ -269,7 +272,9 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
 
     m_stack = new QStackedWidget(content);
 
-    // 页面通用辅助：新建页面并添加页面标题。
+    // 页面通用辅助：新建页面并添加页面标题。页面包在滚动区内：
+    // 提醒/周报等页内容多，对话框高度低于页面最小高度时若直接压缩，
+    // 布局会把控件挤到重叠；滚动区保证内容至少按最小高度排布。
     auto startPage = [this](const QString &title) {
         auto *page = new QWidget(this);
         auto *layout = new QVBoxLayout(page);
@@ -278,6 +283,13 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         auto *titleLabel = new QLabel(title, page);
         titleLabel->setObjectName(QStringLiteral("pageTitle"));
         layout->addWidget(titleLabel);
+        auto *scroll = new QScrollArea(this);
+        scroll->setObjectName(QStringLiteral("pageScroll"));
+        scroll->setWidgetResizable(true);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        scroll->setWidget(page);
+        m_stack->addWidget(scroll);
         return layout;
     };
 
@@ -458,8 +470,6 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         aliasBtnRow->addWidget(deleteAliasBtn);
         aliasBtnRow->addStretch();
         aliasCardLayout->addLayout(aliasBtnRow);
-
-        m_stack->addWidget(pageLayout->parentWidget());
     }
 
     // ================= 页面 2：追踪设置 =================
@@ -519,7 +529,6 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
                                        m_minTrackingSeconds, m_minRecordThreshold});
 
         pageLayout->addStretch(1);
-        m_stack->addWidget(pageLayout->parentWidget());
     }
 
     // ================= 页面 3：个性化 =================
@@ -615,7 +624,6 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         m_dailyGoal->setValue(8);
 
         pageLayout->addStretch(1);
-        m_stack->addWidget(pageLayout->parentWidget());
     }
 
     // ================= 页面 4：提醒 =================
@@ -766,8 +774,6 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         weeklyCardLayout->addLayout(weeklyDayRow);
 
         bindToggle(m_weeklyReportEnabled, {m_weeklyReportDay, m_weeklyReportTime});
-
-        m_stack->addWidget(pageLayout->parentWidget());
     }
 
     // ================= 页面 5：云端同步 =================
@@ -890,7 +896,6 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         testCardLayout->addLayout(testRow);
 
         pageLayout->addStretch(1);
-        m_stack->addWidget(pageLayout->parentWidget());
     }
 
     // ================= 页面 6：AI 智能 =================
@@ -1016,7 +1021,6 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         testCardLayout->addLayout(aiTestRow);
 
         pageLayout->addStretch(1);
-        m_stack->addWidget(pageLayout->parentWidget());
     }
 
     // ================= 页面 7：关于 =================
@@ -1097,7 +1101,6 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
         pageLayout->addWidget(dataLabel);
 
         pageLayout->addStretch(1);
-        m_stack->addWidget(pageLayout->parentWidget());
     }
 
     contentLayout->addWidget(m_stack, 1);

@@ -5,8 +5,9 @@
 namespace {
 
 constexpr double kOuterInset = 4.0;
-constexpr double kStageInset = 12.0;
-constexpr double kStagePadding = 12.0;
+// 热力图不再画内嵌舞台面板：contentRect 即整个图表区域，仅留少量内边距。
+constexpr double kStageInset = 0.0;
+constexpr double kStagePadding = 8.0;
 constexpr double kNormalLabelHeight = 34.0;
 constexpr double kSectionGap = 8.0;
 constexpr double kCellGap = 6.0;
@@ -53,7 +54,7 @@ TrendChartLayout::HeatmapLayout makeHeatmapLayout(const QSizeF &size,
         && layout.contentRect.height() >= 160.0;
     layout.compactInsight = !wide;
 
-    // 舞台内边距：格子不贴舞台边，留出呼吸感。
+    // 内容内边距：格子与概览不贴卡片内容区边缘，留出呼吸感。
     const double padX = qMin(kStagePadding, layout.contentRect.width() / 2.0);
     const double padY = qMin(kStagePadding, layout.contentRect.height() / 2.0);
     const QRectF inner = layout.contentRect.adjusted(padX, padY, -padX, -padY);
@@ -69,7 +70,8 @@ TrendChartLayout::HeatmapLayout makeHeatmapLayout(const QSizeF &size,
                                    qMax(0.0, inner.right()
                                        - layout.matrixRect.right() - kInsightGap),
                                    inner.height());
-        const double legendTop = qMax(layout.insightRect.top() + 130.0,
+        // 图例下沿与「峰值日」数值行（insightRect.top()+172）留出间隙，避免同排相撞。
+        const double legendTop = qMax(layout.insightRect.top() + 178.0,
                                       layout.insightRect.bottom() - kLegendHeight);
         layout.legendRect = QRectF(layout.insightRect.left(),
                                    legendTop,

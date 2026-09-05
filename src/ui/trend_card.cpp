@@ -319,17 +319,38 @@ private:
                 - static_cast<double>(value) / m_maxVal * usableHeight));
         }
 
+        // 两端延伸，避免折线在绘图区边缘被硬截断：
+        // 左端按首段斜率反向外推到绘图区左缘，像从上一周的线延续进来；
+        // 右端用同款平滑曲线落到坐标轴上，再沿轴延伸到绘图区右缘。
+        QVector<QPointF> curve;
+        curve.reserve(points.size() + 2);
+        const QPointF &p0 = points.first();
+        const QPointF &p1 = points.at(1);
+        const double leftX = layout.plotRect.left();
+        const double rightX = layout.plotRect.right();
+        const double ratio = (p0.x() - leftX) / (p1.x() - p0.x());
+        const double leftY = qBound(layout.plotRect.top(),
+                                    p0.y() + (p0.y() - p1.y()) * ratio,
+                                    layout.baselineY);
+        curve.append(QPointF(leftX, leftY));
+        curve += points;
+        curve.append(QPointF(rightX, layout.baselineY));
+
+        auto appendSmooth = [&curve](QPainterPath &path) {
+            path.moveTo(curve.first());
+            for (int index = 0; index < curve.size() - 1; ++index) {
+                const QPointF control1((curve[index].x() + curve[index + 1].x()) / 2.0,
+                                       curve[index].y());
+                const QPointF control2((curve[index].x() + curve[index + 1].x()) / 2.0,
+                                       curve[index + 1].y());
+                path.cubicTo(control1, control2, curve[index + 1]);
+            }
+        };
+
         QPainterPath area;
-        area.moveTo(points.first());
-        for (int index = 0; index < points.size() - 1; ++index) {
-            const QPointF control1((points[index].x() + points[index + 1].x()) / 2.0,
-                                   points[index].y());
-            const QPointF control2((points[index].x() + points[index + 1].x()) / 2.0,
-                                   points[index + 1].y());
-            area.cubicTo(control1, control2, points[index + 1]);
-        }
-        area.lineTo(points.last().x(), layout.baselineY);
-        area.lineTo(points.first().x(), layout.baselineY);
+        appendSmooth(area);
+        area.lineTo(rightX, layout.baselineY);
+        area.lineTo(leftX, layout.baselineY);
         area.closeSubpath();
 
         QLinearGradient areaGradient(0, 0, 0, layout.baselineY);
@@ -340,15 +361,8 @@ private:
         painter.drawPath(area);
 
         QPainterPath line;
-        line.moveTo(points.first());
-        for (int index = 0; index < points.size() - 1; ++index) {
-            const QPointF control1((points[index].x() + points[index + 1].x()) / 2.0,
-                                   points[index].y());
-            const QPointF control2((points[index].x() + points[index + 1].x()) / 2.0,
-                                   points[index + 1].y());
-            line.cubicTo(control1, control2, points[index + 1]);
-        }
-        QLinearGradient strokeGradient(points.first().x(), 0, points.last().x(), 0);
+        appendSmooth(line);
+        QLinearGradient strokeGradient(leftX, 0, rightX, 0);
         strokeGradient.setColorAt(0.0, DesignTokens::kChartGradientTop());
         strokeGradient.setColorAt(1.0, DesignTokens::kChartGradientBottom());
         QPen linePen(QBrush(strokeGradient), 2.5);
@@ -393,12 +407,6 @@ private:
         const double borderWidth = qBound(1.0, cellSide * 0.055, 2.0);
         const QString todayKey = QDate::currentDate().toString(Qt::ISODate);
         bool hasRecordedDay = false;
-
-        QColor stage = DesignTokens::kAccentLight();
-        stage.setAlpha(DesignTokens::isDarkTheme() ? 52 : 72);
-        painter.setPen(QPen(DesignTokens::kBorder(), 1.0));
-        painter.setBrush(stage);
-        painter.drawRoundedRect(layout.contentRect, 10.0, 10.0);
 
         if (layout.isMonth) {
             const QDate today = QDate::currentDate();

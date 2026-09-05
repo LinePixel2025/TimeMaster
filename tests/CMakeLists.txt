@@ -85,7 +85,7 @@ if(BUILD_TESTING)
         ${CMAKE_SOURCE_DIR}/src/reminder/weekly_report_manager.cpp
     )
     target_include_directories(test_weekly_report PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_weekly_report PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Network Qt6::Test)
+    target_link_libraries(test_weekly_report PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Network Qt6::Test dwmapi)
     target_compile_options(test_weekly_report PRIVATE
         $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
@@ -100,7 +100,7 @@ if(BUILD_TESTING)
         ${CMAKE_SOURCE_DIR}/src/report/daily_report_manager.cpp
     )
     target_include_directories(test_daily_report PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_daily_report PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Network Qt6::Test)
+    target_link_libraries(test_daily_report PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Network Qt6::Test dwmapi)
     target_compile_options(test_daily_report PRIVATE
         $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
@@ -193,7 +193,7 @@ if(BUILD_TESTING)
         ${CMAKE_SOURCE_DIR}/src/ui/trend_card.cpp
     )
     target_include_directories(test_trend_card_geometry PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(test_trend_card_geometry PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql)
+    target_link_libraries(test_trend_card_geometry PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql dwmapi)
     target_compile_options(test_trend_card_geometry PRIVATE
         $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
