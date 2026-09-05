@@ -8,12 +8,14 @@
 #include "tracker/window_tracker.h"
 #include "ui/main_window.h"
 #include "ui/tray_manager.h"
+#include "ui/update_dialog.h"
 #include "utility/autostart_helper.h"
 #include "push/lineweb_pusher.h"
 #include "ai/ai_client.h"
 #include "reminder/reminder_scheduler.h"
 #include "reminder/weekly_report_manager.h"
 #include "report/daily_report_manager.h"
+#include "update/update_checker.h"
 #include "ui/theme_manager.h"
 
 int main(int argc, char *argv[])
@@ -49,7 +51,10 @@ int main(int argc, char *argv[])
 
     DailyReportManager daily(&db, &ai);
 
-    MainWindow window(&db, &ai);
+    // 更新检查：启动约 60 秒后首次，此后每 24 小时自动检查 GitHub Releases。
+    UpdateChecker updater(&db);
+
+    MainWindow window(&db, &ai, &updater);
 
     WindowTracker tracker(&db);
     QObject::connect(&tracker, &WindowTracker::activeWindowChanged,
@@ -83,6 +88,7 @@ int main(int argc, char *argv[])
         pusher.pushNow();
         scheduler.stop();
         weekly.stop();
+        updater.stop(); // 停止自动检查定时器；在途请求随对象析构中止。
         tracker.stop();
         tracker.wait(10000);
         db.close();
@@ -279,6 +285,18 @@ int main(int argc, char *argv[])
         }
     });
 
+    // 自动发现新版本：先经系统通知（托盘气泡）提醒，再弹窗展示更新内容；
+    // 同一版本只提醒一次（UpdateChecker 内部按 update_notified_version 去重）。
+    QObject::connect(&updater, &UpdateChecker::updateAvailable,
+                     [&tray, &window](const UpdateInfo &info) {
+        tray.showNotification(
+            QString::fromUtf8("发现新版本"),
+            QString::fromUtf8("Time Master v%1 已发布，正在打开更新说明")
+                .arg(info.version));
+        UpdateDialog dialog(info, &window);
+        dialog.exec();
+    });
+
     tray.show();
     window.refreshData();
 
@@ -297,6 +315,7 @@ int main(int argc, char *argv[])
     pusher.start();
     scheduler.start();
     weekly.start();
+    updater.start();
 
     return app.exec();
 }

@@ -6,8 +6,10 @@
 #include "ui/design_tokens.h"
 #include "ui/ui_utils.h"
 #include "ui/settings_icons.h"
+#include "ui/update_dialog.h"
 #include "utility/process_identity.h"
 #include "push/lineweb_pusher.h"
+#include "update/update_checker.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -211,8 +213,9 @@ QString settingsStyle()
 
 } // namespace
 
-SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
-    : QDialog(parent), m_db(db)
+SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
+                               QWidget *parent)
+    : QDialog(parent), m_db(db), m_updater(updater)
 {
     setWindowTitle(QString::fromUtf8("设置"));
     resize(980, 640);
@@ -1052,6 +1055,38 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
         pageLayout->addWidget(descLabel);
         pageLayout->addSpacing(16);
 
+        // 「更新」卡片：手动检查更新 + 状态展示（自动检查也落到同一状态）。
+        QVBoxLayout *updateCardLayout = nullptr;
+        addSectionCard(pageLayout, QString::fromUtf8("更新"), this,
+                       &updateCardLayout);
+        auto *updateRow = new QHBoxLayout();
+        updateRow->setSpacing(12);
+        m_updateCheckBtn = new QPushButton(QString::fromUtf8("检查更新"), this);
+        m_updateCheckBtn->setObjectName(QStringLiteral("secondaryBtn"));
+        m_updateCheckBtn->setToolTip(
+            QString::fromUtf8("立即从 GitHub 检查新版本，发现更新时弹窗显示更新内容"));
+        connect(m_updateCheckBtn, &QPushButton::clicked,
+                this, &SettingsDialog::onCheckUpdateClicked);
+        m_updateStatus = new QLabel(this);
+        m_updateStatus->setObjectName(QStringLiteral("statusLabel"));
+        m_updateStatus->setWordWrap(true);
+        updateRow->addWidget(m_updateCheckBtn);
+        updateRow->addWidget(m_updateStatus, 1);
+        updateCardLayout->addLayout(updateRow);
+        auto *updateHint = new QLabel(
+            QString::fromUtf8("程序每隔 24 小时自动从 GitHub 检查一次新版本"
+                              "（启动约 1 分钟后首次检查）；发现更新时通过系统通知"
+                              "提醒并弹窗显示更新内容。"), this);
+        updateHint->setObjectName(QStringLiteral("statusLabel"));
+        updateHint->setFont(DesignTokens::appFont(11));
+        updateHint->setWordWrap(true);
+        updateCardLayout->addWidget(updateHint);
+
+        if (m_updater) {
+            connect(m_updater, &UpdateChecker::checkFinished,
+                    this, &SettingsDialog::onUpdateCheckResult);
+        }
+
         auto *dataLabel = new QLabel(
             QString::fromUtf8("数据目录\n%1").arg(m_db->databasePath()), this);
         dataLabel->setObjectName(QStringLiteral("aboutDesc"));
@@ -1112,6 +1147,7 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, QWidget *parent)
     m_linewebStatusTimer->start();
 
     loadSettings();
+    refreshUpdateStatus();
 }
 
 void SettingsDialog::applyTheme()
@@ -1237,6 +1273,62 @@ void SettingsDialog::updateReminderStatus()
     else
         m_reminderStatus->setText(
             QString::fromUtf8("⚙ 尚未触发过提醒，请确认已启用并添加时间点"));
+}
+
+void SettingsDialog::refreshUpdateStatus()
+{
+    if (!m_updateStatus)
+        return;
+    const UpdateInfo cached =
+        m_updater ? m_updater->cachedInfo() : UpdateInfo();
+    const QString lastCheck = m_db->getSetting("update_last_check", "");
+    const bool hasUpdate =
+        !cached.version.isEmpty() &&
+        UpdateChecker::isNewerVersion(cached.version, QLatin1String(APP_VERSION));
+    if (hasUpdate) {
+        m_updateStatus->setText(
+            QString::fromUtf8("发现新版本 v%1（上次检查：%2）")
+                .arg(cached.version,
+                     lastCheck.isEmpty() ? QString::fromUtf8("尚未检查")
+                                         : lastCheck));
+    } else if (!lastCheck.isEmpty()) {
+        m_updateStatus->setText(
+            QString::fromUtf8("已是最新版本（上次检查：%1）").arg(lastCheck));
+    } else {
+        m_updateStatus->setText(QString::fromUtf8("尚未检查"));
+    }
+}
+
+void SettingsDialog::onCheckUpdateClicked()
+{
+    if (!m_updater)
+        return;
+    m_updateCheckBtn->setEnabled(false);
+    m_updateStatus->setText(QString::fromUtf8("正在检查更新…"));
+    // 返回 false 表示自动检查的请求已在途：保持等待，完成回调会恢复状态。
+    m_updater->checkNow(true);
+}
+
+void SettingsDialog::onUpdateCheckResult(bool hasUpdate, const UpdateInfo &info,
+                                         const QString &error)
+{
+    if (!m_updateCheckBtn)
+        return;
+    m_updateCheckBtn->setEnabled(true);
+    if (hasUpdate) {
+        refreshUpdateStatus();
+        UpdateDialog dialog(info, this);
+        dialog.exec();
+    } else if (!error.isEmpty()) {
+        m_updateStatus->setText(QString::fromUtf8("检查失败"));
+        QMessageBox::warning(this, QString::fromUtf8("检查更新失败"),
+            QString::fromUtf8("无法获取更新信息：%1").arg(error));
+    } else {
+        m_updateStatus->setText(QString::fromUtf8("已是最新版本"));
+        QMessageBox::information(this, QString::fromUtf8("检查更新"),
+            QString::fromUtf8("当前已是最新版本 v%1。")
+                .arg(QString::fromLatin1(APP_VERSION)));
+    }
 }
 
 void SettingsDialog::updateAccentSwatches()

@@ -170,6 +170,19 @@ if(BUILD_TESTING)
         $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
     add_test(NAME test_theme_manager COMMAND test_theme_manager)
 
+    add_executable(test_update_checker
+        test_update_checker.cpp
+        ${CMAKE_SOURCE_DIR}/src/database/database_manager.cpp
+        ${CMAKE_SOURCE_DIR}/src/update/update_checker.cpp
+    )
+    target_include_directories(test_update_checker PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_update_checker PRIVATE Qt6::Core Qt6::Sql Qt6::Network Qt6::Test)
+    target_compile_definitions(test_update_checker PRIVATE APP_VERSION="${PROJECT_VERSION}")
+    target_compile_options(test_update_checker PRIVATE
+        $<$<CXX_COMPILER_ID:GNU>:-UNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>)
+    add_test(NAME test_update_checker COMMAND test_update_checker)
+
     add_executable(test_trend_card_geometry
         test_trend_card_geometry.cpp
         ${CMAKE_SOURCE_DIR}/src/database/database_manager.cpp
@@ -188,7 +201,7 @@ if(BUILD_TESTING)
     get_filename_component(QT_INSTALL_ROOT "${Qt6_DIR}/../../.." ABSOLUTE)
     get_filename_component(COMPILER_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
     set_tests_properties(
-        test_database test_exporter test_lineweb_pusher test_cloud_sync test_ai_client test_reminder_scheduler test_weekly_report test_daily_report test_window_tracker test_trend_chart_layout test_dashboard_layout test_period_distribution_layout test_rank_layout test_trend_card_geometry test_theme_manager
+        test_database test_exporter test_lineweb_pusher test_cloud_sync test_ai_client test_reminder_scheduler test_weekly_report test_daily_report test_window_tracker test_trend_chart_layout test_dashboard_layout test_period_distribution_layout test_rank_layout test_trend_card_geometry test_theme_manager test_update_checker
         PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         ENVIRONMENT_MODIFICATION

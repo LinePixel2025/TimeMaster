@@ -15,12 +15,15 @@
 #include <QTimer>
 
 class DatabaseManager;
+class UpdateChecker;
+struct UpdateInfo;
 
 class SettingsDialog : public QDialog
 {
     Q_OBJECT
 public:
-    explicit SettingsDialog(DatabaseManager *db, QWidget *parent = nullptr);
+    explicit SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
+                            QWidget *parent = nullptr);
 
     /// 取消/Esc 关闭时还原未保存的主题色预览。
     void reject() override;
@@ -36,6 +39,9 @@ private slots:
     void onDeleteAlias();
     void filterKnownApps(const QString &text);
     void filterIgnoredApps(const QString &text);
+    void onCheckUpdateClicked();
+    void onUpdateCheckResult(bool hasUpdate, const UpdateInfo &info,
+                             const QString &error);
 
 private:
     void applyTheme();
@@ -49,6 +55,8 @@ private:
     void refreshKnownAppsList();
     void refreshIgnoredList();
     void refreshAliasTable();
+    /// 从更新缓存刷新「关于」页更新状态标签。
+    void refreshUpdateStatus();
     /// 应用内别名编辑面板，替代系统 QInputDialog。
     bool promptAlias(const QString &title, QString *processName,
                      QString *displayName, bool processReadOnly);
@@ -103,4 +111,8 @@ private:
     QCheckBox *m_weeklyReportEnabled = nullptr;
     QComboBox *m_weeklyReportDay = nullptr;
     QTimeEdit *m_weeklyReportTime = nullptr;
+
+    UpdateChecker *m_updater = nullptr;
+    QPushButton *m_updateCheckBtn = nullptr;
+    QLabel *m_updateStatus = nullptr;
 };

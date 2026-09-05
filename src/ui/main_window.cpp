@@ -53,8 +53,9 @@ static void applyDwmTitleBar(HWND hwnd, bool dark)
     DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, &color, sizeof(color));
 }
 
-MainWindow::MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent)
-    : QMainWindow(parent), m_db(db)
+MainWindow::MainWindow(DatabaseManager *db, AiClient *ai,
+                       UpdateChecker *updater, QWidget *parent)
+    : QMainWindow(parent), m_db(db), m_updater(updater)
 {
     setWindowTitle("Time Master");
     setMinimumSize(840, 640);
@@ -515,7 +516,7 @@ void MainWindow::onExport()
 
 void MainWindow::onSettings()
 {
-    SettingsDialog dialog(m_db, this);
+    SettingsDialog dialog(m_db, m_updater, this);
     if (dialog.exec() == QDialog::Accepted) {
         refreshData();
         emit settingsChanged();

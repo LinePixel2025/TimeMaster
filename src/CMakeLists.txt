@@ -23,6 +23,8 @@ set(SOURCES
     push/lineweb_pusher.cpp
     reminder/reminder_scheduler.cpp
     reminder/weekly_report_manager.cpp
+    update/update_checker.cpp
+    ui/update_dialog.cpp
     ${CMAKE_SOURCE_DIR}/third_party/miniz/miniz_all.cpp
 )
 
@@ -58,6 +60,8 @@ set(HEADERS
     push/lineweb_pusher.h
     reminder/reminder_scheduler.h
     reminder/weekly_report_manager.h
+    update/update_checker.h
+    ui/update_dialog.h
 )
 
 qt6_add_resources(RESOURCES ${CMAKE_SOURCE_DIR}/resources/resources.qrc)

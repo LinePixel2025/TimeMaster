@@ -15,12 +15,15 @@ class TrendCard;
 class RankCard;
 class AiReportCard;
 class AiClient;
+class UpdateChecker;
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
 public:
-    explicit MainWindow(DatabaseManager *db, AiClient *ai, QWidget *parent = nullptr);
+    explicit MainWindow(DatabaseManager *db, AiClient *ai,
+                        UpdateChecker *updater,
+                        QWidget *parent = nullptr);
 
 public slots:
     void refreshData();
@@ -68,6 +71,7 @@ private:
     QString dateText() const;
 
     DatabaseManager *m_db = nullptr;
+    UpdateChecker *m_updater = nullptr;
     QTimer *m_refreshTimer = nullptr;
     QPushButton *m_themeBtn = nullptr;
     QPushButton *m_moreBtn = nullptr;
