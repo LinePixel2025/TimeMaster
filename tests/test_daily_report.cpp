@@ -260,6 +260,67 @@ void test_refresh_reads_latest_ai_cache()
     std::cout << "test_refresh_reads_latest_ai_cache PASS" << std::endl;
 }
 
+// 未配置组别时不输出「组别排行」卡片，避免给默认用户增加噪音。
+void test_group_rank_card_absent_without_groups()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    seedTodaySession(db, 3600);
+
+    QTemporaryDir outDir;
+    assert(outDir.isValid());
+
+    AiClient ai(&db);
+    DailyReportManager daily(&db, &ai);
+    daily.setOutputDir(outDir.path());
+
+    const QByteArray content = generateAndRead(daily, outDir.path());
+    assert(content.contains("应用排行"));
+    assert(!content.contains("组别排行"));
+    std::cout << "test_group_rank_card_absent_without_groups PASS" << std::endl;
+}
+
+// 配置了组别后日报应额外产出「组别排行」，且未分组应用自动成桶。
+void test_group_rank_card_present_with_groups()
+{
+    QTemporaryFile tmpFile;
+    assert(tmpFile.open());
+    const QString path = tmpFile.fileName();
+    tmpFile.close();
+
+    DatabaseManager db(path);
+    seedTodaySession(db, 3600);
+    const QDateTime extra(QDate::currentDate(), QTime(14, 0));
+    db.insertSession(QStringLiteral("code.exe"), QStringLiteral("win"),
+                     QStringLiteral("VS Code"), extra, extra.addSecs(1800), 1800);
+
+    int devGroup = -1;
+    for (const QVariantMap &row : db.getGroups()) {
+        if (row.value(QStringLiteral("name")).toString() == QString::fromUtf8("开发效率"))
+            devGroup = row.value(QStringLiteral("id")).toInt();
+    }
+    assert(devGroup > 0);
+    db.setAppGroup(QStringLiteral("code.exe"), devGroup);
+
+    QTemporaryDir outDir;
+    assert(outDir.isValid());
+
+    AiClient ai(&db);
+    DailyReportManager daily(&db, &ai);
+    daily.setOutputDir(outDir.path());
+
+    const QByteArray content = generateAndRead(daily, outDir.path());
+    assert(content.contains("组别排行"));
+    assert(content.contains("开发效率"));
+    // 记事本未归入任何组别，应出现在「未分组」桶里。
+    assert(content.contains("未分组"));
+    std::cout << "test_group_rank_card_present_with_groups PASS" << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -270,6 +331,8 @@ int main(int argc, char *argv[])
     test_session_hours_split_across_hour();
     test_apply_report_text();
     test_refresh_reads_latest_ai_cache();
+    test_group_rank_card_absent_without_groups();
+    test_group_rank_card_present_with_groups();
     std::cout << "All daily report tests passed!" << std::endl;
     return 0;
 }

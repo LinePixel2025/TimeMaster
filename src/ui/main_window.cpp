@@ -411,7 +411,8 @@ void MainWindow::refreshData()
             m_db->getSetting("trend_heatmap_period", "week"));
     }
 
-    m_rankCard->refresh(m_db->getAppRank());
+    // 组别数据为空时 RankCard 自动隐藏「组别」切换，只有配置过组别才出现双类别。
+    m_rankCard->setData(m_db->getAppRank(), m_db->getGroupRank());
     m_dateLabel->setText(dateText());
     updateStatusChip();
 }

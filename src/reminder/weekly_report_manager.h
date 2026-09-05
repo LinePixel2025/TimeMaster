@@ -24,6 +24,7 @@ struct WeekStats {
         int seconds;
     };
     QVector<AppUsage> apps;        // 按时长降序（同名变体已按小写去空格键归一化合并）
+    QVector<AppUsage> groups;      // 组别排行（未分组自动成桶）；无组别配置时为空
     int hourMatrix[7][24] = {};    // 星期×小时热力矩阵（会话按时段切分，跨小时/跨午夜分摊到实际占用时段）
     int periodSeconds[4] = {0};    // 凌晨0-6 / 上午6-12 / 下午12-18 / 晚上18-24
     int sessionCount = 0;

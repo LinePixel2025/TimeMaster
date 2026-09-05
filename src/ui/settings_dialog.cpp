@@ -2,6 +2,7 @@
 #include "database/database_manager.h"
 #include "utility/autostart_helper.h"
 #include "icon/app_icon_provider.h"
+#include "ui/app_manage_page.h"
 #include "ui/theme_manager.h"
 #include "ui/design_tokens.h"
 #include "ui/ui_utils.h"
@@ -341,135 +342,13 @@ SettingsDialog::SettingsDialog(DatabaseManager *db, UpdateChecker *updater,
     };
 
     // ================= 页面 1：应用管理 =================
+    // 独立 QWidget（src/ui/app_manage_page）：列表 + 属性面板的交互较重，
+    // 内联到本构造函数里会让其进一步膨胀。
     {
-        QVBoxLayout *pageLayout = startPage(QString::fromUtf8("应用管理"));
-        QVBoxLayout *cardLayout = nullptr;
-        addSectionCard(pageLayout,
-                       QString::fromUtf8("屏蔽不需要统计的应用"),
-                       this, &cardLayout, 1);
-
-        auto *splitLayout = new QHBoxLayout();
-        splitLayout->setSpacing(10);
-
-        auto buildPanel = [this](const QString &labelText, const QString &tip,
-                                 QLineEdit **searchOut,
-                                 QListWidget **listOut,
-                                 bool multiSelect) {
-            auto *panel = new QVBoxLayout();
-            panel->setSpacing(6);
-            auto *label = new QLabel(labelText, this);
-            label->setFont(DesignTokens::appFont(12, QFont::Medium));
-            label->setToolTip(tip);
-            panel->addWidget(label);
-
-            auto *search = new QLineEdit(this);
-            search->setPlaceholderText(QString::fromUtf8("搜索..."));
-            search->setToolTip(tip);
-            panel->addWidget(search);
-
-            auto *list = new QListWidget(this);
-            list->setToolTip(tip);
-            list->setSelectionMode(multiSelect
-                ? QAbstractItemView::MultiSelection
-                : QAbstractItemView::SingleSelection);
-            panel->addWidget(list, 1);
-
-            if (searchOut) *searchOut = search;
-            if (listOut) *listOut = list;
-            return panel;
-        };
-
-        const QString knownTip =
-            QString::fromUtf8("已识别到的前台应用；可多选后点击「加入屏蔽」不再统计");
-        const QString ignoredTip =
-            QString::fromUtf8("被屏蔽的应用；选中后点击「移除屏蔽」或按 Delete 键恢复统计");
-        splitLayout->addLayout(buildPanel(
-            QString::fromUtf8("已知应用"), knownTip,
-            &m_knownSearch, &m_knownAppsList, true), 1);
-        connect(m_knownSearch, &QLineEdit::textChanged,
-                this, &SettingsDialog::filterKnownApps);
-
-        auto *centerPanel = new QVBoxLayout();
-        centerPanel->setSpacing(8);
-        centerPanel->addStretch();
-
-        auto *addIgnoredBtn = new QPushButton(
-            QString::fromUtf8("→ 加入屏蔽"), this);
-        addIgnoredBtn->setObjectName(QStringLiteral("secondaryBtn"));
-        addIgnoredBtn->setToolTip(knownTip);
-        connect(addIgnoredBtn, &QPushButton::clicked,
-                this, &SettingsDialog::onAddIgnored);
-        centerPanel->addWidget(addIgnoredBtn);
-
-        auto *removeIgnoredBtn = new QPushButton(
-            QString::fromUtf8("← 移除屏蔽"), this);
-        removeIgnoredBtn->setObjectName(QStringLiteral("secondaryBtn"));
-        removeIgnoredBtn->setToolTip(ignoredTip);
-        connect(removeIgnoredBtn, &QPushButton::clicked,
-                this, &SettingsDialog::onRemoveIgnored);
-        centerPanel->addWidget(removeIgnoredBtn);
-
-        centerPanel->addStretch();
-        splitLayout->addLayout(centerPanel);
-
-        splitLayout->addLayout(buildPanel(
-            QString::fromUtf8("已屏蔽应用"), ignoredTip,
-            &m_ignoredSearch, &m_ignoredAppsList, false), 1);
-        connect(m_ignoredSearch, &QLineEdit::textChanged,
-                this, &SettingsDialog::filterIgnoredApps);
-
-        auto *delShortcut = new QShortcut(QKeySequence::Delete, m_ignoredAppsList);
-        connect(delShortcut, &QShortcut::activated, this, [this]() {
-            if (m_ignoredAppsList->currentItem())
-                onRemoveIgnored();
-        });
-
-        cardLayout->addLayout(splitLayout, 1);
-
-        // ---- 应用别名 ----
-        QVBoxLayout *aliasCardLayout = nullptr;
-        addSectionCard(pageLayout,
-                       QString::fromUtf8("应用名称别名"),
-                       this, &aliasCardLayout, 0);
-
-        m_aliasTable = new QTableWidget(0, 2, this);
-        m_aliasTable->setHorizontalHeaderLabels({
-            QString::fromUtf8("进程名"),
-            QString::fromUtf8("显示名")
-        });
-        m_aliasTable->horizontalHeader()->setStretchLastSection(true);
-        m_aliasTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-        m_aliasTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        m_aliasTable->verticalHeader()->setVisible(false);
-        m_aliasTable->setMinimumHeight(130);
-        m_aliasTable->setToolTip(
-            QString::fromUtf8("把进程名显示为更友好的名称；选中一行后可编辑或删除"));
-        aliasCardLayout->addWidget(m_aliasTable);
-
-        auto *aliasBtnRow = new QHBoxLayout();
-        aliasBtnRow->setSpacing(8);
-        auto *addAliasBtn = new QPushButton(QString::fromUtf8("添加别名"), this);
-        addAliasBtn->setObjectName(QStringLiteral("secondaryBtn"));
-        addAliasBtn->setToolTip(QString::fromUtf8("为某个进程名设置自定义显示名称"));
-        connect(addAliasBtn, &QPushButton::clicked,
-                this, &SettingsDialog::onAddAlias);
-        aliasBtnRow->addWidget(addAliasBtn);
-
-        auto *editAliasBtn = new QPushButton(QString::fromUtf8("编辑"), this);
-        editAliasBtn->setObjectName(QStringLiteral("secondaryBtn"));
-        editAliasBtn->setToolTip(QString::fromUtf8("修改选中别名的显示名称"));
-        connect(editAliasBtn, &QPushButton::clicked,
-                this, &SettingsDialog::onEditAlias);
-        aliasBtnRow->addWidget(editAliasBtn);
-
-        auto *deleteAliasBtn = new QPushButton(QString::fromUtf8("删除"), this);
-        deleteAliasBtn->setObjectName(QStringLiteral("secondaryBtn"));
-        deleteAliasBtn->setToolTip(QString::fromUtf8("移除选中的别名，恢复默认显示名称"));
-        connect(deleteAliasBtn, &QPushButton::clicked,
-                this, &SettingsDialog::onDeleteAlias);
-        aliasBtnRow->addWidget(deleteAliasBtn);
-        aliasBtnRow->addStretch();
-        aliasCardLayout->addLayout(aliasBtnRow);
+        m_appManagePage = new AppManagePage(m_db, this);
+        connect(m_appManagePage, &AppManagePage::appsChanged,
+                this, &SettingsDialog::settingsChanged);
+        m_stack->addWidget(m_appManagePage);
     }
 
     // ================= 页面 2：追踪设置 =================
@@ -1252,9 +1131,8 @@ void SettingsDialog::loadSettings()
 
     m_dailyGoal->setValue(m_db->getSetting("daily_goal", "28800").toInt() / 3600);
 
-    refreshKnownAppsList();
-    refreshIgnoredList();
-    refreshAliasTable();
+    // 应用管理页是即时落库的独立页面，这里只负责让它反映最新的追踪状态。
+    m_appManagePage->reload();
 }
 
 void SettingsDialog::updateCloudStatus()
@@ -1451,184 +1329,4 @@ void SettingsDialog::saveSettings()
                      m_weeklyReportTime->time().toString(QStringLiteral("HH:mm")));
 
     m_db->setSetting("daily_goal", QString::number(m_dailyGoal->value() * 3600));
-}
-
-void SettingsDialog::refreshKnownAppsList()
-{
-    m_knownAppsList->clear();
-    m_knownSearch->clear();
-
-    const QStringList processNames = m_db->getAllKnownProcessNames();
-    QMap<int, QString> ignored = m_db->getIgnoredApps();
-    QSet<QString> ignoredNames;
-    for (auto it = ignored.begin(); it != ignored.end(); ++it)
-        ignoredNames.insert(it.value());
-    const QMap<QString, QString> aliases = m_db->getAppAliases();
-
-    for (const QString &path : processNames) {
-        const QString key = ProcessIdentity::normalizeKey(path);
-        QString name = aliases.contains(key)
-            ? aliases[key] : UiUtils::friendlyAppName(path);
-        QIcon icon = AppIconProvider::instance()->icon(path, 20);
-        auto *item = new QListWidgetItem(icon, name);
-        item->setData(Qt::UserRole, path);
-        if (ignoredNames.contains(key))
-            item->setForeground(DesignTokens::kTextFaint());
-        m_knownAppsList->addItem(item);
-    }
-}
-
-void SettingsDialog::refreshIgnoredList()
-{
-    m_ignoredAppsList->clear();
-    m_ignoredSearch->clear();
-
-    QMap<int, QString> ignored = m_db->getIgnoredApps();
-    const QMap<QString, QString> aliases = m_db->getAppAliases();
-
-    for (auto it = ignored.begin(); it != ignored.end(); ++it) {
-        const QString path = it.value();
-        const QString key = ProcessIdentity::normalizeKey(path);
-        const QString name = aliases.contains(key)
-            ? aliases[key] : UiUtils::friendlyAppName(path);
-        QIcon icon = AppIconProvider::instance()->icon(path, 20);
-        auto *item = new QListWidgetItem(icon, name);
-        item->setData(Qt::UserRole, it.key());
-        m_ignoredAppsList->addItem(item);
-    }
-}
-
-void SettingsDialog::filterKnownApps(const QString &text)
-{
-    for (int i = 0; i < m_knownAppsList->count(); ++i) {
-        QListWidgetItem *item = m_knownAppsList->item(i);
-        item->setHidden(!item->text().contains(text, Qt::CaseInsensitive));
-    }
-}
-
-void SettingsDialog::filterIgnoredApps(const QString &text)
-{
-    for (int i = 0; i < m_ignoredAppsList->count(); ++i) {
-        QListWidgetItem *item = m_ignoredAppsList->item(i);
-        item->setHidden(!item->text().contains(text, Qt::CaseInsensitive));
-    }
-}
-
-void SettingsDialog::refreshAliasTable()
-{
-    m_aliasTable->setRowCount(0);
-    const QMap<QString, QString> aliases = m_db->getAppAliases();
-    for (auto it = aliases.begin(); it != aliases.end(); ++it) {
-        int row = m_aliasTable->rowCount();
-        m_aliasTable->insertRow(row);
-        m_aliasTable->setItem(row, 0, new QTableWidgetItem(it.key()));
-        m_aliasTable->setItem(row, 1, new QTableWidgetItem(it.value()));
-    }
-}
-
-void SettingsDialog::onAddIgnored()
-{
-    QList<QListWidgetItem *> selected = m_knownAppsList->selectedItems();
-    for (QListWidgetItem *item : selected) {
-        m_db->addIgnoredApp(ProcessIdentity::normalizeKey(
-            item->data(Qt::UserRole).toString()));
-    }
-    refreshKnownAppsList();
-    refreshIgnoredList();
-}
-
-void SettingsDialog::onRemoveIgnored()
-{
-    QListWidgetItem *item = m_ignoredAppsList->currentItem();
-    if (!item) {
-        QMessageBox::warning(this,
-            QString::fromUtf8("没有选择"),
-            QString::fromUtf8("请先选择要移除的应用"));
-        return;
-    }
-    m_db->removeIgnoredApp(item->data(Qt::UserRole).toInt());
-    refreshIgnoredList();
-    refreshKnownAppsList();
-}
-
-bool SettingsDialog::promptAlias(const QString &title, QString *processName,
-                                 QString *displayName, bool processReadOnly)
-{
-    QDialog dlg(this);
-    dlg.setWindowTitle(title);
-    dlg.setMinimumWidth(360);
-    dlg.setStyleSheet(settingsStyle());
-    auto *layout = new QVBoxLayout(&dlg);
-    layout->setContentsMargins(20, 18, 20, 16);
-    layout->setSpacing(12);
-
-    auto *processEdit = new QLineEdit(*processName, &dlg);
-    processEdit->setPlaceholderText(QStringLiteral("例如 code.exe"));
-    processEdit->setReadOnly(processReadOnly);
-    auto *displayEdit = new QLineEdit(*displayName, &dlg);
-    displayEdit->setPlaceholderText(QStringLiteral("显示名"));
-
-    auto *processLabel = new QLabel(QStringLiteral("进程名"), &dlg);
-    auto *displayLabel = new QLabel(QStringLiteral("显示名"), &dlg);
-    layout->addWidget(processLabel);
-    layout->addWidget(processEdit);
-    layout->addWidget(displayLabel);
-    layout->addWidget(displayEdit);
-
-    auto *buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
-    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("确定"));
-    buttons->button(QDialogButtonBox::Ok)->setObjectName(QStringLiteral("accentBtn"));
-    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
-    buttons->button(QDialogButtonBox::Cancel)->setObjectName(QStringLiteral("secondaryBtn"));
-    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    layout->addWidget(buttons);
-
-    ThemeManager::applyToWindow(&dlg);
-    if (dlg.exec() != QDialog::Accepted)
-        return false;
-    *processName = processEdit->text().trimmed();
-    *displayName = displayEdit->text().trimmed();
-    return !processName->isEmpty() && !displayName->isEmpty();
-}
-
-void SettingsDialog::onAddAlias()
-{
-    QString processName;
-    QString displayName;
-    if (!promptAlias(QStringLiteral("添加别名"), &processName, &displayName, false))
-        return;
-    m_db->setAppAlias(ProcessIdentity::normalizeKey(processName), displayName);
-    refreshAliasTable();
-}
-
-void SettingsDialog::onEditAlias()
-{
-    const int row = m_aliasTable->currentRow();
-    if (row < 0) {
-        QMessageBox::warning(this,
-            QString::fromUtf8("没有选择"),
-            QString::fromUtf8("请先选择要编辑的别名"));
-        return;
-    }
-    QString processName = m_aliasTable->item(row, 0)->text();
-    QString displayName = m_aliasTable->item(row, 1)->text();
-    if (!promptAlias(QStringLiteral("编辑别名"), &processName, &displayName, true))
-        return;
-    m_db->setAppAlias(processName, displayName);
-    refreshAliasTable();
-}
-
-void SettingsDialog::onDeleteAlias()
-{
-    const int row = m_aliasTable->currentRow();
-    if (row < 0) {
-        QMessageBox::warning(this,
-            QString::fromUtf8("没有选择"),
-            QString::fromUtf8("请先选择要删除的别名"));
-        return;
-    }
-    m_db->removeAppAliasByProcessName(m_aliasTable->item(row, 0)->text());
-    refreshAliasTable();
 }

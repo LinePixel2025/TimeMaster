@@ -16,6 +16,8 @@ struct Item
     int rank = 0;
     int sharePercent = 0;
     double share = 0;
+    /// 组别排行行：没有应用图标，改为绘制首字色块。
+    bool isGroup = false;
 };
 
 inline QVector<Item> normalize(const QVector<QVariantMap> &rankData)
@@ -29,6 +31,7 @@ inline QVector<Item> normalize(const QVector<QVariantMap> &rankData)
         Item item;
         item.appName = row.value(QStringLiteral("app_name")).toString();
         item.processName = row.value(QStringLiteral("process_name")).toString();
+        item.isGroup = row.value(QStringLiteral("is_group")).toBool();
         item.seconds = seconds;
         items.append(item);
     }

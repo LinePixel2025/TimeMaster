@@ -139,6 +139,16 @@ DayStats DailyReportManager::collectDayStats(const QDate &date) const
 
     stats.dailyGoal = m_db->getSetting("daily_goal", "28800").toInt();
 
+    // 组别排行由数据库侧聚合（含合并链解析与「未分组」兜底），未配置组别时为空。
+    const auto groupRows = m_db->getGroupRank(date.toString(Qt::ISODate),
+                                              date.toString(Qt::ISODate));
+    for (const auto &row : groupRows) {
+        if (row.value(QStringLiteral("total_seconds")).toInt() <= 0)
+            continue;
+        stats.groups.append({row.value(QStringLiteral("group_name")).toString(),
+                             row.value(QStringLiteral("total_seconds")).toInt()});
+    }
+
     // 本周节奏：报告日所在周周一至 date 的每日时长（按日聚合，无记录日补 0；
     // getDailySummaries 支持任意日期范围，历史日报告也能画出所在周节奏）。
     const QDate monday = date.addDays(-date.dayOfWeek() + 1);
@@ -291,6 +301,13 @@ QString DailyReportManager::buildHtml(const DayStats &stats, const QDate &date) 
     html += ReportHtml::wrapCard(
         QStringLiteral("应用排行 Top %1").arg(qMin(5, qMax(1, stats.apps.size()))),
         ReportHtml::buildAppRank(stats.apps, stats.total));
+
+    // 未配置组别时 stats.groups 为空，不输出该卡片。
+    if (!stats.groups.isEmpty()) {
+        html += ReportHtml::wrapCard(
+            QStringLiteral("组别排行 Top %1").arg(qMin(5, qMax(1, stats.groups.size()))),
+            ReportHtml::buildAppRank(stats.groups, stats.total));
+    }
 
     QVector<ReportHtml::InsightItem> insights;
     const int avg = stats.sessionCount > 0 ? stats.total / stats.sessionCount : 0;

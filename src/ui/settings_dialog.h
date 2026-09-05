@@ -3,7 +3,6 @@
 #include <QDialog>
 #include <QStackedWidget>
 #include <QListWidget>
-#include <QTableWidget>
 #include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
@@ -13,6 +12,8 @@
 #include <QLabel>
 #include <QTimeEdit>
 #include <QTimer>
+
+#include "ui/app_manage_page.h"
 
 class DatabaseManager;
 class UpdateChecker;
@@ -36,13 +37,6 @@ signals:
     void settingsChanged();
 
 private slots:
-    void onAddIgnored();
-    void onRemoveIgnored();
-    void onAddAlias();
-    void onEditAlias();
-    void onDeleteAlias();
-    void filterKnownApps(const QString &text);
-    void filterIgnoredApps(const QString &text);
     void onCheckUpdateClicked();
     void onUpdateCheckResult(bool hasUpdate, const UpdateInfo &info,
                              const QString &error);
@@ -56,22 +50,14 @@ private:
     void updateReminderStatus();
     void updateAccentSwatches();
     void fetchGoalFromCloud(const QString &endpoint, const QString &token);
-    void refreshKnownAppsList();
-    void refreshIgnoredList();
-    void refreshAliasTable();
     /// 从更新缓存刷新「关于」页更新状态标签。
     void refreshUpdateStatus();
-    /// 应用内别名编辑面板，替代系统 QInputDialog。
-    bool promptAlias(const QString &title, QString *processName,
-                     QString *displayName, bool processReadOnly);
 
     DatabaseManager *m_db;
 
     QStackedWidget *m_stack = nullptr;
     QList<QPushButton *> m_navButtons;
-    QListWidget *m_knownAppsList = nullptr;
-    QListWidget *m_ignoredAppsList = nullptr;
-    QTableWidget *m_aliasTable = nullptr;
+    AppManagePage *m_appManagePage = nullptr;
     QCheckBox *m_trackingEnabled = nullptr;
     QSpinBox *m_pollInterval = nullptr;
     QSpinBox *m_idleThreshold = nullptr;
@@ -83,8 +69,6 @@ private:
     QColor m_initialAccent; // 打开对话框时的主题色，取消时据此还原
     QComboBox *m_trendFormat = nullptr;
     QSpinBox *m_dailyGoal = nullptr;
-    QLineEdit *m_knownSearch = nullptr;
-    QLineEdit *m_ignoredSearch = nullptr;
 
     QCheckBox *m_linewebEnabled = nullptr;
     QLineEdit *m_linewebEndpoint = nullptr;

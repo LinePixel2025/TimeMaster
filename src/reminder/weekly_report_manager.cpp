@@ -265,6 +265,16 @@ WeekStats WeeklyReportManager::collectWeekStats(const QDate &monday) const
                   return a.seconds > b.seconds;
               });
 
+    // 组别排行由数据库侧聚合（含合并链解析与「未分组」兜底），未配置组别时为空。
+    const auto groupRows = m_db->getGroupRank(monday.toString(Qt::ISODate),
+                                              monday.addDays(6).toString(Qt::ISODate));
+    for (const auto &row : groupRows) {
+        if (row.value(QStringLiteral("total_seconds")).toInt() <= 0)
+            continue;
+        stats.groups.append({row.value(QStringLiteral("group_name")).toString(),
+                             row.value(QStringLiteral("total_seconds")).toInt()});
+    }
+
     for (int i = 0; i < 7; ++i)
         if (stats.dailyTotals[i] > 0)
             ++stats.activeDays;
@@ -422,6 +432,17 @@ QString WeeklyReportManager::buildHtml(const QString &aiHtml,
     html += ReportHtml::wrapCard(
         QStringLiteral("应用排行 Top %1").arg(qMin(5, qMax(1, apps.size()))),
         ReportHtml::buildAppRank(apps, stats.weekTotal));
+
+    // 未配置组别时 stats.groups 为空，不输出该卡片。
+    if (!stats.groups.isEmpty()) {
+        QVector<ReportHtml::AppUsage> groups;
+        groups.reserve(stats.groups.size());
+        for (const auto &group : stats.groups)
+            groups.append({group.name, group.seconds});
+        html += ReportHtml::wrapCard(
+            QStringLiteral("组别排行 Top %1").arg(qMin(5, qMax(1, groups.size()))),
+            ReportHtml::buildAppRank(groups, stats.weekTotal));
+    }
 
     QVector<ReportHtml::InsightItem> insights;
     const int avg = stats.sessionCount > 0 ? stats.weekTotal / stats.sessionCount : 0;

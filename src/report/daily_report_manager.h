@@ -17,6 +17,7 @@ struct DayStats {
     int hourTotals[24] = {};       // 0-23 每小时秒数（会话按时段切分，跨午夜部分归次日不计）
     int periodSeconds[4] = {0};    // 凌晨0-6 / 上午6-12 / 下午12-18 / 晚上18-24
     QVector<ReportHtml::AppUsage> apps; // 按时长降序（同名变体已归一化合并）
+    QVector<ReportHtml::AppUsage> groups; // 组别排行（未分组自动成桶）；无组别配置时为空
     int total = 0;                 // 当日总秒数
     int sessionCount = 0;
     int longestSeconds = 0;        // 最长单次连续使用秒数

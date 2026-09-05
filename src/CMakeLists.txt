@@ -7,6 +7,7 @@ set(SOURCES
     ai/ai_client.cpp
     ui/main_window.cpp
     ui/settings_dialog.cpp
+    ui/app_manage_page.cpp
     ui/theme_manager.cpp
     ui/tray_manager.cpp
     ui/card_frame.cpp
@@ -38,6 +39,7 @@ set(HEADERS
     ui/main_window.h
     ui/settings_dialog.h
     ui/settings_icons.h
+    ui/app_manage_page.h
     ui/theme_manager.h
     ui/tray_manager.h
     ui/design_tokens.h
